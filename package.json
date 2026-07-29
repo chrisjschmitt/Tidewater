@@ -1,7 +1,7 @@
 {
   "name": "tidewater",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Tidewater — a calm, abundance-minded personal budgeting PWA. All data stays on your device.",
   "scripts": {

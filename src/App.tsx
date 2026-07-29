@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChatPanel from './components/ChatPanel'
+import ChangelogModal from './components/ChangelogModal'
 import GoalsPanel from './components/GoalsPanel'
 import GroupBars from './components/GroupBars'
 import GroupDetail from './components/GroupDetail'
@@ -46,6 +47,7 @@ export default function App() {
   const [openGroup, setOpenGroup] = useState<GroupId | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
+  const [changelogOpen, setChangelogOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -181,12 +183,16 @@ export default function App() {
 
   if (!budget) {
     return (
-      <Onboarding
-        onReady={commit}
-        onLoadSample={loadSample}
-        onImportFile={(f) => void handleFile(f)}
-        busy={busy}
-      />
+      <>
+        <Onboarding
+          onReady={commit}
+          onLoadSample={loadSample}
+          onImportFile={(f) => void handleFile(f)}
+          onOpenChangelog={() => setChangelogOpen(true)}
+          busy={busy}
+        />
+        <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+      </>
     )
   }
 
@@ -228,9 +234,20 @@ export default function App() {
               <circle cx="64" cy="46" r="15" fill="#faf8f3" opacity=".9" />
             </svg>
             <div>
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.2em] text-tide-700">
-                Tidewater
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-tide-700">
+                  Tidewater
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChangelogOpen(true)}
+                  className="rounded px-1 py-0.5 text-[11px] tabular-nums text-ink-400 transition hover:bg-sand-100 hover:text-tide-700"
+                  aria-label={`Version ${APP_VERSION}. View changelog.`}
+                  title="What’s new"
+                >
+                  v{APP_VERSION}
+                </button>
+              </div>
               <span className="block text-[11px] text-ink-400">
                 {budget.profile.name ? `${budget.profile.name}’s plan` : 'Your plan'}
                 {budget.source === 'sample' && ' · sample'}
@@ -347,6 +364,8 @@ export default function App() {
           void loadSample()
         }}
       />
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
 
       {!chatOpen && (
         <button

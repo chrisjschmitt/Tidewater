@@ -2,17 +2,25 @@ import { useRef, useState } from 'react'
 import { money } from '../lib/format'
 import { EMPTY_ANSWERS, buildStarterBudget, type StarterAnswers } from '../lib/starter'
 import type { Budget } from '../lib/types'
+import { APP_VERSION } from '../lib/version'
 
 interface Props {
   onReady: (budget: Budget) => void
   onLoadSample: () => void
   onImportFile: (file: File) => void
+  onOpenChangelog: () => void
   busy?: boolean
 }
 
 type Screen = 'welcome' | 'wizard'
 
-export default function Onboarding({ onReady, onLoadSample, onImportFile, busy }: Props) {
+export default function Onboarding({
+  onReady,
+  onLoadSample,
+  onImportFile,
+  onOpenChangelog,
+  busy,
+}: Props) {
   const [screen, setScreen] = useState<Screen>('welcome')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -32,7 +40,7 @@ export default function Onboarding({ onReady, onLoadSample, onImportFile, busy }
 
       {screen === 'welcome' ? (
         <div className="animate-rise">
-          <Wordmark />
+          <Wordmark onOpenChangelog={onOpenChangelog} />
           <h1 className="mt-8 text-4xl font-semibold leading-tight tracking-tight text-ink-900">
             You likely have more than you think.
           </h1>
@@ -74,7 +82,7 @@ export default function Onboarding({ onReady, onLoadSample, onImportFile, busy }
   )
 }
 
-function Wordmark() {
+function Wordmark({ onOpenChangelog }: { onOpenChangelog: () => void }) {
   return (
     <div className="flex items-center gap-3">
       <svg width="34" height="34" viewBox="0 0 128 128" aria-hidden>
@@ -83,9 +91,20 @@ function Wordmark() {
         <path d="M8 92c14 0 14-10 28-10s14 10 28 10 14-10 28-10 14 10 28 10v36H8z" fill="#d5e8e4" opacity=".85" />
         <circle cx="64" cy="44" r="16" fill="#faf8f3" opacity=".9" />
       </svg>
-      <span className="text-sm font-semibold uppercase tracking-[0.22em] text-tide-700">
-        Tidewater
-      </span>
+      <div className="flex items-baseline gap-2">
+        <span className="text-sm font-semibold uppercase tracking-[0.22em] text-tide-700">
+          Tidewater
+        </span>
+        <button
+          type="button"
+          onClick={onOpenChangelog}
+          className="rounded px-1 py-0.5 text-xs tabular-nums text-ink-400 transition hover:bg-sand-100 hover:text-tide-700"
+          aria-label={`Version ${APP_VERSION}. View changelog.`}
+          title="What’s new"
+        >
+          v{APP_VERSION}
+        </button>
+      </div>
     </div>
   )
 }

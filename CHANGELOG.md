@@ -3,6 +3,11 @@
 Versions follow [semver](https://semver.org): **MAJOR.MINOR.PATCH**.
 Release notes start here — earlier work lived in the initial 0.1.0 commit without a changelog.
 
+## 0.2.1 — 2026-07-29
+
+### Added
+- Version number after the Tidewater name; tap or click it to read this changelog
+
 ## 0.2.0 — 2026-07-29
 
 ### Added
