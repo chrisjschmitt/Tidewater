@@ -1,0 +1,153 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-sand-50: #faf8f3;
+  --color-sand-100: #f4f1e8;
+  --color-sand-200: #e9e4d6;
+  --color-sand-300: #d9d2be;
+  --color-ink-900: #1c2b28;
+  --color-ink-700: #354744;
+  --color-ink-500: #5f716d;
+  --color-ink-400: #8b9a96;
+  --color-tide-50: #edf6f4;
+  --color-tide-100: #d5e8e4;
+  --color-tide-300: #8fc4bb;
+  --color-tide-500: #2f9184;
+  --color-tide-600: #0f766e;
+  --color-tide-700: #0b5d57;
+  --color-shell-500: #c96a4e;
+  --color-shell-300: #e5a58e;
+
+  --font-sans: 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade: fade 0.35s ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, var(--color-tide-50), transparent 60%),
+    radial-gradient(900px 500px at 5% 110%, #f0ece0, transparent 55%),
+    var(--color-sand-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-3xl border border-sand-200/80 bg-white/70 backdrop-blur-sm shadow-[0_1px_2px_rgba(28,43,40,0.04),0_12px_32px_-18px_rgba(28,43,40,0.25)];
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-ghost,
+  .btn-quiet {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-tide-500/40 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-tide-600 text-white hover:bg-tide-700;
+  }
+
+  .btn-ghost {
+    @apply border border-sand-300 text-ink-700 hover:bg-sand-100;
+  }
+
+  .btn-quiet {
+    @apply text-ink-500 hover:bg-sand-100 hover:text-ink-900;
+  }
+
+  .field {
+    @apply w-full rounded-2xl border border-sand-300 bg-white/80 px-4 py-2.5 text-sm text-ink-900
+      placeholder:text-ink-400 focus:border-tide-500 focus:outline-none focus:ring-2 focus:ring-tide-500/20;
+  }
+
+  .label {
+    @apply block text-xs font-medium uppercase tracking-[0.14em] text-ink-400;
+  }
+}
+
+/* Sliders are the main way people change their plan, so they get real attention. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--track, var(--color-sand-200));
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  width: 22px;
+  margin-top: -7px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--thumb, var(--color-tide-600));
+  box-shadow: 0 2px 8px rgba(28, 43, 40, 0.18);
+  transition: transform 0.12s ease;
+}
+
+input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+input[type='range']::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--track, var(--color-sand-200));
+}
+
+input[type='range']::-moz-range-thumb {
+  height: 22px;
+  width: 22px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--thumb, var(--color-tide-600));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

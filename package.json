@@ -1,0 +1,33 @@
+{
+  "name": "tidewater",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tidewater — a calm, abundance-minded personal budgeting PWA. All data stays on your device.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "check:import": "esbuild scripts/check-import.ts --bundle --platform=node --format=esm --outfile=.tmp/check-import.mjs --log-level=error && node .tmp/check-import.mjs",
+    "check:starter": "esbuild scripts/check-starter.ts --bundle --platform=node --format=esm --outfile=.tmp/check-starter.mjs --log-level=error && node .tmp/check-starter.mjs",
+    "check:assistant": "esbuild scripts/check-assistant.ts --bundle --platform=node --format=esm --outfile=.tmp/check-assistant.mjs --log-level=error && node .tmp/check-assistant.mjs"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.1",
+    "papaparse": "^5.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/papaparse": "^5.3.14",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
