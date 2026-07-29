@@ -30,9 +30,9 @@ import { money } from './lib/format'
 import {
   DEFAULT_SETTINGS,
   clearBudget,
+  clearChat,
   downloadFile,
-  loadBudget,
-  loadSettings,
+  loadAll,
   saveBudget,
   saveSettings,
   type Settings,
@@ -55,10 +55,15 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
-      const [b, s] = await Promise.all([loadBudget(), loadSettings()])
-      if (b) setBudget(b)
-      setSettings(s)
+      const { budget: saved, settings: stored, storageOk } = await loadAll()
+      if (saved) setBudget(saved)
+      setSettings(stored)
       setReady(true)
+      if (!storageOk) {
+        setNotice(
+          'This browser is not letting Tidewater read its storage, so nothing will be saved. Close any other Tidewater tabs and reload.',
+        )
+      }
     })()
   }, [])
 
@@ -192,6 +197,11 @@ export default function App() {
           busy={busy}
         />
         <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+        {notice && (
+          <p className="fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-ink-900/90 px-4 py-3 text-center text-xs text-sand-50 shadow-lg">
+            {notice}
+          </p>
+        )}
       </>
     )
   }
@@ -356,6 +366,7 @@ export default function App() {
         onClose={() => setDataOpen(false)}
         onReset={() => {
           void clearBudget()
+          void clearChat()
           setBudget(null)
           setDataOpen(false)
         }}
@@ -534,7 +545,8 @@ function DataModal({
         <div className="rounded-2xl border border-shell-300/50 bg-shell-300/10 px-4 py-3.5">
           <p className="text-sm font-medium text-ink-900">Start over</p>
           <p className="mt-0.5 text-xs text-ink-500">
-            Erases the budget stored in this browser. Export first if you might want it back.
+            Erases the budget and chat history stored in this browser. Export first if you might
+            want the budget back.
           </p>
           {confirming ? (
             <div className="mt-3 flex gap-2">

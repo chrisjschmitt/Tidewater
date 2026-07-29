@@ -10,7 +10,11 @@ import {
   DEFAULT_MODELS,
   PROVIDER_LABELS,
   activeConfig,
+  clearChat,
+  loadChat,
+  saveChat,
   updateProviderConfig,
+  type ChatMessage,
   type CloudProvider,
   type Provider,
   type ProviderConfig,
@@ -26,13 +30,6 @@ interface Props {
   onSettingsChange: (settings: Settings) => void
 }
 
-interface Message {
-  id: number
-  role: 'user' | 'assistant'
-  text: string
-  cloud?: boolean
-}
-
 /** Say plainly where answers are coming from right now, not where they could. */
 function statusLine(settings: Settings): string {
   const config = activeConfig(settings)
@@ -43,12 +40,25 @@ function statusLine(settings: Settings): string {
 }
 
 export default function ChatPanel({ open, onClose, budget, settings, onSettingsChange }: Props) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [hydrated, setHydrated] = useState(false)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    void loadChat().then((saved) => {
+      if (saved.length > 0) setMessages(saved)
+      setHydrated(true)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    void saveChat(messages)
+  }, [messages, hydrated])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -80,6 +90,11 @@ export default function ChatPanel({ open, onClose, budget, settings, onSettingsC
     }
   }
 
+  const eraseChat = () => {
+    setMessages([])
+    void clearChat()
+  }
+
   return (
     <>
       {open && <div className="fixed inset-0 z-40 bg-ink-900/10 animate-fade" onClick={onClose} />}
@@ -96,6 +111,16 @@ export default function ChatPanel({ open, onClose, budget, settings, onSettingsC
             <p className="text-xs text-ink-400">{statusLine(settings)}</p>
           </div>
           <div className="flex items-center gap-1">
+            {messages.length > 0 && (
+              <button
+                onClick={eraseChat}
+                className="btn-quiet px-2 py-1 text-xs"
+                aria-label="Clear chat history"
+                title="Clear chat"
+              >
+                Clear
+              </button>
+            )}
             <button
               onClick={() => setShowSettings((v) => !v)}
               className="btn-quiet px-2 py-1 text-xs"
