@@ -132,6 +132,12 @@ npm run check:starter   # generates starter budgets for three household shapes
 npm run check:assistant "Where does my money go?"   # shows the local answer for a question
 ```
 
+## Versions
+
+Release notes live in [`CHANGELOG.md`](CHANGELOG.md). The current version is in `package.json`
+(and shown under **Your data**). Bump **MINOR** for user-facing features, **PATCH** for fixes,
+and keep `src/lib/version.ts` in sync with `package.json`.
+
 ## Built with
 
 React, TypeScript, Vite, Tailwind CSS, PapaParse, idb-keyval, and vite-plugin-pwa — all open

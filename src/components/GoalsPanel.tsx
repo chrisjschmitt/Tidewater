@@ -46,11 +46,18 @@ const PRESETS: Array<{
 
 export default function GoalsPanel({ goals, available, capacity, onChange }: Props) {
   const [adding, setAdding] = useState(false)
+  /** Null until the user picks "Something else" and is naming their own goal. */
+  const [customName, setCustomName] = useState<string | null>(null)
 
   const update = (id: string, patch: Partial<Goal>) =>
     onChange(goals.map((g) => (g.id === id ? { ...g, ...patch } : g)))
 
   const remove = (id: string) => onChange(goals.filter((g) => g.id !== id))
+
+  const closeAdd = () => {
+    setAdding(false)
+    setCustomName(null)
+  }
 
   const addGoal = (preset: (typeof PRESETS)[number]) => {
     const monthly = preset.kind === 'debt' ? 250 : Math.max(50, Math.round(Math.max(available, 100) / 2 / 25) * 25)
@@ -67,7 +74,13 @@ export default function GoalsPanel({ goals, available, capacity, onChange }: Pro
         horizonMonths: preset.horizon,
       },
     ])
-    setAdding(false)
+    closeAdd()
+  }
+
+  const addCustom = () => {
+    const name = customName?.trim()
+    if (!name) return
+    addGoal({ name, kind: 'savings', target: 10000, rate: 3.5, horizon: DEFAULT_HORIZON, blurb: '' })
   }
 
   return (
@@ -115,32 +128,64 @@ export default function GoalsPanel({ goals, available, capacity, onChange }: Pro
 
       <Modal
         open={adding}
-        onClose={() => setAdding(false)}
-        title="What would you like to work toward?"
-        subtitle="Pick a starting point — every number stays adjustable."
+        onClose={closeAdd}
+        title={customName === null ? 'What would you like to work toward?' : 'Name this goal'}
+        subtitle={
+          customName === null
+            ? 'Pick a starting point — every number stays adjustable.'
+            : 'Call it whatever matters to you. You can rename it later.'
+        }
         width="max-w-xl"
       >
-        <div className="grid gap-2 sm:grid-cols-2">
-          {PRESETS.map((p) => (
+        {customName === null ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {PRESETS.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => addGoal(p)}
+                className="rounded-2xl border border-sand-200 bg-white/70 px-4 py-3 text-left transition hover:border-tide-300 hover:bg-tide-50/50"
+              >
+                <span className="block text-sm font-medium text-ink-900">{p.name}</span>
+                <span className="block text-xs text-ink-400">{p.blurb}</span>
+              </button>
+            ))}
             <button
-              key={p.name}
-              onClick={() => addGoal(p)}
-              className="rounded-2xl border border-sand-200 bg-white/70 px-4 py-3 text-left transition hover:border-tide-300 hover:bg-tide-50/50"
+              onClick={() => setCustomName('')}
+              className="rounded-2xl border border-sand-200 bg-white/70 px-4 py-3 text-left transition hover:border-tide-300 hover:bg-tide-50/50 sm:col-span-2"
             >
-              <span className="block text-sm font-medium text-ink-900">{p.name}</span>
-              <span className="block text-xs text-ink-400">{p.blurb}</span>
+              <span className="block text-sm font-medium text-ink-900">Something else</span>
+              <span className="block text-xs text-ink-400">Name it yourself</span>
             </button>
-          ))}
-          <button
-            onClick={() =>
-              addGoal({ name: 'My goal', kind: 'savings', target: 10000, rate: 3.5, horizon: DEFAULT_HORIZON, blurb: '' })
-            }
-            className="rounded-2xl border border-sand-200 bg-white/70 px-4 py-3 text-left transition hover:border-tide-300 hover:bg-tide-50/50 sm:col-span-2"
+          </div>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              addCustom()
+            }}
+            className="space-y-4"
           >
-            <span className="block text-sm font-medium text-ink-900">Something else</span>
-            <span className="block text-xs text-ink-400">Name it yourself</span>
-          </button>
-        </div>
+            <label className="block">
+              <span className="label">Goal name</span>
+              <input
+                autoFocus
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="e.g. Trip to Japan, Studio renovation"
+                className="field mt-1.5"
+                aria-label="Goal name"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setCustomName(null)} className="btn-quiet">
+                Back
+              </button>
+              <button type="submit" disabled={!customName.trim()} className="btn-primary">
+                Add goal
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </section>
   )
@@ -184,8 +229,9 @@ function GoalCard({
           <input
             value={goal.name}
             onChange={(e) => onChange({ name: e.target.value })}
-            className="w-full truncate border-none bg-transparent p-0 text-sm font-semibold text-ink-900 focus:outline-none"
+            className="w-full truncate border-none bg-transparent p-0 text-sm font-semibold text-ink-900 focus:outline-none focus:ring-0"
             aria-label="Goal name"
+            title="Click to rename"
           />
           <p className="mt-0.5 text-xs text-ink-500">
             {isDebt ? (

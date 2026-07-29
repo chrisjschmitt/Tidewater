@@ -37,6 +37,7 @@ import {
   type Settings,
 } from './lib/storage'
 import type { Budget, ExpenseLine, Goal, GroupId, IncomeLine } from './lib/types'
+import { APP_VERSION } from './lib/version'
 
 export default function App() {
   const [budget, setBudget] = useState<Budget | null>(null)
@@ -533,7 +534,7 @@ function DataModal({
         </div>
 
         <p className="pt-1 text-[11px] text-ink-400">
-          Last changed {new Date(budget.updatedAt).toLocaleString()}
+          Tidewater {APP_VERSION} · Last changed {new Date(budget.updatedAt).toLocaleString()}
         </p>
       </div>
     </Modal>
