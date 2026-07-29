@@ -4,6 +4,7 @@ import ChangelogModal from './components/ChangelogModal'
 import GoalsPanel from './components/GoalsPanel'
 import GroupBars from './components/GroupBars'
 import GroupDetail from './components/GroupDetail'
+import HelpModal from './components/HelpModal'
 import IncomeCard from './components/IncomeCard'
 import Modal from './components/Modal'
 import Onboarding from './components/Onboarding'
@@ -48,6 +49,7 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -194,9 +196,18 @@ export default function App() {
           onLoadSample={loadSample}
           onImportFile={(f) => void handleFile(f)}
           onOpenChangelog={() => setChangelogOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
           busy={busy}
         />
         <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+        <HelpModal
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          onOpenChat={() => {
+            setHelpOpen(false)
+            setChatOpen(true)
+          }}
+        />
         {notice && (
           <p className="fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-ink-900/90 px-4 py-3 text-center text-xs text-sand-50 shadow-lg">
             {notice}
@@ -271,6 +282,9 @@ export default function App() {
                 {notice}
               </span>
             )}
+            <button onClick={() => setHelpOpen(true)} className="btn-quiet text-xs">
+              Help
+            </button>
             <button onClick={() => fileRef.current?.click()} className="btn-quiet text-xs">
               Import
             </button>
@@ -377,6 +391,15 @@ export default function App() {
       />
 
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+
+      <HelpModal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        onOpenChat={() => {
+          setHelpOpen(false)
+          setChatOpen(true)
+        }}
+      />
 
       {!chatOpen && (
         <button
