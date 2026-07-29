@@ -43,7 +43,8 @@ Tidewater derives an average monthly income and spend:
   of calendar months touched.
 - Categories are merged case-insensitively, so `Groceries` and `GROCERIES` become one line.
 - Categories are mapped onto ten groups by keyword. Anything unrecognised lands in *Everything Else*
-  and can be moved by hand.
+  and can be moved by hand. The full keyword lists and ordering rules are in
+  [docs/category-mapping.md](docs/category-mapping.md).
 
 `Test-Data/Transactions_2026-07-29.csv` is a working example.
 
