@@ -1,7 +1,16 @@
 # Changelog
 
+## v0.3.0 — 2026-07-29
+
+- CR-16: Add a help feature
+
 Versions follow [semver](https://semver.org): **MAJOR.MINOR.PATCH**.
 Release notes start here — earlier work lived in the initial 0.1.0 commit without a changelog.
+
+## 0.2.4 — 2026-07-29
+
+### Added
+- Help button in the header and a dedicated Help modal with guidance on budget setup, expense sliders, goals, CSV/Monarch importing, chat assistant, and data privacy
 
 ## 0.2.3 — 2026-07-29
 

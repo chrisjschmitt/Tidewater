@@ -9,6 +9,7 @@ interface Props {
   onLoadSample: () => void
   onImportFile: (file: File) => void
   onOpenChangelog: () => void
+  onOpenHelp?: () => void
   busy?: boolean
 }
 
@@ -19,6 +20,7 @@ export default function Onboarding({
   onLoadSample,
   onImportFile,
   onOpenChangelog,
+  onOpenHelp,
   busy,
 }: Props) {
   const [screen, setScreen] = useState<Screen>('welcome')
@@ -70,10 +72,21 @@ export default function Onboarding({
 
           {busy && <p className="mt-6 text-sm text-ink-400">Reading your file…</p>}
 
-          <p className="mt-10 text-xs leading-relaxed text-ink-400">
-            Your budget is stored in this browser only. There is no account, no server, and no
-            tracking. You can export everything at any time.
-          </p>
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-4 text-xs leading-relaxed text-ink-400">
+            <span>
+              Your budget is stored in this browser only. There is no account, no server, and no
+              tracking. You can export everything at any time.
+            </span>
+            {onOpenHelp && (
+              <button
+                type="button"
+                onClick={onOpenHelp}
+                className="shrink-0 text-tide-700 underline underline-offset-2 hover:text-tide-800"
+              >
+                Help & guide
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <Wizard onBack={() => setScreen('welcome')} onDone={onReady} />
