@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4 — 2026-07-30
+
+### Fixed
+- Transaction import review appears immediately on the welcome screen (it used to wait until a budget was already open)
+
 ## 0.3.3 — 2026-07-30
 
 ### Added

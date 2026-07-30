@@ -244,6 +244,12 @@ export default function App() {
           </p>
         )}
         {importProgress && <ImportProgress progress={importProgress} />}
+        <ImportReview
+          result={pendingImport}
+          hasGoals={false}
+          onCancel={() => setPendingImport(null)}
+          onApply={applyImport}
+        />
       </>
     )
   }
