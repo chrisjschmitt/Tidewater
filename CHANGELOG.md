@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-07-29
+
+### Added
+- **Restore a full backup** under Your data (JSON), so export and restore sit together; welcome Import also accepts `.json`
+
 ## v0.3.0 — 2026-07-29
 
 - CR-16: Add a help feature

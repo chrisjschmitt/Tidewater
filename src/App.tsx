@@ -92,8 +92,15 @@ export default function App() {
       setBusy(true)
       try {
         const text = await file.text()
-        if (file.name.endsWith('.json')) {
+        const looksLikeBackup =
+          file.name.toLowerCase().endsWith('.json') ||
+          file.type === 'application/json' ||
+          text.trimStart().startsWith('{')
+        if (looksLikeBackup) {
           const restored = JSON.parse(text) as Budget
+          if (!restored || !Array.isArray(restored.expenses) || !Array.isArray(restored.income)) {
+            throw new Error('That JSON file does not look like a Tidewater backup.')
+          }
           commit({ ...restored, updatedAt: new Date().toISOString() })
           flash('Your backup is restored.')
           return
@@ -378,6 +385,10 @@ export default function App() {
         open={dataOpen}
         budget={budget}
         onClose={() => setDataOpen(false)}
+        onImportBackup={(file) => {
+          setDataOpen(false)
+          void handleFile(file)
+        }}
         onReset={() => {
           void clearBudget()
           void clearChat()
@@ -515,16 +526,19 @@ function DataModal({
   open,
   budget,
   onClose,
+  onImportBackup,
   onReset,
   onLoadSample,
 }: {
   open: boolean
   budget: Budget
   onClose: () => void
+  onImportBackup: (file: File) => void
   onReset: () => void
   onLoadSample: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
+  const backupRef = useRef<HTMLInputElement>(null)
 
   return (
     <Modal
@@ -534,6 +548,17 @@ function DataModal({
       subtitle="It lives in this browser, on this device, and nowhere else."
       width="max-w-lg"
     >
+      <input
+        ref={backupRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onImportBackup(file)
+          e.target.value = ''
+        }}
+      />
       <div className="space-y-3">
         <Row
           title="Export as a budget file"
@@ -557,6 +582,12 @@ function DataModal({
               'application/json',
             )
           }
+        />
+        <Row
+          title="Restore a full backup"
+          body="Replace what is on screen with a Tidewater JSON backup from this or another device."
+          action="Choose JSON"
+          onClick={() => backupRef.current?.click()}
         />
         <Row
           title="Load Ted’s sample budget"

@@ -31,7 +31,7 @@ export default function Onboarding({
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,.json,text/csv,application/json"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -60,7 +60,7 @@ export default function Onboarding({
             />
             <Choice
               title="Import a file"
-              body="A Tidewater budget, or a year of transactions from Monarch Money."
+              body="A Tidewater budget CSV, a full JSON backup, or a year of Monarch Money transactions."
               onClick={() => fileRef.current?.click()}
             />
             <Choice

@@ -107,7 +107,9 @@ const TOPICS: Topic[] = [
             <strong>Budget CSV:</strong> Load or export clean CSV budget files compatible with Excel or Google Sheets.
           </li>
           <li>
-            <strong>JSON Backup:</strong> Save a complete snapshot of your budget, custom goals, and profile settings via <strong>Your data</strong>.
+            <strong>JSON Backup:</strong> Under <strong>Your data</strong>, download a full snapshot
+            (budget, goals, profile), then restore it with <strong>Restore a full backup</strong> —
+            or use the header <strong>Import</strong> button with a <code>.json</code> file.
           </li>
           <li>
             <strong>Ted’s Sample Budget:</strong> Explore pre-populated sample data anytime to test features safely.
