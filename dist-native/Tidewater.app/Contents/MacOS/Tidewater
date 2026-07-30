@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+URL="${TIDEWATER_URL:-https://tidewater-one.vercel.app}"
+
+open_chrome_family() {
+  local app="$1"
+  if [[ -d "/Applications/${app}.app" ]] || [[ -d "$HOME/Applications/${app}.app" ]]; then
+    open -na "$app" --args --app="$URL" --new-window
+    return 0
+  fi
+  return 1
+}
+
+if open_chrome_family "Google Chrome"; then
+  exit 0
+fi
+if open_chrome_family "Microsoft Edge"; then
+  exit 0
+fi
+if open_chrome_family "Brave Browser"; then
+  exit 0
+fi
+if open_chrome_family "Chromium"; then
+  exit 0
+fi
+
+# Safari fallback — opens the site; use File → Add to Dock for a true PWA window.
+open -a Safari "$URL"

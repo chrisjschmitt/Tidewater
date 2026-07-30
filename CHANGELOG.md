@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 — 2026-07-30
+
+### Added
+- Desktop / home-screen icon set (PNG + Apple touch icon + macOS `.icns`)
+- Installable Mac app at `dist-native/Tidewater.app` (`npm run app:mac`) — opens the live PWA in an app window
+- Stronger PWA manifest for installing Tidewater on Mac and iPad
+
 ## 0.3.1 — 2026-07-29
 
 ### Added

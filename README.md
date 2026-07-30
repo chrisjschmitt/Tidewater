@@ -6,21 +6,92 @@ life you actually want.
 
 Everything you enter stays in your browser. There is no account, no server, and no analytics.
 
-## Running it
+Live site: [https://tidewater-one.vercel.app](https://tidewater-one.vercel.app)
+
+## Installation
+
+Tidewater is a Progressive Web App (PWA). Personal data stays in the browser (or browser profile)
+used to open it — nothing is uploaded to a Tidewater server.
+
+### Option A — MacBook: Tidewater.app (recommended)
+
+A double-clickable Mac app is built into this repo.
+
+1. In Terminal, from the project folder:
+
+   ```bash
+   npm run app:mac
+   ```
+
+   This writes `dist-native/Tidewater.app`.
+
+2. In Finder, open the `dist-native` folder.
+3. Drag **Tidewater.app** into **Applications** (or keep it in `dist-native` / on the Desktop).
+4. Double-click **Tidewater** to launch.
+5. If macOS says the app can’t be opened because it is from an unidentified developer:
+   - Control-click (or right-click) **Tidewater.app** → **Open** → **Open**.
+   - You only need to do this once.
+
+What it does: opens the live Tidewater site in an app-style window using Google Chrome, Microsoft
+Edge, or Brave if installed; otherwise it opens Safari.
+
+Optional — point the app at a local dev server instead of production:
+
+```bash
+npm run dev
+# in another terminal:
+TIDEWATER_URL=http://localhost:5173 npm run app:mac
+```
+
+Then launch the rebuilt `dist-native/Tidewater.app`.
+
+### Option B — MacBook: install from the browser
+
+1. Open [https://tidewater-one.vercel.app](https://tidewater-one.vercel.app) in Chrome, Edge, or Safari.
+2. **Chrome / Edge:** click the install icon in the address bar (or the browser menu → **Install Tidewater** / **Open as app**).
+3. **Safari (macOS):** **File → Add to Dock**.
+
+Tidewater then appears as its own window with the Tidewater icon.
+
+### Option C — iPad: Add to Home Screen
+
+iPadOS does not run the Mac `.app`. Install the PWA from Safari:
+
+1. Open **Safari** on the iPad (not Chrome — home-screen install is a Safari feature).
+2. Go to [https://tidewater-one.vercel.app](https://tidewater-one.vercel.app).
+3. Tap the **Share** button (square with an arrow).
+4. Scroll and tap **Add to Home Screen**.
+5. Keep the name **Tidewater**, confirm the icon, then tap **Add**.
+
+Launch Tidewater from the home screen like any other app. It opens full screen; your budget stays
+on that iPad.
+
+> **Note:** The home-screen icon is served from the live site. After icon updates are merged and
+> deployed to Vercel, remove the old home-screen icon and add it again if the icon does not refresh.
+
+### Updating the Mac app icon assets
+
+Icons live under `public/icons/` (plus `public/apple-touch-icon.png` and `native/mac/AppIcon.icns`).
+Rebuild from the 1024×1024 master:
+
+```bash
+npm run icons
+npm run app:mac
+```
+
+## Running from source (developers)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Then open http://localhost:5173. To build and serve the production version:
+Then open http://localhost:5173. Production build:
 
 ```bash
 npm run build
 npm run preview
 ```
-
-Tidewater is an installable PWA, so your browser will offer to install it as an app once built.
 
 ## Three ways to start
 
@@ -119,9 +190,12 @@ configured. `npm run check:assistant "your question"` shows which intent a quest
 ```
 src/lib/          budget maths, CSV parsing, projections, storage, assistant
 src/components/   dashboard, group drill-in, goals, chat, onboarding
-public/sample/    Ted's default budget
-scripts/          sanity checks that run the real parsers against Test-Data
-docs/             product spec
+public/icons/     PWA and home-screen PNG icons
+public/sample/    Sample budgets (Ted balanced; Noel overspending)
+native/mac/       macOS AppIcon.icns source
+dist-native/      Tidewater.app (from npm run app:mac)
+scripts/          sanity checks, icon build, Mac app build
+docs/             product spec and category mapping
 ```
 
 ## Checks
