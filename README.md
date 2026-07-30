@@ -118,10 +118,15 @@ Tidewater derives an average monthly income and spend:
   [docs/category-mapping.md](docs/category-mapping.md).
 
 `Test-Data/` is gitignored (personal Monarch exports stay on your machine). Drop a transaction
-CSV there to try **Import**, or run `npm run check:import` when the file is present.
+CSV there for local smoke tests; `npm run check:import` will pick it up when present.
 
-Sample budgets you can import anytime: `public/sample/ted-budget.csv` (balanced) and
-`public/sample/noel-budget.csv` (overspending, no savings goals).
+Checked-in samples (safe to commit and import anytime):
+
+| File | What it is |
+|------|------------|
+| `public/sample/ted-budget.csv` | Balanced starter budget |
+| `public/sample/noel-budget.csv` | Overspending budget, no savings goals |
+| `public/sample/monarch-fixture.csv` | Fake ~12 months of Monarch-style transactions for import testing |
 
 ## The budget CSV format
 
