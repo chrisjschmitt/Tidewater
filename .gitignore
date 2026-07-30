@@ -7,3 +7,7 @@ dist-ssr
 .vite
 *.tsbuildinfo
 native/mac/Tidewater.iconset
+
+# Local Monarch exports and Numbers workbooks — often personal; keep off GitHub
+Test-Data/
+*.numbers

@@ -117,7 +117,11 @@ Tidewater derives an average monthly income and spend:
   and can be moved by hand. The full keyword lists and ordering rules are in
   [docs/category-mapping.md](docs/category-mapping.md).
 
-`Test-Data/Transactions_2026-07-29.csv` is a working example.
+`Test-Data/` is gitignored (personal Monarch exports stay on your machine). Drop a transaction
+CSV there to try **Import**, or run `npm run check:import` when the file is present.
+
+Sample budgets you can import anytime: `public/sample/ted-budget.csv` (balanced) and
+`public/sample/noel-budget.csv` (overspending, no savings goals).
 
 ## The budget CSV format
 

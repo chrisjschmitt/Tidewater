@@ -1,8 +1,11 @@
 /**
- * Sanity check for the CSV importers, run against the real files in Test-Data.
- * Usage: npx tsx scripts/check-import.ts
+ * Sanity check for the CSV importers.
+ * Usage: npm run check:import
+ *
+ * Always checks public sample budgets. Monarch transaction CSVs under Test-Data/
+ * are optional (that folder is gitignored when it holds personal exports).
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { parseBudgetCsv, parseTransactionsCsv } from '../src/lib/csv.ts'
 import { groupSummaries, totalExpenses, totalIncome, unallocated } from '../src/lib/budget.ts'
 import { money } from '../src/lib/format.ts'
@@ -18,17 +21,29 @@ const asBudget = (income: Budget['income'], expenses: Budget['expenses'], goals:
   source: 'transactions',
 })
 
-console.log('=== Ted sample budget ===')
-const ted = parseBudgetCsv(readFileSync('public/sample/ted-budget.csv', 'utf8'))
-const tedBudget = asBudget(ted.income, ted.expenses, ted.goals)
-console.log('income     ', money(totalIncome(tedBudget)))
-console.log('expenses   ', money(totalExpenses(tedBudget)))
-console.log('goals      ', ted.goals.map((g) => `${g.name} ${money(g.monthly)}/mo`).join(', '))
-console.log('unallocated', money(unallocated(tedBudget)))
-console.log('warnings   ', ted.warnings)
+function summarizeBudget(label: string, path: string) {
+  console.log(`=== ${label} ===`)
+  const parsed = parseBudgetCsv(readFileSync(path, 'utf8'))
+  const budget = asBudget(parsed.income, parsed.expenses, parsed.goals)
+  console.log('income     ', money(totalIncome(budget)))
+  console.log('expenses   ', money(totalExpenses(budget)))
+  console.log('goals      ', parsed.goals.map((g) => `${g.name} ${money(g.monthly)}/mo`).join(', ') || '(none)')
+  console.log('unallocated', money(unallocated(budget)))
+  console.log('warnings   ', parsed.warnings)
+  console.log()
+}
 
-console.log('\n=== Monarch transactions ===')
-const tx = parseTransactionsCsv(readFileSync('Test-Data/Transactions_2026-07-29.csv', 'utf8'))
+summarizeBudget('Ted sample budget', 'public/sample/ted-budget.csv')
+summarizeBudget('Noel sample budget', 'public/sample/noel-budget.csv')
+
+const monarchPath = 'Test-Data/Transactions_2026-07-29.csv'
+console.log('=== Monarch transactions ===')
+if (!existsSync(monarchPath)) {
+  console.log(`Skipped — ${monarchPath} not found (Test-Data/ is local-only).`)
+  process.exit(0)
+}
+
+const tx = parseTransactionsCsv(readFileSync(monarchPath, 'utf8'))
 const txBudget = asBudget(tx.income, tx.expenses)
 console.log(tx.note)
 console.log('skipped internal transfers/payments:', tx.skippedInternal)
