@@ -117,16 +117,43 @@ Tidewater derives an average monthly income and spend:
   and can be moved by hand. The full keyword lists and ordering rules are in
   [docs/category-mapping.md](docs/category-mapping.md).
 
-`Test-Data/` is gitignored (personal Monarch exports stay on your machine). Drop a transaction
-CSV there for local smoke tests; `npm run check:import` will pick it up when present.
-
-Checked-in samples (safe to commit and import anytime):
+### Sample files and the Monarch fixture
 
 | File | What it is |
 |------|------------|
-| `public/sample/ted-budget.csv` | Balanced starter budget |
-| `public/sample/noel-budget.csv` | Overspending budget, no savings goals |
-| `public/sample/monarch-fixture.csv` | Fake ~12 months of Monarch-style transactions for import testing |
+| `public/sample/ted-budget.csv` | Balanced starter budget (also used by **Look around first**) |
+| `public/sample/noel-budget.csv` | Overspending budget with no savings goals |
+| `public/sample/monarch-fixture.csv` | Fake ~12 months of Monarch-style transactions for testing import |
+
+**When to use the Monarch fixture**
+
+- After changing CSV parsing, category mapping (`src/lib/categories.ts`), or the import review UI
+- Before a release or PR that touches `src/lib/csv.ts` / `scripts/check-import.ts`
+- Anytime you want a repeatable import without using personal bank data
+
+**How to run it in the app**
+
+1. Start the app (`npm run dev`) and open http://localhost:5173 — or use the live site.
+2. Click **Import** (or **Import a file** on the welcome screen).
+3. Choose `public/sample/monarch-fixture.csv`.
+4. Confirm the import review: you should see averaged monthly income/spend, internal transfers
+   skipped, and categories sorted into Tidewater groups.
+
+**How to run it from the command line**
+
+```bash
+npm run check:import
+```
+
+That always parses Ted’s budget, Noel’s budget, and `monarch-fixture.csv`, then prints derived
+totals and spending-by-group. No browser required. Use this as a quick regression check while
+coding.
+
+**Personal exports (optional)**
+
+`Test-Data/` is gitignored. If you drop a real Monarch CSV there (for example
+`Test-Data/Transactions_2026-07-29.csv`), `npm run check:import` will also summarize it after the
+sanitized fixture. Prefer the fixture for anything that gets committed or shared.
 
 ## The budget CSV format
 
@@ -200,7 +227,7 @@ configured. `npm run check:assistant "your question"` shows which intent a quest
 src/lib/          budget maths, CSV parsing, projections, storage, assistant
 src/components/   dashboard, group drill-in, goals, chat, onboarding
 public/icons/     PWA and home-screen PNG icons
-public/sample/    Sample budgets (Ted balanced; Noel overspending)
+public/sample/    Ted & Noel budgets; monarch-fixture.csv for import tests
 native/mac/       macOS AppIcon.icns source
 dist-native/      Tidewater.app (from npm run app:mac)
 scripts/          sanity checks, icon build, Mac app build
@@ -211,11 +238,13 @@ docs/             product spec and category mapping
 
 ```bash
 npm run typecheck       # TypeScript
-npm run check:import    # parses Ted's budget and the Monarch export, prints derived totals
+npm run check:import    # Ted + Noel budgets and monarch-fixture.csv (plus local Test-Data if present)
 npm run check:starter   # generates starter budgets for three household shapes
 npm run check:assistant "Where does my money go?"   # shows the local answer for a question
 ```
 
+Run `check:import` whenever you change import or category-mapping code; details are under
+**Sample files and the Monarch fixture** above.
 ## Versions
 
 Release notes live in [`CHANGELOG.md`](CHANGELOG.md). The current version is in `package.json`
