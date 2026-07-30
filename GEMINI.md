@@ -65,3 +65,9 @@ acknowledgement.
   promote = merge to `main` + push.
 
 ## Lessons from CRs
+
+### From CR-16 (2026-07-29)
+- Help UI: `src/components/HelpModal.tsx` (static, accordion sections + search), opened from a header button in `App.tsx` and a "Help & guide" link in `Onboarding`.
+- No emoji in UI copy; match `ChangelogModal`/`Modal` typography and the app's quiet visual language.
+- Explanatory/help copy must be verified line-by-line against actual code (`starter.ts`, `csv.ts`, `goals.ts`, `storage.ts`) — never described from a plan draft.
+- Verify header controls don't wrap at 375px when adding buttons to the header group.
