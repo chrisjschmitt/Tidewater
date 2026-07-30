@@ -5,6 +5,7 @@ import GoalsPanel from './components/GoalsPanel'
 import GroupBars from './components/GroupBars'
 import GroupDetail from './components/GroupDetail'
 import HelpModal from './components/HelpModal'
+import ImportProgress, { type ImportProgressState } from './components/ImportProgress'
 import IncomeCard from './components/IncomeCard'
 import Modal from './components/Modal'
 import Onboarding from './components/Onboarding'
@@ -23,7 +24,7 @@ import {
   DEFAULT_PROFILE,
   detectCsvKind,
   parseBudgetCsv,
-  parseTransactionsCsv,
+  parseTransactionsCsvAsync,
   toBudgetCsv,
   type TransactionImport,
 } from './lib/csv'
@@ -53,6 +54,7 @@ export default function App() {
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -90,33 +92,53 @@ export default function App() {
   const handleFile = useCallback(
     async (file: File) => {
       setBusy(true)
+      const setPhase = (label: string, percent: number) => {
+        setImportProgress({ fileName: file.name, label, percent })
+      }
+
       try {
-        const text = await file.text()
+        setPhase('Reading your file…', 2)
+        const text = await readFileText(file, (loaded, total) => {
+          const fraction = total > 0 ? loaded / total : 1
+          setPhase('Reading your file…', Math.round(fraction * 40))
+        })
+        setPhase('Reading your file…', 42)
+
         const looksLikeBackup =
           file.name.toLowerCase().endsWith('.json') ||
           file.type === 'application/json' ||
           text.trimStart().startsWith('{')
         if (looksLikeBackup) {
+          setPhase('Restoring your backup…', 70)
+          await yieldToUi()
           const restored = JSON.parse(text) as Budget
           if (!restored || !Array.isArray(restored.expenses) || !Array.isArray(restored.income)) {
             throw new Error('That JSON file does not look like a Tidewater backup.')
           }
+          setPhase('Restoring your backup…', 95)
           commit({ ...restored, updatedAt: new Date().toISOString() })
           flash('Your backup is restored.')
           return
         }
 
         if (detectCsvKind(text) === 'transactions') {
-          const result = parseTransactionsCsv(text)
+          setPhase('Averaging your transactions…', 45)
+          const result = await parseTransactionsCsvAsync(text, (fraction) => {
+            setPhase('Averaging your transactions…', Math.round(45 + fraction * 50))
+          })
           if (result.expenses.length === 0 && result.income.length === 0) {
             flash('I could not find any spending in that file. Is it a transaction export?')
             return
           }
+          setPhase('Almost ready…', 100)
           setPendingImport(result)
           return
         }
 
+        setPhase('Loading your budget…', 75)
+        await yieldToUi()
         const parsed = parseBudgetCsv(text)
+        setPhase('Loading your budget…', 95)
         commit({
           version: 1,
           profile: budget?.profile ?? DEFAULT_PROFILE,
@@ -131,6 +153,7 @@ export default function App() {
         flash(`That file could not be read: ${err instanceof Error ? err.message : String(err)}`)
       } finally {
         setBusy(false)
+        setImportProgress(null)
       }
     },
     [budget, commit],
@@ -220,6 +243,7 @@ export default function App() {
             {notice}
           </p>
         )}
+        {importProgress && <ImportProgress progress={importProgress} />}
       </>
     )
   }
@@ -423,6 +447,8 @@ export default function App() {
           </svg>
         </button>
       )}
+
+      {importProgress && <ImportProgress progress={importProgress} />}
     </div>
   )
 }
@@ -648,4 +674,22 @@ function Row({
       </button>
     </div>
   )
+}
+
+const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+function readFileText(
+  file: File,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded, e.total)
+      else if (file.size > 0) onProgress?.(Math.min(e.loaded, file.size), file.size)
+    }
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read that file.'))
+    reader.readAsText(file)
+  })
 }

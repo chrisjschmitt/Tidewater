@@ -140,37 +140,115 @@ export interface TransactionImport {
 }
 
 export function parseTransactionsCsv(text: string): TransactionImport {
+  return finalizeTransactionImport(accumulateTransactionRows(readRows(text)))
+}
+
+/**
+ * Same as parseTransactionsCsv, but yields to the UI between batches so a large
+ * Monarch export can show a progress bar instead of freezing the page.
+ */
+export async function parseTransactionsCsvAsync(
+  text: string,
+  onProgress?: (fraction: number) => void,
+): Promise<TransactionImport> {
+  const report = (fraction: number) => onProgress?.(Math.max(0, Math.min(1, fraction)))
+  report(0)
+  await yieldToUi()
   const rows = readRows(text)
-  /** Keyed case-insensitively so "Groceries" and "GROCERIES" are one category. */
+  report(0.12)
+  await yieldToUi()
+
   const buckets = new Map<string, { net: number; labels: Map<string, number> }>()
+  let skippedInternal = 0
+  let counted = 0
+  let firstDate = ''
+  let lastDate = ''
+  const batch = Math.max(100, Math.ceil(rows.length / 40))
+
+  for (let i = 0; i < rows.length; i++) {
+    const outcome = ingestTransactionRow(rows[i]!, buckets)
+    if (outcome === 'skip-empty') continue
+    if (outcome === 'skip-internal') {
+      skippedInternal++
+      continue
+    }
+    counted++
+    if (!firstDate || outcome.date < firstDate) firstDate = outcome.date
+    if (!lastDate || outcome.date > lastDate) lastDate = outcome.date
+
+    if (i > 0 && i % batch === 0) {
+      report(0.12 + 0.8 * (i / rows.length))
+      await yieldToUi()
+    }
+  }
+
+  report(0.95)
+  await yieldToUi()
+  const result = finalizeTransactionImport({
+    buckets,
+    skippedInternal,
+    counted,
+    firstDate,
+    lastDate,
+  })
+  report(1)
+  return result
+}
+
+const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+type BucketMap = Map<string, { net: number; labels: Map<string, number> }>
+
+function accumulateTransactionRows(rows: Record<string, string>[]) {
+  const buckets: BucketMap = new Map()
   let skippedInternal = 0
   let counted = 0
   let firstDate = ''
   let lastDate = ''
 
   for (const row of rows) {
-    const dateText = pick(row, 'Date', 'Transaction Date', 'Posted Date')
-    const category = (pick(row, 'Category', 'Category Name') || 'Uncategorized').replace(/\s+/g, ' ').trim()
-    const amount = parseAmount(pick(row, 'Amount', 'Value'))
-    if (!dateText || amount === 0) continue
-
-    if (isInternalCategory(category)) {
+    const outcome = ingestTransactionRow(row, buckets)
+    if (outcome === 'skip-empty') continue
+    if (outcome === 'skip-internal') {
       skippedInternal++
       continue
     }
-
-    const date = dateText.slice(0, 10)
-    if (!firstDate || date < firstDate) firstDate = date
-    if (!lastDate || date > lastDate) lastDate = date
-
-    const key = category.toLowerCase()
-    const bucket = buckets.get(key) ?? { net: 0, labels: new Map<string, number>() }
-    bucket.net += amount
-    bucket.labels.set(category, (bucket.labels.get(category) ?? 0) + 1)
-    buckets.set(key, bucket)
     counted++
+    if (!firstDate || outcome.date < firstDate) firstDate = outcome.date
+    if (!lastDate || outcome.date > lastDate) lastDate = outcome.date
   }
 
+  return { buckets, skippedInternal, counted, firstDate, lastDate }
+}
+
+function ingestTransactionRow(
+  row: Record<string, string>,
+  buckets: BucketMap,
+): 'skip-empty' | 'skip-internal' | { date: string } {
+  const dateText = pick(row, 'Date', 'Transaction Date', 'Posted Date')
+  const category = (pick(row, 'Category', 'Category Name') || 'Uncategorized').replace(/\s+/g, ' ').trim()
+  const amount = parseAmount(pick(row, 'Amount', 'Value'))
+  if (!dateText || amount === 0) return 'skip-empty'
+
+  if (isInternalCategory(category)) return 'skip-internal'
+
+  const date = dateText.slice(0, 10)
+  const key = category.toLowerCase()
+  const bucket = buckets.get(key) ?? { net: 0, labels: new Map<string, number>() }
+  bucket.net += amount
+  bucket.labels.set(category, (bucket.labels.get(category) ?? 0) + 1)
+  buckets.set(key, bucket)
+  return { date }
+}
+
+function finalizeTransactionImport(state: {
+  buckets: BucketMap
+  skippedInternal: number
+  counted: number
+  firstDate: string
+  lastDate: string
+}): TransactionImport {
+  const { buckets, skippedInternal, counted, firstDate, lastDate } = state
   const months = monthSpan(firstDate, lastDate)
   const income: IncomeLine[] = []
   const expenses: ExpenseLine[] = []

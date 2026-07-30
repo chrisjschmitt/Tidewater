@@ -101,7 +101,8 @@ const TOPICS: Topic[] = [
         </p>
         <ul className="list-disc space-y-1.5 pl-5 text-ink-700">
           <li>
-            <strong>Monarch Money Import:</strong> Import 12 months of exported transactions (<code>Transactions_...csv</code>). Tidewater automatically calculates monthly averages and filters out internal transfers/payments.
+            <strong>Monarch Money Import:</strong> Import 12 months of exported transactions (<code>Transactions_...csv</code>).
+            Tidewater shows a progress bar while it reads and averages the file, then filters out internal transfers/payments.
           </li>
           <li>
             <strong>Budget CSV:</strong> Load or export clean CSV budget files compatible with Excel or Google Sheets.

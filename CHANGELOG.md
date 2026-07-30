@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 — 2026-07-30
+
+### Added
+- Progress bar while importing large files (reading, then averaging Monarch transactions)
+
 ## 0.3.2 — 2026-07-30
 
 ### Added
