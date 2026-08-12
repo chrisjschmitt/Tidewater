@@ -54,6 +54,7 @@ export default function EtmModule({
   if (unlockedKey) {
     return (
       <EtmArea
+        unlockedKey={unlockedKey}
         onClose={onClose}
         onLock={() => {
           void forgetRememberedKey()

@@ -52,6 +52,9 @@ const RECORD_STORES = [
   'config',
 ] as const
 
+/** Stores holding sealed records, as opposed to the vault's own bookkeeping. */
+export type RecordStore = (typeof RECORD_STORES)[number]
+
 export function openEtmDb(): Promise<EtmDb> {
   return openDB<EtmSchema>(DB_NAME, DB_VERSION, {
     upgrade(db) {
