@@ -40,6 +40,7 @@ export default function SummaryRing({ income, spending, goals, size = 260, actua
   const innerCircumference = 2 * Math.PI * innerRadius
   const actualIncome = overlay?.income.CAD ?? 0
   const actualSpend = overlay?.spend.CAD ?? 0
+  const reimbursed = overlay?.reimbursable.CAD ?? 0
   const actualShare = Math.min(1, actualSpend / Math.max(actualIncome, 1))
   const actualOver = actualSpend > actualIncome
 
@@ -148,6 +149,12 @@ export default function SummaryRing({ income, spending, goals, size = 260, actua
           {overlay.months > 1 && (
             <p className="mt-2 text-center text-[11px] text-ink-400">
               Over {overlay.months} months. The plan above is monthly.
+            </p>
+          )}
+          {reimbursed > 0 && (
+            <p className="mt-2 text-center text-[11px] text-ink-400">
+              Another {money(reimbursed)} went out on reimbursable spending, held
+              apart here because it comes back.
             </p>
           )}
         </div>

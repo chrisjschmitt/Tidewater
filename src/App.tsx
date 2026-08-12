@@ -66,6 +66,7 @@ export default function App() {
   const [etmOpen, setEtmOpen] = useState(false)
   const [etmKey, setEtmKey] = useState<CryptoKey | null>(null)
   const [etmState, setEtmActuals] = useState<DashboardActuals | null>(null)
+  const [etmCategory, setEtmCategory] = useState<string | null>(null)
   // Folds to a constant null in public builds, so no comparison markup ships.
   const etmActuals = __ETM_AVAILABLE__ ? etmState : null
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
@@ -383,6 +384,8 @@ export default function App() {
               open={etmOpen}
               unlockedKey={etmKey}
               budget={budget}
+              openCategory={etmCategory}
+              onCloseCategory={() => setEtmCategory(null)}
               onActuals={setEtmActuals}
               onUnlocked={rememberEtmUnlock}
               onOpen={() => setEtmOpen(true)}
@@ -473,8 +476,13 @@ export default function App() {
       <GroupDetail
         summary={activeSummary}
         unallocated={left}
-        onClose={() => setOpenGroup(null)}
+        onClose={() => {
+          setOpenGroup(null)
+          setEtmCategory(null)
+        }}
         onChange={(lines) => activeSummary && setExpenses(lines, activeSummary.group.id)}
+        actuals={etmActuals}
+        onOpenCategory={etmActuals ? setEtmCategory : undefined}
       />
 
       <ChatPanel

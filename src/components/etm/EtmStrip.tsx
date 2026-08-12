@@ -8,6 +8,8 @@ interface Props {
   months: string[]
   income: Money
   spend: Money
+  /** Named rather than folded in, so "Out" cannot be read as everything. */
+  reimbursable: Money
   counted: number
   loading: boolean
   onPeriodChange: (period: Period) => void
@@ -24,11 +26,14 @@ export default function EtmStrip({
   months,
   income,
   spend,
+  reimbursable,
   counted,
   loading,
   onPeriodChange,
   onOpen,
 }: Props) {
+  const advances = presentIn(reimbursable)
+
   return (
     <section className="card mb-6 flex flex-wrap items-center justify-between gap-4 px-5 py-3.5 animate-fade">
       <div className="flex flex-wrap items-center gap-4">
@@ -48,6 +53,15 @@ export default function EtmStrip({
             <span className="text-xs text-ink-400">
               {counted.toLocaleString()} transaction{counted === 1 ? '' : 's'}
             </span>
+            {advances.length > 0 && (
+              <span className="text-xs text-ink-400">
+                plus{' '}
+                {advances
+                  .map(([currency, value]) => amountIn(Math.abs(value), currency))
+                  .join(' · ')}{' '}
+                reimbursable, kept out
+              </span>
+            )}
           </>
         )}
         <button onClick={onOpen} className="btn-ghost text-xs">

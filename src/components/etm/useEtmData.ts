@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DEFAULT_CONFIG, type EtmConfig } from '../../lib/etm/config'
 import type { ImportPlan } from '../../lib/etm/importer'
 import {
   addManualTransaction,
@@ -6,9 +7,11 @@ import {
   deleteAccount,
   loadAccounts,
   loadBatches,
+  loadConfig,
   loadTransactions,
   removeTransaction,
   saveAccount,
+  saveConfig,
   undoBatch,
 } from '../../lib/etm/storage/repo'
 import { monthOf, type Account, type ImportBatch, type Transaction } from '../../lib/etm/types'
@@ -18,6 +21,8 @@ export interface EtmData {
   accounts: Account[]
   transactions: Transaction[]
   batches: ImportBatch[]
+  config: EtmConfig
+  saveSettings: (config: EtmConfig) => Promise<void>
   /** Months holding data, oldest first — what the period selector offers. */
   months: string[]
   transactionCounts: Map<string, number>
@@ -38,18 +43,21 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [batches, setBatches] = useState<ImportBatch[]>([])
+  const [config, setConfig] = useState<EtmConfig>(DEFAULT_CONFIG)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
 
   const reload = useCallback(async () => {
-    const [nextAccounts, nextTransactions, nextBatches] = await Promise.all([
+    const [nextAccounts, nextTransactions, nextBatches, nextConfig] = await Promise.all([
       loadAccounts(unlockedKey),
       loadTransactions(unlockedKey),
       loadBatches(unlockedKey),
+      loadConfig(unlockedKey),
     ])
     setAccounts(nextAccounts)
     setTransactions(nextTransactions)
     setBatches(nextBatches)
+    setConfig(nextConfig)
   }, [unlockedKey])
 
   useEffect(() => {
@@ -97,6 +105,14 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
       await reload()
     },
     [accounts, reload, unlockedKey],
+  )
+
+  const saveSettings = useCallback(
+    async (next: EtmConfig) => {
+      await saveConfig(unlockedKey, next)
+      setConfig(next)
+    },
+    [unlockedKey],
   )
 
   const removeAccount = useCallback(
@@ -149,6 +165,8 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     accounts,
     transactions,
     batches,
+    config,
+    saveSettings,
     months,
     transactionCounts,
     notice,

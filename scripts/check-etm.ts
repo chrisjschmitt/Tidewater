@@ -15,8 +15,10 @@ import { groupForCategory } from '../src/lib/categories.ts'
 import {
   aggregate,
   compareToBudget,
+  dashboardActuals,
   filterTransactions,
   isEmpty,
+  isReimbursable,
   noFilters,
   runningTotals,
   sumOf,
@@ -312,15 +314,15 @@ const all = first.added
 const dec = aggregate(all, december)
 
 check('internal movements are set aside', dec.internal === 4, `${dec.internal}`)
-check('everything else is counted', dec.counted === 28, `${dec.counted}`)
+check('everything else is counted', dec.counted === 27, `${dec.counted}`)
 check('income is summed', round(dec.income.CAD) === 6062.4, `${round(dec.income.CAD)}`)
-check('spending is summed', round(dec.spend.CAD) === 3470.48, `${round(dec.spend.CAD)}`)
-check('USD is kept apart from CAD', round(dec.spend.USD) === 24, `${round(dec.spend.USD)}`)
+check('spending is summed', round(dec.spend.CAD) === 3060.48, `${round(dec.spend.CAD)}`)
+check('USD is kept apart from CAD', round(dec.spend.USD) === 30, `${round(dec.spend.USD)}`)
 check('no transfer leaked into a total', round(dec.income.CAD) !== 6262.4 && round(dec.spend.CAD) !== 4270.48)
 
 const EXPECTED_GROUP_SPEND: Array<[GroupId, number]> = [
   ['home', 1930],
-  ['joy', 571.98],
+  ['joy', 161.98],
   ['food', 406.5],
   ['transport', 318],
   ['personal', 120],
@@ -338,7 +340,100 @@ check(
 )
 check(
   'a USD-only category reports no CAD',
-  dec.byGroup.get('personal')?.categories.some((c) => c.label === 'Software' && c.spend.CAD === 0 && c.spend.USD === 24),
+  dec.byGroup.get('personal')?.categories.some((c) => c.label === 'Software' && c.spend.CAD === 0 && c.spend.USD === 30),
+)
+
+console.log('\n=== Reimbursables are held out of the budget ===')
+
+// December holds three: two untagged beyond the marker, and one carrying two
+// bucket tags at once.
+check('they are counted apart', dec.reimbursable.count === 3, `${dec.reimbursable.count}`)
+check('their total is kept', round(dec.reimbursable.spend.CAD) === 550, `${round(dec.reimbursable.spend.CAD)}`)
+check('in their own currencies', round(dec.reimbursable.spend.USD) === 24, `${round(dec.reimbursable.spend.USD)}`)
+check('none of it reached the budget', round(dec.spend.CAD) === 3060.48 && round(dec.spend.USD) === 30)
+check(
+  'the group they were charged to does not carry them',
+  round(dec.byGroup.get('joy')?.spend.CAD ?? 0) === 161.98,
+  `${round(dec.byGroup.get('joy')?.spend.CAD ?? 0)}`,
+)
+check(
+  'a reimbursable category vanishes from the comparison entirely',
+  !dec.categories.some((c) => c.label === 'Airfare'),
+)
+check(
+  'a category with one of each keeps only the budget row',
+  dec.categories.find((c) => c.label === 'Software')?.count === 1,
+  `${dec.categories.find((c) => c.label === 'Software')?.count}`,
+)
+
+check('the tie-out holds in CAD', round(dec.totalOut.CAD) === 3610.48, `${round(dec.totalOut.CAD)}`)
+check('the tie-out holds in USD', round(dec.totalOut.USD) === 54, `${round(dec.totalOut.USD)}`)
+
+const BUCKETS = dec.reimbursable.buckets
+check('several tags become one bucket', BUCKETS[0]?.label === 'Chris Personal + Healthcare', BUCKETS[0]?.label)
+check('a bucket keeps its own subtotal', round(BUCKETS[0]?.spend.CAD ?? 0) === 140)
+check('untagged reimbursables gather, and sort last', BUCKETS.at(-1)?.label === 'No bucket' && BUCKETS.at(-1)?.count === 2)
+check(
+  'the buckets add back up to the total',
+  round(BUCKETS.reduce((s, b) => s + b.spend.CAD, 0)) === round(dec.reimbursable.spend.CAD) &&
+    BUCKETS.reduce((s, b) => s + b.count, 0) === dec.reimbursable.count,
+)
+
+check('the marker is matched however it is typed', isReimbursable({ tags: ['  reimbursABLE '] } as never, 'Reimbursable'))
+check('a bucket never includes the marker itself', !BUCKETS.some((b) => b.tags.some((t) => t.toLowerCase() === 'reimbursable')))
+
+// The tag is the user's to choose, so nothing may assume the default.
+const renamed = aggregate(all, december, { reimbursableTag: 'Healthcare' })
+check('a different tag moves the line', renamed.reimbursable.count === 1, `${renamed.reimbursable.count}`)
+check('and the default stops being special', round(renamed.spend.CAD) === 3470.48, `${round(renamed.spend.CAD)}`)
+check(
+  'the bucket is then whatever else is there',
+  renamed.reimbursable.buckets[0]?.label === 'Chris Personal + Reimbursable',
+  renamed.reimbursable.buckets[0]?.label,
+)
+
+check(
+  'a period with none of them ties out trivially',
+  isEmpty(aggregate(all, monthPeriod('2025-04')).reimbursable.spend) &&
+    round(aggregate(all, monthPeriod('2025-04')).totalOut.CAD) ===
+      round(aggregate(all, monthPeriod('2025-04')).spend.CAD),
+)
+
+console.log('\n=== What the dashboard is handed ===')
+
+// The dashboard's group modal lists these without any ETM code of its own,
+// so the shape it receives is worth pinning down.
+const handed = dashboardActuals(dec, 'December 2025')
+check('the period is named for the dashboard', handed.label === 'December 2025')
+check('group totals survive the handover', round(handed.byGroup.get('home')?.CAD ?? 0) === 1930)
+
+const homeCategories = handed.categoriesByGroup.get('home') ?? []
+const EXPECTED_HOME: Array<[string, number, number]> = [
+  ['Rent', 1650, 1],
+  ['Utilities', 140, 1],
+  ['Internet', 85, 1],
+  ['Phone', 55, 1],
+]
+check('a group arrives broken into its categories', homeCategories.length === 4, `${homeCategories.length}`)
+for (const [name, spend, count] of EXPECTED_HOME) {
+  const found = homeCategories.find((c) => c.name === name)
+  check(`${name} is ${spend} over ${count}`, round(found?.spend.CAD ?? 0) === spend && found?.count === count, `${round(found?.spend.CAD ?? 0)}`)
+}
+check(
+  'the categories add back up to the group',
+  round(homeCategories.reduce((s, c) => s + c.spend.CAD, 0)) === 1930,
+)
+check(
+  'categories are ordered largest first',
+  homeCategories.map((c) => c.name).join(' ') === 'Rent Utilities Internet Phone',
+)
+check(
+  'a USD-only category keeps its own currency across the handover',
+  handed.categoriesByGroup.get('personal')?.some((c) => c.name === 'Software' && c.spend.CAD === 0 && c.spend.USD === 30),
+)
+check(
+  'reimbursables are named for the dashboard, never folded in',
+  round(handed.reimbursable.CAD) === 550 && round(handed.spend.CAD) === 3060.48,
 )
 
 console.log('\n=== Netting and exclusions ===')
@@ -396,7 +491,7 @@ check(
     dec.categories.filter((c) => !c.isIncome).length,
 )
 check('the actual total matches the aggregate', round(monthly.actualTotal.CAD) === round(dec.spend.CAD))
-check('USD rides alongside, never added in', round(monthly.actualTotal.USD) === 24)
+check('USD rides alongside, never added in', round(monthly.actualTotal.USD) === 30)
 
 const twoMonths = compareToBudget(plan, aggregate(all, rangePeriod('2025-11-01', '2025-12-31')))
 check('two months of plan is twice the plan', twoMonths.plannedTotal === 4200, `${twoMonths.plannedTotal}`)
@@ -405,8 +500,10 @@ check('the plan scales but the actuals do not', round(twoMonths.actualTotal.CAD)
 console.log('\n=== Filtering the transactions view ===')
 
 const base = noFilters()
-check('by default the period alone applies', filterTransactions(all, december, base).length === 28)
-check('internal rows can be brought back', filterTransactions(all, december, { ...base, includeInternal: true }).length === 32)
+// Thirty, not the twenty-seven the budget counted: this view hides nothing,
+// so the three reimbursables are here.
+check('by default the period alone applies', filterTransactions(all, december, base).length === 30)
+check('internal rows can be brought back', filterTransactions(all, december, { ...base, includeInternal: true }).length === 34)
 
 const groceriesOnly = filterTransactions(all, december, { ...base, categories: ['Groceries'] })
 check('by category', groceriesOnly.length === 2 && round(-sumOf(groceriesOnly).CAD) === 345)
@@ -415,17 +512,17 @@ const foodOnly = filterTransactions(all, december, { ...base, groupIds: ['food']
 check('by group', foodOnly.length === 6, `${foodOnly.length}`)
 
 const usdOnly = filterTransactions(all, december, { ...base, accountIds: [usdAccount.id] })
-check('by account', usdOnly.length === 1 && usdOnly[0]!.currency === 'USD')
+check('by account', usdOnly.length === 2 && usdOnly.every((t) => t.currency === 'USD'), `${usdOnly.length}`)
 
 const tagged = filterTransactions(all, year.period, { ...base, tags: ['Reimbursable'] })
-check('by tag', tagged.length === 7, `${tagged.length}`)
+check('by tag', tagged.length === 8, `${tagged.length}`)
 
 const owned = filterTransactions(all, year.period, { ...base, owners: ['Sam'] })
 check('by owner', owned.length === 4, `${owned.length}`)
 
-// Nine, because the floor is on size and so catches the paycheque too.
+// Ten, because the floor is on size and so catches the paycheque too.
 const large = filterTransactions(all, december, { ...base, minAmount: 100 })
-check('by amount floor', large.every((t) => Math.abs(t.amount) >= 100) && large.length === 9, `${large.length}`)
+check('by amount floor', large.every((t) => Math.abs(t.amount) >= 100) && large.length === 10, `${large.length}`)
 
 const window = filterTransactions(all, december, { ...base, minAmount: 50, maxAmount: 100 })
 check('by amount window', window.every((t) => Math.abs(t.amount) >= 50 && Math.abs(t.amount) <= 100))

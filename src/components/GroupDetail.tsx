@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { GroupSummary } from '../lib/budget'
-import { money, uid } from '../lib/format'
+import { money, moneyPrecise, uid } from '../lib/format'
 import type { ExpenseLine } from '../lib/types'
+import type { CategorySpend, DashboardActuals } from '../lib/etm/aggregate'
 import AmountInput from './AmountInput'
 import Modal from './Modal'
 
@@ -11,6 +12,13 @@ interface Props {
   unallocated: number
   onClose: () => void
   onChange: (lines: ExpenseLine[]) => void
+  /**
+   * Present only while the expense module is unlocked. Type-only, so nothing
+   * of that module is reachable from here in a build without it.
+   */
+  actuals?: DashboardActuals | null
+  /** Opens the transactions behind a category, back in the expense module. */
+  onOpenCategory?: (category: string) => void
 }
 
 const ROUND_STEPS = [1, 1.5, 2, 3, 5, 7.5]
@@ -59,7 +67,16 @@ interface Session {
   baselines: Record<string, number>
 }
 
-export default function GroupDetail({ summary, unallocated, onClose, onChange }: Props) {
+export default function GroupDetail({
+  summary,
+  unallocated,
+  onClose,
+  onChange,
+  actuals,
+  onOpenCategory,
+}: Props) {
+  // Folds to a constant null in public builds, taking the spending list too.
+  const overlay = __ETM_AVAILABLE__ ? (actuals ?? null) : null
   const [draftName, setDraftName] = useState('')
   const [addedId, setAddedId] = useState<string | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -266,8 +283,76 @@ export default function GroupDetail({ summary, unallocated, onClose, onChange }:
             Add
           </button>
         </div>
+
+        {overlay && (
+          <Spending
+            categories={overlay.categoriesByGroup.get(group.id) ?? []}
+            label={overlay.label}
+            onOpenCategory={onOpenCategory}
+          />
+        )}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * What the group actually cost, under the plan rather than mixed into it: the
+ * sliders above are a decision, and this is the record. Opening a category
+ * hands back to the expense module, which holds the transactions.
+ */
+function Spending({
+  categories,
+  label,
+  onOpenCategory,
+}: {
+  categories: CategorySpend[]
+  label: string
+  onOpenCategory?: (category: string) => void
+}) {
+  return (
+    <section className="border-t border-sand-200 pt-5">
+      <h3 className="text-[11px] uppercase tracking-wider text-ink-400">
+        What you actually spent · {label}
+      </h3>
+
+      {categories.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-500">Nothing landed here in this period.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-sand-200">
+          {categories.map((category) => (
+            <li key={category.name}>
+              <button
+                onClick={() => onOpenCategory?.(category.name)}
+                disabled={!onOpenCategory}
+                className="group flex w-full items-center justify-between gap-4 py-2 text-left transition hover:bg-sand-100/70 disabled:hover:bg-transparent"
+              >
+                <span className="min-w-0">
+                  <span className="block break-words text-sm text-ink-900">{category.name}</span>
+                  <span className="block text-[11px] text-ink-400">
+                    {category.count} transaction{category.count === 1 ? '' : 's'}
+                    {onOpenCategory && ' · tap to see them'}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-sm font-semibold tabular-nums text-ink-900">
+                    {moneyPrecise(category.spend.CAD)}
+                  </span>
+                  {category.spend.USD !== 0 && (
+                    <span className="block text-[11px] tabular-nums text-tide-700">
+                      + US${Math.round(Math.abs(category.spend.USD)).toLocaleString()}
+                    </span>
+                  )}
+                </span>
+                <span className="w-4 shrink-0 text-ink-300 opacity-0 transition group-hover:opacity-100">
+                  ›
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

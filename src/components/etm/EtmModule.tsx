@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import CategoryModal from './CategoryModal'
 import EtmArea from './EtmArea'
 import EtmGate from './EtmGate'
 import EtmStrip from './EtmStrip'
@@ -20,6 +21,9 @@ interface Props {
   /** Whether the full expenses area is showing, or just the dashboard strip. */
   open: boolean
   budget: Budget
+  /** A category the dashboard's group modal asked to see behind. */
+  openCategory: string | null
+  onCloseCategory: () => void
   onActuals: (actuals: DashboardActuals | null) => void
   onUnlocked: (key: CryptoKey, remembered: boolean) => void
   onLocked: () => void
@@ -71,6 +75,8 @@ function Unlocked({
   unlockedKey,
   open,
   budget,
+  openCategory,
+  onCloseCategory,
   onActuals,
   onLocked,
   onWiped,
@@ -91,12 +97,17 @@ function Unlocked({
     [data.accounts],
   )
 
+  const reimbursableTag = data.config.reimbursableTag
+
   const actuals = useMemo(
     () =>
       period
-        ? aggregate(data.transactions, period, { excludeAccountIds: excluded })
+        ? aggregate(data.transactions, period, {
+            excludeAccountIds: excluded,
+            reimbursableTag,
+          })
         : null,
-    [data.transactions, period, excluded],
+    [data.transactions, period, excluded, reimbursableTag],
   )
 
   useEffect(() => {
@@ -108,36 +119,54 @@ function Unlocked({
 
   if (!period) return null
 
+  const drillDown = openCategory && (
+    <CategoryModal
+      category={openCategory}
+      period={period}
+      transactions={data.transactions}
+      excluded={excluded}
+      reimbursableTag={reimbursableTag}
+      onClose={onCloseCategory}
+    />
+  )
+
   if (!open) {
     return (
-      <EtmStrip
-        period={period}
-        months={data.months}
-        income={actuals?.income ?? { CAD: 0, USD: 0 }}
-        spend={actuals?.spend ?? { CAD: 0, USD: 0 }}
-        counted={actuals?.counted ?? 0}
-        loading={data.loading}
-        onPeriodChange={setPeriod}
-        onOpen={onOpen}
-      />
+      <>
+        <EtmStrip
+          period={period}
+          months={data.months}
+          income={actuals?.income ?? { CAD: 0, USD: 0 }}
+          spend={actuals?.spend ?? { CAD: 0, USD: 0 }}
+          reimbursable={actuals?.reimbursable.spend ?? { CAD: 0, USD: 0 }}
+          counted={actuals?.counted ?? 0}
+          loading={data.loading}
+          onPeriodChange={setPeriod}
+          onOpen={onOpen}
+        />
+        {drillDown}
+      </>
     )
   }
 
   return (
-    <EtmArea
-      data={data}
-      budget={budget}
-      period={period}
-      onPeriodChange={setPeriod}
-      onClose={onClose}
-      onLock={() => {
-        void forgetRememberedKey()
-        onLocked()
-      }}
-      onWipe={() => {
-        void wipeVault()
-        onWiped()
-      }}
-    />
+    <>
+      <EtmArea
+        data={data}
+        budget={budget}
+        period={period}
+        onPeriodChange={setPeriod}
+        onClose={onClose}
+        onLock={() => {
+          void forgetRememberedKey()
+          onLocked()
+        }}
+        onWipe={() => {
+          void wipeVault()
+          onWiped()
+        }}
+      />
+      {drillDown}
+    </>
   )
 }

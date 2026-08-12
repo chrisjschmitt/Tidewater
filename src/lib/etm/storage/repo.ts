@@ -1,3 +1,4 @@
+import { withDefaults, type EtmConfig } from '../config'
 import type { ImportPlan } from '../importer'
 import { monthOf, type Account, type ImportBatch, type Transaction } from '../types'
 import { openEtmDb, type EtmDb } from './db'
@@ -18,6 +19,20 @@ async function withDb<T>(work: (db: EtmDb) => Promise<T>): Promise<T> {
   } finally {
     db.close()
   }
+}
+
+// --- configuration ---------------------------------------------------------
+
+const CONFIG_ID = 'etm'
+
+export function loadConfig(key: CryptoKey): Promise<EtmConfig> {
+  return withDb(async (db) =>
+    withDefaults(await getSealed<Partial<EtmConfig>>(db, 'config', key, CONFIG_ID)),
+  )
+}
+
+export function saveConfig(key: CryptoKey, config: EtmConfig): Promise<void> {
+  return withDb((db) => putSealed(db, 'config', key, CONFIG_ID, config))
 }
 
 // --- accounts --------------------------------------------------------------

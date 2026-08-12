@@ -250,7 +250,7 @@ needed). Dates are compared as ISO strings end to end; parsing them into
 `Date` objects invites a timezone to move a transaction into the
 neighbouring month.
 
-Four rules settle what the numbers mean, and every view obeys them:
+Five rules settle what the numbers mean, and every view obeys them:
 
 - **A monthly plan over a longer period** is multiplied by the calendar
   months the period touches. A year-to-date period part-way through August
@@ -268,6 +268,29 @@ Four rules settle what the numbers mean, and every view obeys them:
 - **Categories are netted before being classified**, so a refund lands back
   on the category it came from rather than reading as income. This is the
   treatment the budget importer already gives them.
+- **Reimbursable transactions are not family-budget spending** (decided
+  with the owner, Aug 2026). A transaction carrying the reimbursable tag
+  (configurable, default "Reimbursable") is an advance repaid at month end;
+  the repayment arrives as an internal transfer, so counting the purchase
+  would overstate spending with no offsetting inflow. Reimbursables are
+  excluded from budget-vs-actual everywhere (bars, ring, drill-ins) and
+  counted instead in a per-bucket "Reimbursable" section of the Expenses
+  area (bucket = the transaction's other tags), which is also the input to
+  the Phase 4 reimbursement pivot. They stay fully visible, with a marker,
+  in the Transactions view and exports, and the tie-out holds: total out =
+  budget spending + reimbursable spending.
+
+Two details the reimbursable rule left open, settled with the owner in
+building it. A bucket is only obvious when there is exactly one other tag, so
+**a row with none falls into a visible "No bucket", and a row with several is
+counted once under all of them together** ("Healthcare + Chris Personal")
+rather than once per tag. Counting it under each would read more naturally
+per bucket but would make the subtotals exceed the total and break the
+tie-out, and a bucket that quietly picked one tag would hide the choice. And
+because reimbursables leave budget-vs-actual, the dashboard's "Out" and "Went
+out" are **budget spending only**, matching the bars and ring beside them;
+where an amount has been held out, the figure says so in words and points at
+the Expenses area for the full tie-out.
 
 ### Dashboard integration (budget vs actual)
 
@@ -300,12 +323,23 @@ pattern:
   with a running subtotal — the "view the underlying transactions with
   subtotals" acceptance criterion.
 
+### Reimbursable section
+
+Its own tab beside Budget, and the only place reimbursables are counted:
+per-bucket subtotals for the period, each opening onto the transactions
+behind it, above the tie-out that proves nothing was lost between the two
+halves. The tag it looks for is the first field of `EtmConfig` to become
+editable, so a workflow that calls it something else is a setting rather
+than a fork. Phase 4's reimbursement pivot reads these buckets.
+
 ### Transactions view
 
 A full filterable table: period, account, group, category, tags, owner,
 amount range, and text search across merchant/statement/notes. Totals and
 subtotals follow the active filters. USD accounts display in USD, visually
-separated, never mixed into CAD totals.
+separated, never mixed into CAD totals. Reimbursables are here like anything
+else, marked but never filtered out: this view is the whole record, and the
+one place to confirm what the budget set aside.
 
 ## 6. Workflow screen (reconciliation assistant)
 

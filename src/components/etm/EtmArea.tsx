@@ -3,6 +3,7 @@ import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
 import ImportPanel from './ImportPanel'
 import PeriodSelector from './PeriodSelector'
+import ReimbursablePanel from './ReimbursablePanel'
 import TransactionsPanel from './TransactionsPanel'
 import type { EtmData } from './useEtmData'
 import type { Period } from '../../lib/etm/period'
@@ -18,17 +19,18 @@ interface Props {
   onWipe: () => void
 }
 
-type Tab = 'budget' | 'transactions' | 'import' | 'accounts'
+type Tab = 'budget' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
 
 const TABS: Array<[Tab, string]> = [
   ['budget', 'Budget'],
+  ['reimbursable', 'Reimbursable'],
   ['transactions', 'Transactions'],
   ['import', 'Import'],
   ['accounts', 'Accounts'],
 ]
 
 /** The period selector is hidden on tabs it does not govern. */
-const PERIODIC: Tab[] = ['budget', 'transactions']
+const PERIODIC: Tab[] = ['budget', 'reimbursable', 'transactions']
 
 export default function EtmArea({
   data,
@@ -103,6 +105,17 @@ export default function EtmArea({
                 accounts={data.accounts}
                 transactions={data.transactions}
                 period={period}
+                reimbursableTag={data.config.reimbursableTag}
+              />
+            )}
+
+            {tab === 'reimbursable' && (
+              <ReimbursablePanel
+                accounts={data.accounts}
+                transactions={data.transactions}
+                period={period}
+                config={data.config}
+                onConfigChange={(config) => void data.saveSettings(config)}
               />
             )}
 
@@ -111,6 +124,7 @@ export default function EtmArea({
                 accounts={data.accounts}
                 transactions={data.transactions}
                 period={period}
+                reimbursableTag={data.config.reimbursableTag}
                 onCreateAccount={data.persistAccount}
                 onAddManual={data.addManual}
                 onRemove={data.removeManual}

@@ -3,6 +3,7 @@ import ManualEntryForm from './ManualEntryForm'
 import { GROUPS, GROUP_BY_ID } from '../../lib/categories'
 import {
   filterTransactions,
+  isReimbursable,
   negate,
   noFilters,
   presentIn,
@@ -20,6 +21,8 @@ interface Props {
   accounts: Account[]
   transactions: Transaction[]
   period: Period
+  /** Marked, never hidden: this view is the whole record (§5). */
+  reimbursableTag: string
   onAddManual: (transaction: Transaction) => Promise<void>
   onRemove: (transaction: Transaction) => Promise<void>
   onCreateAccount: (account: Account) => Promise<void>
@@ -32,6 +35,7 @@ export default function TransactionsPanel({
   accounts,
   transactions,
   period,
+  reimbursableTag,
   onAddManual,
   onRemove,
   onCreateAccount,
@@ -206,6 +210,7 @@ export default function TransactionsPanel({
                           {t.merchant || t.originalStatement || t.category}
                           {t.source === 'manual' && <Tag>Cash</Tag>}
                           {t.internal && <Tag>Internal</Tag>}
+                          {isReimbursable(t, reimbursableTag) && <Tag>Reimbursable</Tag>}
                         </span>
                         {(t.notes || t.tags.length > 0) && (
                           <span className="block truncate text-xs text-ink-400">

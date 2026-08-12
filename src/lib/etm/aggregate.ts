@@ -1,5 +1,6 @@
 import { GROUPS, GROUP_BY_ID, looksLikeIncome } from '../categories'
 import type { Budget, Group, GroupId } from '../types'
+import { DEFAULT_CONFIG } from './config'
 import { includes, monthsInPeriod, type Period } from './period'
 import type { Currency, Transaction } from './types'
 
@@ -46,23 +47,68 @@ export interface GroupActual {
   categories: CategoryActual[]
 }
 
+/** Reimbursable spending gathered under the tags that say who it is for. */
+export interface ReimbursableBucket {
+  /** The other tags, joined — or "No bucket" when there are none. */
+  label: string
+  tags: string[]
+  spend: Money
+  count: number
+}
+
+export interface ReimbursableTotals {
+  spend: Money
+  count: number
+  buckets: ReimbursableBucket[]
+}
+
 export interface PeriodActuals {
   period: Period
   /** Calendar months touched — what a monthly plan is multiplied by. */
   months: number
   income: Money
+  /** Family-budget spending: excludes internal movements and reimbursables. */
   spend: Money
   byGroup: Map<GroupId, GroupActual>
   categories: CategoryActual[]
   counted: number
   /** Transfers and card payments, kept but excluded from the totals above. */
   internal: number
+  /** Advances repaid at month end, held apart from the budget (§5). */
+  reimbursable: ReimbursableTotals
+  /** The tie-out: budget spending plus reimbursable spending. */
+  totalOut: Money
 }
 
 export interface AggregateOptions {
   /** Accounts marked as kept out of the family budget. */
   excludeAccountIds?: Set<string>
+  /** Defaults to "Reimbursable"; the user may call it something else. */
+  reimbursableTag?: string
 }
+
+export const NO_BUCKET = 'No bucket'
+
+/** Matched case- and space-insensitively, like every other name in here. */
+export const isReimbursable = (transaction: Transaction, tag: string): boolean => {
+  const wanted = normalize(tag)
+  return transaction.tags.some((t) => normalize(t) === wanted)
+}
+
+/**
+ * A row's bucket is whatever else it is tagged with. Several tags are joined
+ * into one bucket rather than counted under each, so the buckets always sum
+ * to the reimbursable total and the tie-out holds.
+ */
+export function bucketOf(transaction: Transaction, tag: string): string[] {
+  const wanted = normalize(tag)
+  return transaction.tags
+    .filter((t) => normalize(t) !== wanted && t.trim() !== '')
+    .sort((a, z) => a.localeCompare(z))
+}
+
+export const bucketLabel = (tags: string[]): string =>
+  tags.length === 0 ? NO_BUCKET : tags.join(' + ')
 
 /**
  * Categories are netted before being classified, so a refund lands back on the
@@ -75,7 +121,10 @@ export function aggregate(
   options: AggregateOptions = {},
 ): PeriodActuals {
   const excluded = options.excludeAccountIds ?? new Set<string>()
+  const reimbursableTag = options.reimbursableTag ?? DEFAULT_CONFIG.reimbursableTag
   const buckets = new Map<string, CategoryActual & { spellings: Map<string, number> }>()
+  const claimed = new Map<string, ReimbursableBucket>()
+  const reimbursable: ReimbursableTotals = { spend: zeroMoney(), count: 0, buckets: [] }
   let counted = 0
   let internal = 0
 
@@ -86,6 +135,21 @@ export function aggregate(
       internal++
       continue
     }
+
+    // Held apart before anything else sees it, so an advance cannot net
+    // against the category it was charged to.
+    if (isReimbursable(transaction, reimbursableTag)) {
+      const tags = bucketOf(transaction, reimbursableTag)
+      const label = bucketLabel(tags)
+      const bucket = claimed.get(label) ?? { label, tags, spend: zeroMoney(), count: 0 }
+      addTo(bucket.spend, transaction.currency, -transaction.amount)
+      bucket.count++
+      claimed.set(label, bucket)
+      addTo(reimbursable.spend, transaction.currency, -transaction.amount)
+      reimbursable.count++
+      continue
+    }
+
     counted++
 
     const key = transaction.category.trim().toLowerCase()
@@ -146,6 +210,18 @@ export function aggregate(
   for (const group of byGroup.values()) group.categories.sort(bySpendDescending)
   categories.sort(bySpendDescending)
 
+  // "No bucket" last: it is a prompt to tag something, not a bucket.
+  reimbursable.buckets = [...claimed.values()].sort(
+    (a, z) =>
+      Number(a.label === NO_BUCKET) - Number(z.label === NO_BUCKET) ||
+      z.spend.CAD - a.spend.CAD ||
+      z.spend.USD - a.spend.USD,
+  )
+
+  const totalOut = zeroMoney()
+  for (const [currency, value] of presentIn(spend)) addTo(totalOut, currency, value)
+  for (const [currency, value] of presentIn(reimbursable.spend)) addTo(totalOut, currency, value)
+
   return {
     period,
     months: monthsInPeriod(period),
@@ -155,7 +231,16 @@ export function aggregate(
     categories,
     counted,
     internal,
+    reimbursable,
+    totalOut,
   }
+}
+
+/** One category's spending, flattened for the dashboard's drill-in. */
+export interface CategorySpend {
+  name: string
+  spend: Money
+  count: number
 }
 
 /**
@@ -166,8 +251,13 @@ export interface DashboardActuals {
   label: string
   months: number
   income: Money
+  /** Budget spending only. Reimbursables are named separately below. */
   spend: Money
+  /** Held out of every figure here, so the dashboard can say so plainly. */
+  reimbursable: Money
   byGroup: Map<GroupId, Money>
+  /** What each group was made of, so a group can be opened without the module. */
+  categoriesByGroup: Map<GroupId, CategorySpend[]>
 }
 
 export const dashboardActuals = (actuals: PeriodActuals, label: string): DashboardActuals => ({
@@ -175,7 +265,14 @@ export const dashboardActuals = (actuals: PeriodActuals, label: string): Dashboa
   months: actuals.months,
   income: actuals.income,
   spend: actuals.spend,
+  reimbursable: actuals.reimbursable.spend,
   byGroup: new Map([...actuals.byGroup].map(([id, group]) => [id, group.spend])),
+  categoriesByGroup: new Map(
+    [...actuals.byGroup].map(([id, group]) => [
+      id,
+      group.categories.map((c) => ({ name: c.label, spend: c.spend, count: c.count })),
+    ]),
+  ),
 })
 
 // --- budget comparison -----------------------------------------------------

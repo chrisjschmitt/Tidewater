@@ -1,17 +1,15 @@
 import { useMemo, useState } from 'react'
+import CategoryTransactions from './CategoryTransactions'
 import Modal from '../Modal'
 import { moneyPrecise } from '../../lib/format'
 import {
   aggregate,
   compareToBudget,
-  filterTransactions,
   isEmpty,
-  noFilters,
   presentIn,
-  runningTotals,
-  type CategoryComparison,
   type GroupComparison,
   type Money,
+  type PeriodActuals,
 } from '../../lib/etm/aggregate'
 import { amountIn } from '../../lib/etm/format'
 import { periodLabel, type Period } from '../../lib/etm/period'
@@ -23,9 +21,16 @@ interface Props {
   accounts: Account[]
   transactions: Transaction[]
   period: Period
+  reimbursableTag: string
 }
 
-export default function BudgetPanel({ budget, accounts, transactions, period }: Props) {
+export default function BudgetPanel({
+  budget,
+  accounts,
+  transactions,
+  period,
+  reimbursableTag,
+}: Props) {
   const [openGroup, setOpenGroup] = useState<GroupComparison | null>(null)
 
   const excluded = useMemo(
@@ -33,8 +38,8 @@ export default function BudgetPanel({ budget, accounts, transactions, period }: 
     [accounts],
   )
   const actuals = useMemo(
-    () => aggregate(transactions, period, { excludeAccountIds: excluded }),
-    [transactions, period, excluded],
+    () => aggregate(transactions, period, { excludeAccountIds: excluded, reimbursableTag }),
+    [transactions, period, excluded, reimbursableTag],
   )
   const comparison = useMemo(
     () => (budget ? compareToBudget(budget, actuals) : null),
@@ -80,6 +85,8 @@ export default function BudgetPanel({ budget, accounts, transactions, period }: 
           <Figure label="Money out" money={actuals.spend} />
         </div>
 
+        <TieOut actuals={actuals} />
+
         {actuals.internal > 0 && (
           <p className="mt-4 text-xs text-ink-400">
             {actuals.internal.toLocaleString()} transfer{actuals.internal === 1 ? '' : 's'} and card
@@ -118,6 +125,7 @@ export default function BudgetPanel({ budget, accounts, transactions, period }: 
           period={period}
           transactions={transactions}
           excluded={excluded}
+          reimbursableTag={reimbursableTag}
           onClose={() => setOpenGroup(null)}
         />
       )}
@@ -181,12 +189,14 @@ function GroupDrill({
   period,
   transactions,
   excluded,
+  reimbursableTag,
   onClose,
 }: {
   group: GroupComparison
   period: Period
   transactions: Transaction[]
   excluded: Set<string>
+  reimbursableTag: string
   onClose: () => void
 }) {
   const [openCategory, setOpenCategory] = useState<string | null>(null)
@@ -233,12 +243,15 @@ function GroupDrill({
             </button>
 
             {openCategory === category.name && (
-              <CategoryTransactions
-                category={category}
-                period={period}
-                transactions={transactions}
-                excluded={excluded}
-              />
+              <div className="animate-fade border-t border-sand-200">
+                <CategoryTransactions
+                  category={category.name}
+                  period={period}
+                  transactions={transactions}
+                  excluded={excluded}
+                  reimbursableTag={reimbursableTag}
+                />
+              </div>
             )}
           </div>
         ))}
@@ -247,78 +260,29 @@ function GroupDrill({
   )
 }
 
-function CategoryTransactions({
-  category,
-  period,
-  transactions,
-  excluded,
-}: {
-  category: CategoryComparison
-  period: Period
-  transactions: Transaction[]
-  excluded: Set<string>
-}) {
-  const rows = useMemo(
-    () =>
-      filterTransactions(
-        transactions.filter((t) => !excluded.has(t.accountId)),
-        period,
-        { ...noFilters(), categories: [category.name] },
-      ).slice().sort((a, z) => a.date.localeCompare(z.date)),
-    [transactions, period, category.name, excluded],
-  )
-  const totals = useMemo(() => runningTotals(rows), [rows])
-
-  if (rows.length === 0) {
-    return (
-      <p className="border-t border-sand-200 px-4 py-4 text-xs text-ink-400">
-        Nothing was spent here in this period.
-      </p>
-    )
-  }
+/**
+ * The one place the two halves are added back together, so the figures above
+ * can be trusted to leave nothing out: everything that left an account is
+ * either budget spending or an advance that comes back.
+ */
+function TieOut({ actuals }: { actuals: PeriodActuals }) {
+  if (isEmpty(actuals.reimbursable.spend)) return null
+  const show = (money: Money) =>
+    presentIn(money)
+      .map(([currency, value]) => amountIn(Math.abs(value), currency))
+      .join(' · ') || '—'
 
   return (
-    <div className="animate-fade border-t border-sand-200 px-4 py-2">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-ink-400">
-            <th className="py-1.5 text-left font-medium">Date</th>
-            <th className="py-1.5 text-left font-medium">What</th>
-            <th className="py-1.5 text-right font-medium">Amount</th>
-            <th className="py-1.5 text-right font-medium">Running</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-sand-200">
-          {rows.map((row, i) => (
-            <tr key={row.id}>
-              <td className="py-1.5 tabular-nums text-ink-500">{row.date}</td>
-              <td className="max-w-0 truncate py-1.5 pr-3 text-ink-700">
-                {row.merchant || row.originalStatement}
-                {row.notes && <span className="text-ink-400"> · {row.notes}</span>}
-              </td>
-              <td className="py-1.5 text-right tabular-nums text-ink-900">
-                {amountIn(row.amount, row.currency)}
-              </td>
-              <td className="py-1.5 text-right tabular-nums text-ink-400">
-                {amountIn(totals[i]![row.currency], row.currency)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-sand-300">
-            <td colSpan={2} className="py-2 text-ink-500">
-              Subtotal
-            </td>
-            <td colSpan={2} className="py-2 text-right font-semibold tabular-nums text-ink-900">
-              {presentIn(totals.at(-1)!)
-                .map(([currency, value]) => amountIn(value, currency))
-                .join(' · ')}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+    <p className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-xs text-ink-500">
+      <span className="font-semibold text-ink-900">
+        {show(actuals.totalOut)} left your accounts
+      </span>{' '}
+      in this period — {show(actuals.spend)} of budget spending plus{' '}
+      {show(actuals.reimbursable.spend)} of reimbursable spending across{' '}
+      {actuals.reimbursable.count} transaction
+      {actuals.reimbursable.count === 1 ? '' : 's'}, which is held out of
+      everything above because it comes back.
+    </p>
   )
 }
 
