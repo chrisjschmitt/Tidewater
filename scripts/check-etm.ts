@@ -13,6 +13,23 @@
 import { readFileSync } from 'node:fs'
 import { groupForCategory } from '../src/lib/categories.ts'
 import {
+  aggregate,
+  compareToBudget,
+  filterTransactions,
+  isEmpty,
+  noFilters,
+  runningTotals,
+  sumOf,
+  type BudgetComparison,
+} from '../src/lib/etm/aggregate.ts'
+import {
+  monthKeys,
+  monthPeriod,
+  monthsInPeriod,
+  rangePeriod,
+  ytdPeriod,
+} from '../src/lib/etm/period.ts'
+import {
   PBKDF2_ITERATIONS,
   deriveKey,
   open,
@@ -25,7 +42,7 @@ import { findUnmatchedAccounts, planImport } from '../src/lib/etm/importer.ts'
 import { createManualTransaction } from '../src/lib/etm/manual.ts'
 import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
 import type { Account, Transaction } from '../src/lib/etm/types.ts'
-import type { GroupId } from '../src/lib/types.ts'
+import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
 
@@ -33,6 +50,9 @@ function check(label: string, passed: boolean, detail = '') {
   console.log(`  ${passed ? 'ok  ' : 'FAIL'}  ${label}${detail ? `  — ${detail}` : ''}`)
   if (!passed) failures++
 }
+
+/** Money compared to the cent, so summing floats never fails a check. */
+const round = (n: number) => Math.round(n * 100) / 100
 
 const KEY = 'correct horse battery staple'
 const WRONG_KEY = 'correct horse battery stapl'
@@ -271,8 +291,167 @@ check(
   fourth.updated.every(({ previous }) => previous.source !== 'manual'),
 )
 
+// ---------------------------------------------------------------------------
+// Periods and aggregation
+// ---------------------------------------------------------------------------
+
+console.log('\n=== Periods ===')
+
+const december = monthPeriod('2025-12')
+check('a month runs to its last day', december.start === '2025-12-01' && december.end === '2025-12-31')
+check('February knows its length', monthPeriod('2024-02').end === '2024-02-29')
+check('one month is one month of plan', monthsInPeriod(december) === 1)
+check('year to date counts calendar months', monthsInPeriod(ytdPeriod('2025-08-12')) === 8, `${monthsInPeriod(ytdPeriod('2025-08-12'))}`)
+check('a range across a year boundary counts through', monthsInPeriod(rangePeriod('2024-11-15', '2025-02-03')) === 4)
+check('a reversed range is put right', rangePeriod('2025-05-01', '2025-01-01').start === '2025-01-01')
+check('month keys cover the period', monthKeys(rangePeriod('2024-11-15', '2025-02-03')).join(' ') === '2024-11 2024-12 2025-01 2025-02')
+
+console.log('\n=== December actuals ===')
+
+const all = first.added
+const dec = aggregate(all, december)
+
+check('internal movements are set aside', dec.internal === 4, `${dec.internal}`)
+check('everything else is counted', dec.counted === 28, `${dec.counted}`)
+check('income is summed', round(dec.income.CAD) === 6062.4, `${round(dec.income.CAD)}`)
+check('spending is summed', round(dec.spend.CAD) === 3470.48, `${round(dec.spend.CAD)}`)
+check('USD is kept apart from CAD', round(dec.spend.USD) === 24, `${round(dec.spend.USD)}`)
+check('no transfer leaked into a total', round(dec.income.CAD) !== 6262.4 && round(dec.spend.CAD) !== 4270.48)
+
+const EXPECTED_GROUP_SPEND: Array<[GroupId, number]> = [
+  ['home', 1930],
+  ['joy', 571.98],
+  ['food', 406.5],
+  ['transport', 318],
+  ['personal', 120],
+  ['health', 70],
+  ['future', 50],
+  ['financial', 4],
+]
+for (const [groupId, expected] of EXPECTED_GROUP_SPEND) {
+  const actual = round(dec.byGroup.get(groupId)?.spend.CAD ?? 0)
+  check(`${groupId} spent ${expected}`, actual === expected, `${actual}`)
+}
+check(
+  'group totals add up to the whole',
+  round([...dec.byGroup.values()].reduce((s, g) => s + g.spend.CAD, 0)) === round(dec.spend.CAD),
+)
+check(
+  'a USD-only category reports no CAD',
+  dec.byGroup.get('personal')?.categories.some((c) => c.label === 'Software' && c.spend.CAD === 0 && c.spend.USD === 24),
+)
+
+console.log('\n=== Netting and exclusions ===')
+
+// April holds a refund posted back to the category it came from.
+const april = aggregate(all, monthPeriod('2025-04'))
+const restaurants = april.byGroup.get('joy')?.categories.find((c) => c.label === 'Restaurants')
+check('a refund nets against its own category', round(restaurants?.spend.CAD ?? 0) === 68, `${round(restaurants?.spend.CAD ?? 0)}`)
+check('a refund is not counted as income', !april.categories.some((c) => c.label === 'Restaurants' && c.isIncome))
+
+const usdAccount = accounts[4]!
+const withoutUsd = aggregate(all, december, { excludeAccountIds: new Set([usdAccount.id]) })
+check('an excluded account leaves the totals', withoutUsd.spend.USD === 0)
+check('excluding one account leaves the others alone', round(withoutUsd.spend.CAD) === round(dec.spend.CAD))
+
+const year = aggregate(all, rangePeriod('2025-01-01', '2025-12-31'))
+check('a full year covers twelve months of plan', year.months === 12)
+check('a year counts more than a month', year.counted > dec.counted, `${year.counted}`)
+
+console.log('\n=== Budget versus actual ===')
+
+const plan: Budget = {
+  version: 1,
+  profile: { name: '', housing: 'rent', household: 'single', dependents: 0, hasDebt: false, region: '' },
+  income: [{ id: 'i1', name: 'Salary', amount: 4850 }],
+  expenses: [
+    { id: 'e1', name: 'Rent', groupId: 'home', amount: 1600 },
+    { id: 'e2', name: 'groceries', groupId: 'food', amount: 400 },
+    { id: 'e3', name: 'Piano lessons', groupId: 'family', amount: 100 },
+  ],
+  goals: [],
+  updatedAt: new Date().toISOString(),
+  source: 'budget-csv',
+}
+
+const monthly = compareToBudget(plan, dec)
+check('one month of plan is the plan itself', monthly.plannedTotal === 2100, `${monthly.plannedTotal}`)
+
+const rent = findRow(monthly, 'home', 'Rent')
+check('a planned line meets its spending', rent?.planned === 1600 && round(rent.actual.CAD) === 1650)
+check('a matched line is marked matched', rent?.status === 'both')
+
+const groceries = findRow(monthly, 'food', 'groceries')
+check('matching ignores case', groceries?.status === 'both' && round(groceries.actual.CAD) === 345, `${groceries?.status}`)
+
+const piano = findRow(monthly, 'family', 'Piano lessons')
+check('a planned line with no spending still shows', piano?.status === 'planned-only' && isEmpty(piano.actual))
+
+const unplanned = findRow(monthly, 'home', 'Utilities')
+check('spending with no plan still shows', unplanned?.status === 'unplanned' && unplanned.planned === 0)
+
+check(
+  'every category is accounted for somewhere',
+  monthly.groups.flatMap((g) => g.categories).filter((c) => c.status !== 'planned-only').length ===
+    dec.categories.filter((c) => !c.isIncome).length,
+)
+check('the actual total matches the aggregate', round(monthly.actualTotal.CAD) === round(dec.spend.CAD))
+check('USD rides alongside, never added in', round(monthly.actualTotal.USD) === 24)
+
+const twoMonths = compareToBudget(plan, aggregate(all, rangePeriod('2025-11-01', '2025-12-31')))
+check('two months of plan is twice the plan', twoMonths.plannedTotal === 4200, `${twoMonths.plannedTotal}`)
+check('the plan scales but the actuals do not', round(twoMonths.actualTotal.CAD) > round(monthly.actualTotal.CAD))
+
+console.log('\n=== Filtering the transactions view ===')
+
+const base = noFilters()
+check('by default the period alone applies', filterTransactions(all, december, base).length === 28)
+check('internal rows can be brought back', filterTransactions(all, december, { ...base, includeInternal: true }).length === 32)
+
+const groceriesOnly = filterTransactions(all, december, { ...base, categories: ['Groceries'] })
+check('by category', groceriesOnly.length === 2 && round(-sumOf(groceriesOnly).CAD) === 345)
+
+const foodOnly = filterTransactions(all, december, { ...base, groupIds: ['food'] })
+check('by group', foodOnly.length === 6, `${foodOnly.length}`)
+
+const usdOnly = filterTransactions(all, december, { ...base, accountIds: [usdAccount.id] })
+check('by account', usdOnly.length === 1 && usdOnly[0]!.currency === 'USD')
+
+const tagged = filterTransactions(all, year.period, { ...base, tags: ['Reimbursable'] })
+check('by tag', tagged.length === 7, `${tagged.length}`)
+
+const owned = filterTransactions(all, year.period, { ...base, owners: ['Sam'] })
+check('by owner', owned.length === 4, `${owned.length}`)
+
+// Nine, because the floor is on size and so catches the paycheque too.
+const large = filterTransactions(all, december, { ...base, minAmount: 100 })
+check('by amount floor', large.every((t) => Math.abs(t.amount) >= 100) && large.length === 9, `${large.length}`)
+
+const window = filterTransactions(all, december, { ...base, minAmount: 50, maxAmount: 100 })
+check('by amount window', window.every((t) => Math.abs(t.amount) >= 50 && Math.abs(t.amount) <= 100))
+
+// Three: the same-day duplicate pair, plus one earlier in the month.
+const searched = filterTransactions(all, december, { ...base, text: 'corner bean' })
+check('by text, case-insensitively', searched.length === 3, `${searched.length}`)
+check(
+  'text reaches the statement and notes',
+  filterTransactions(all, december, { ...base, text: 'client trip' }).length === 1,
+)
+
+const combined = filterTransactions(all, december, { ...base, groupIds: ['food'], text: 'green basket' })
+check('filters combine', combined.length === 2 && round(-sumOf(combined).CAD) === 345)
+
+const totals = runningTotals(groceriesOnly)
+check('a running subtotal accumulates', totals.length === 2 && round(totals[1]!.CAD) === -345)
+
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)
+
+function findRow(comparison: BudgetComparison, groupId: GroupId, name: string) {
+  return comparison.groups
+    .find((g) => g.group.id === groupId)
+    ?.categories.find((c) => c.name.toLowerCase() === name.toLowerCase())
+}
 
 function account(
   nickname: string,

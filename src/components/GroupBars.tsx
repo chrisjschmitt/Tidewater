@@ -2,23 +2,43 @@ import { useState } from 'react'
 import type { GroupSummary } from '../lib/budget'
 import { splitForDisplay } from '../lib/budget'
 import { money, percent } from '../lib/format'
+import type { DashboardActuals } from '../lib/etm/aggregate'
 
 interface Props {
   summaries: GroupSummary[]
   onOpen: (summary: GroupSummary) => void
   /** How many bars fit before the rest is folded into "everything else". */
   visible?: number
+  /**
+   * Present only while the expense module is unlocked. Type-only, so nothing
+   * of that module is reachable from here in a build without it.
+   */
+  actuals?: DashboardActuals | null
 }
 
-export default function GroupBars({ summaries, onOpen, visible = 6 }: Props) {
+export default function GroupBars({ summaries, onOpen, visible = 6, actuals }: Props) {
   const [expanded, setExpanded] = useState(false)
   const { shown, rest, restTotal } = splitForDisplay(summaries, visible)
-  const max = summaries[0]?.total ?? 1
+  // Folds to a constant null in public builds, taking the comparison with it.
+  const overlay = __ETM_AVAILABLE__ ? (actuals ?? null) : null
+  const months = overlay?.months ?? 1
+  const plannedMax = (summaries[0]?.total ?? 1) * months
+  const actualMax = overlay ? Math.max(...[...overlay.byGroup.values()].map((m) => m.CAD), 0) : 0
+  const max = Math.max(plannedMax, actualMax, 1)
 
   return (
     <div className="space-y-1">
       {shown.map((s, i) => (
-        <Bar key={s.group.id} summary={s} max={max} onOpen={onOpen} index={i} />
+        <Bar
+          key={s.group.id}
+          summary={s}
+          max={max}
+          onOpen={onOpen}
+          index={i}
+          months={months}
+          actual={overlay?.byGroup.get(s.group.id) ?? null}
+          comparing={Boolean(overlay)}
+        />
       ))}
 
       {rest.length > 0 && (
@@ -34,11 +54,11 @@ export default function GroupBars({ summaries, onOpen, visible = 6 }: Props) {
             <span className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-sand-200/70">
               <span
                 className="absolute inset-y-0 left-0 rounded-full bg-ink-400/50"
-                style={{ width: `${Math.max(2, (restTotal / max) * 100)}%` }}
+                style={{ width: `${Math.max(2, ((restTotal * months) / max) * 100)}%` }}
               />
             </span>
             <span className="w-24 shrink-0 text-right text-sm tabular-nums text-ink-500">
-              {money(restTotal)}
+              {money(restTotal * months)}
             </span>
             <span className="w-5 text-ink-400 transition group-hover:text-ink-700">
               {expanded ? '−' : '+'}
@@ -48,7 +68,17 @@ export default function GroupBars({ summaries, onOpen, visible = 6 }: Props) {
           {expanded && (
             <div className="mt-1 space-y-1 border-l border-sand-200 pl-3 animate-fade">
               {rest.map((s, i) => (
-                <Bar key={s.group.id} summary={s} max={max} onOpen={onOpen} index={i} compact />
+                <Bar
+                  key={s.group.id}
+                  summary={s}
+                  max={max}
+                  onOpen={onOpen}
+                  index={i}
+                  months={months}
+                  actual={overlay?.byGroup.get(s.group.id) ?? null}
+                  comparing={Boolean(overlay)}
+                  compact
+                />
               ))}
             </div>
           )}
@@ -63,15 +93,25 @@ function Bar({
   max,
   onOpen,
   index,
+  months,
+  actual,
+  comparing,
   compact = false,
 }: {
   summary: GroupSummary
   max: number
   onOpen: (s: GroupSummary) => void
   index: number
+  months: number
+  actual: { CAD: number; USD: number } | null
+  comparing: boolean
   compact?: boolean
 }) {
-  const width = Math.max(2, (summary.total / max) * 100)
+  const planned = summary.total * months
+  const width = Math.max(2, (planned / max) * 100)
+  const spent = actual?.CAD ?? 0
+  const over = comparing && spent > planned
+
   return (
     <button
       onClick={() => onOpen(summary)}
@@ -88,18 +128,51 @@ function Bar({
         )}
       </span>
 
-      <span className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-sand-200/70">
-        <span
-          className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-          style={{ width: `${width}%`, background: summary.group.color }}
-        />
+      <span className="flex-1 space-y-1">
+        <span className="relative block h-2.5 overflow-hidden rounded-full bg-sand-200/70">
+          <span
+            className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+            style={{ width: `${width}%`, background: summary.group.color }}
+          />
+        </span>
+        {comparing && (
+          <span
+            className="relative block h-1.5 overflow-hidden rounded-full bg-sand-200/70"
+            title="Actually spent"
+          >
+            <span
+              className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.max(0, Math.min(100, (spent / max) * 100))}%`,
+                background: over ? 'var(--color-shell-500)' : 'var(--color-ink-700)',
+              }}
+            />
+          </span>
+        )}
       </span>
 
-      <span className="w-24 shrink-0 text-right">
+      <span className={`shrink-0 text-right ${comparing ? 'w-28' : 'w-24'}`}>
         <span className="block text-sm font-semibold tabular-nums text-ink-900">
-          {money(summary.total)}
+          {money(planned)}
         </span>
-        <span className="block text-[11px] tabular-nums text-ink-400">{percent(summary.share)}</span>
+        {comparing ? (
+          <>
+            <span
+              className={`block text-[11px] tabular-nums ${over ? 'text-shell-500' : 'text-ink-500'}`}
+            >
+              spent {money(spent)}
+            </span>
+            {actual && actual.USD !== 0 && (
+              <span className="block text-[11px] tabular-nums text-tide-700">
+                + US${Math.round(Math.abs(actual.USD)).toLocaleString()}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="block text-[11px] tabular-nums text-ink-400">
+            {percent(summary.share)}
+          </span>
+        )}
       </span>
 
       <span className="w-5 text-ink-300 opacity-0 transition group-hover:opacity-100">›</span>

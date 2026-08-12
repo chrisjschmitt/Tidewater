@@ -1,6 +1,6 @@
 # Expense Tracking Module (ETM) — Systems Architecture & Implementation Plan
 
-Status: **in progress** — Phase 1 (§10) is built; Phases 2–5 are still proposed.
+Status: **in progress** — Phases 1–3 (§10) are built; Phases 4–5 are still proposed.
 
 Inputs: `docs/ExpenseTrackingModuleSpecs.md`, `docs/Workflow.md` (both private,
 gitignored), `docs/product-spec.md`, `docs/category-mapping.md`, and the sample
@@ -241,19 +241,53 @@ layer while giving reconciliation its balance anchors. Balances can always
 be typed in manually instead (pending card charges must be, since no export
 contains them).
 
-## 5. Aggregation and views
+## 5. Aggregation and views (implemented)
 
 A single **period selector** (month / year-to-date / custom range) drives
 every ETM view. All aggregation is pure: `(transactions, period, filters) →
 totals`, computed in memory (thousands of rows — no indexing infrastructure
-needed).
+needed). Dates are compared as ISO strings end to end; parsing them into
+`Date` objects invites a timezone to move a transaction into the
+neighbouring month.
+
+Four rules settle what the numbers mean, and every view obeys them:
+
+- **A monthly plan over a longer period** is multiplied by the calendar
+  months the period touches. A year-to-date period part-way through August
+  compares against eight months of plan — a figure someone recognises from
+  their own budget, unlike a day-weighted fraction.
+- **Plan lines and Monarch categories** are independent free text, so they
+  are paired on their names ignoring case and spacing. Whatever fails to
+  pair still appears: planned but unspent on one side, spent but unplanned
+  on the other. A comparison that hides a difference is worse than none.
+  (Hand-linking a plan line to a differently worded category is a possible
+  later addition; nothing here depends on it.)
+- **Currencies are never converted or added** (§7). A USD figure rides
+  beside the CAD one everywhere — bars, ring, group and category rows,
+  transaction totals — and is never folded in.
+- **Categories are netted before being classified**, so a refund lands back
+  on the category it came from rather than reading as income. This is the
+  treatment the budget importer already gives them.
 
 ### Dashboard integration (budget vs actual)
 
 The existing dashboard remains the core view. With ETM unlocked it gains a
 calm overlay: each group bar shows planned vs actual for the selected
-period ("planned X, spent Y"), and the summary ring reflects actual income
-vs actual spend. Tone stays observational — abundance, not alarm.
+period ("planned X, spent Y"), and the summary ring gains a second, thinner
+ring inside it reading the same way but from what actually happened. Tone
+stays observational — abundance, not alarm.
+
+The module hands the dashboard **finished numbers only** (`DashboardActuals`
+— totals and a group→amount map). `GroupBars`, `SummaryRing` and `App` take
+them as an optional prop typed through a type-only import, and each folds
+its comparison markup behind `__ETM_AVAILABLE__` so the public flavour
+drops it entirely (§3). No ETM value or string is reachable from the main
+bundle.
+
+Decrypted rows are loaded once, by `useEtmData`, and shared by the
+dashboard strip and the full expenses area. The strip appears only after
+the module has been opened in a session; a remembered unlock still costs
+one click, and the ETM chunk is never fetched on a plain page load.
 
 ### Drill-down
 
@@ -384,7 +418,7 @@ fixture.
   re-importing after category/tag edits updates rows; `check:etm` verifies
   counts and group mapping. *(Covers "transaction categorization".)*
 
-### Phase 3 — Views: budget vs actual and drill-down
+### Phase 3 — Views: budget vs actual and drill-down (implemented)
 
 - Global period selector (month / YTD / range).
 - Dashboard overlay (group bars, summary ring) with actuals.
@@ -392,7 +426,10 @@ fixture.
 - Transactions view with full filtering; per-currency totals.
 - **Exit criteria:** the two "transaction view" criteria and the "monthly
   income and expense spend" criterion demonstrably pass against the
-  fixture.
+  fixture. *(Met: `check:etm` asserts the December totals, group split,
+  refund netting, plan scaling and every filter against the fixture; the
+  same figures were confirmed in the browser, including the drill-down's
+  running subtotal.)*
 
 ### Phase 4 — Workflow screen and reconciliation
 

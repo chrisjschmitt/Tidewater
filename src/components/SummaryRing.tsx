@@ -1,17 +1,30 @@
 import { money, percent } from '../lib/format'
+import type { DashboardActuals } from '../lib/etm/aggregate'
 
 interface Props {
   income: number
   spending: number
   goals: number
   size?: number
+  /**
+   * Present only while the expense module is unlocked. Type-only, so nothing
+   * of that module is reachable from here in a build without it.
+   */
+  actuals?: DashboardActuals | null
 }
 
 /**
  * One ring, read from the top clockwise: everyday spending, then goals, then
  * whatever remains. The gap at the end is the point of the whole app.
+ *
+ * With the expense module unlocked a second, thinner ring sits inside it,
+ * reading the same way but from what actually happened. The two are never
+ * added together, and the inner one is drawn against its own income so it
+ * stays honest when a month came in higher or lower than planned.
  */
-export default function SummaryRing({ income, spending, goals, size = 260 }: Props) {
+export default function SummaryRing({ income, spending, goals, size = 260, actuals }: Props) {
+  // Folds to a constant null in public builds, taking the inner ring with it.
+  const overlay = __ETM_AVAILABLE__ ? (actuals ?? null) : null
   const stroke = 18
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
@@ -22,6 +35,13 @@ export default function SummaryRing({ income, spending, goals, size = 260 }: Pro
   const leftShare = Math.max(0, 1 - spendShare - goalShare)
   const left = income - spending - goals
   const over = left < 0
+
+  const innerRadius = radius - stroke
+  const innerCircumference = 2 * Math.PI * innerRadius
+  const actualIncome = overlay?.income.CAD ?? 0
+  const actualSpend = overlay?.spend.CAD ?? 0
+  const actualShare = Math.min(1, actualSpend / Math.max(actualIncome, 1))
+  const actualOver = actualSpend > actualIncome
 
   const arc = (share: number, offsetShare: number, color: string, key: string) => (
     <circle
@@ -54,6 +74,30 @@ export default function SummaryRing({ income, spending, goals, size = 260 }: Pro
           {arc(spendShare, 0, over ? 'var(--color-shell-500)' : 'var(--color-tide-600)', 'spend')}
           {goalShare > 0.002 && arc(goalShare, spendShare, 'var(--color-tide-300)', 'goals')}
           {leftShare > 0.002 && arc(leftShare, spendShare + goalShare, 'var(--color-sand-300)', 'left')}
+
+          {overlay && (
+            <>
+              <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={innerRadius}
+                fill="none"
+                stroke="var(--color-sand-200)"
+                strokeWidth={8}
+              />
+              <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={innerRadius}
+                fill="none"
+                stroke={actualOver ? 'var(--color-shell-500)' : 'var(--color-ink-700)'}
+                strokeWidth={8}
+                strokeLinecap="round"
+                strokeDasharray={`${Math.max(0, actualShare * innerCircumference - 3)} ${innerCircumference}`}
+                style={{ transition: 'stroke-dasharray 500ms cubic-bezier(0.22,1,0.36,1)' }}
+              />
+            </>
+          )}
         </svg>
 
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
@@ -81,9 +125,40 @@ export default function SummaryRing({ income, spending, goals, size = 260 }: Pro
           sub={percent(leftShare)}
         />
       </dl>
+
+      {overlay && (
+        <div className="mt-5 w-full rounded-2xl bg-white/70 px-4 py-3 animate-fade">
+          <p className="text-[11px] uppercase tracking-wider text-ink-400">
+            What actually happened · {overlay.label}
+          </p>
+          <dl className="mt-2 grid grid-cols-2 gap-2 text-center">
+            <Legend
+              swatch="var(--color-tide-600)"
+              label="Came in"
+              value={money(actualIncome)}
+              sub={usdNote(overlay.income.USD)}
+            />
+            <Legend
+              swatch={actualOver ? 'var(--color-shell-500)' : 'var(--color-ink-700)'}
+              label="Went out"
+              value={money(actualSpend)}
+              sub={usdNote(overlay.spend.USD)}
+            />
+          </dl>
+          {overlay.months > 1 && (
+            <p className="mt-2 text-center text-[11px] text-ink-400">
+              Over {overlay.months} months. The plan above is monthly.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
+
+/** US dollars are never folded into a Canadian total, so they sit beside it. */
+const usdNote = (amount: number) =>
+  amount === 0 ? '' : `+ US$${Math.round(Math.abs(amount)).toLocaleString()}`
 
 function Legend({
   swatch,

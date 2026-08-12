@@ -10,6 +10,7 @@ import IncomeCard from './components/IncomeCard'
 import Modal from './components/Modal'
 import Onboarding from './components/Onboarding'
 import SummaryRing from './components/SummaryRing'
+import type { DashboardActuals } from './lib/etm/aggregate'
 import {
   balanceTone,
   freeAfterExpenses,
@@ -64,6 +65,9 @@ export default function App() {
   const [etm, setEtm] = useState<EtmPresence | undefined>(undefined)
   const [etmOpen, setEtmOpen] = useState(false)
   const [etmKey, setEtmKey] = useState<CryptoKey | null>(null)
+  const [etmState, setEtmActuals] = useState<DashboardActuals | null>(null)
+  // Folds to a constant null in public builds, so no comparison markup ships.
+  const etmActuals = __ETM_AVAILABLE__ ? etmState : null
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -365,6 +369,39 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
+        {(etmOpen || etmKey) && EtmModule && (
+          <Suspense
+            fallback={
+              etmOpen ? (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
+                  Opening expense tracking…
+                </div>
+              ) : null
+            }
+          >
+            <EtmModule
+              open={etmOpen}
+              unlockedKey={etmKey}
+              budget={budget}
+              onActuals={setEtmActuals}
+              onUnlocked={rememberEtmUnlock}
+              onOpen={() => setEtmOpen(true)}
+              onClose={() => setEtmOpen(false)}
+              onLocked={() => {
+                setEtmKey(null)
+                setEtm({ setUp: true, remembered: false })
+                setEtmOpen(false)
+              }}
+              onWiped={() => {
+                setEtmKey(null)
+                setEtm(undefined)
+                setEtmOpen(false)
+                flash('Expense tracking data was erased. Your budget is untouched.')
+              }}
+            />
+          </Suspense>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[minmax(320px,380px)_1fr]">
           <div className="space-y-6">
             <section className="card p-6">
@@ -373,7 +410,12 @@ export default function App() {
               </h1>
               <p className="mt-1 text-sm text-ink-500">{tone.detail}</p>
               <div className="mt-6">
-                <SummaryRing income={income} spending={spending} goals={goalMoney} />
+                <SummaryRing
+                  income={income}
+                  spending={spending}
+                  goals={goalMoney}
+                  actuals={etmActuals}
+                />
               </div>
             </section>
 
@@ -387,18 +429,28 @@ export default function App() {
                   Where it goes
                 </h2>
                 <p className="mt-0.5 text-sm text-ink-500">
-                  Largest first. Open any group to adjust what is inside it.
+                  {etmActuals
+                    ? `Planned above, spent below, for ${etmActuals.label}. Open any group to adjust the plan.`
+                    : 'Largest first. Open any group to adjust what is inside it.'}
                 </p>
               </div>
               <div className="text-right">
                 <span className="block text-sm font-semibold tabular-nums text-ink-900">
-                  {money(spending)}
+                  {money(spending * (etmActuals?.months ?? 1))}
                 </span>
-                <span className="block text-[11px] text-ink-400">across {budget.expenses.length} items</span>
+                <span className="block text-[11px] text-ink-400">
+                  {etmActuals
+                    ? `spent ${money(etmActuals.spend.CAD)}`
+                    : `across ${budget.expenses.length} items`}
+                </span>
               </div>
             </header>
 
-            <GroupBars summaries={summaries} onOpen={(s) => setOpenGroup(s.group.id)} />
+            <GroupBars
+              summaries={summaries}
+              onOpen={(s) => setOpenGroup(s.group.id)}
+              actuals={etmActuals}
+            />
 
             {budget.sourceNote && (
               <p className="mt-5 border-t border-sand-200 pt-4 text-xs text-ink-400">
@@ -489,33 +541,6 @@ export default function App() {
       )}
 
       {importProgress && <ImportProgress progress={importProgress} />}
-
-      {etmOpen && EtmModule && (
-        <Suspense
-          fallback={
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
-              Opening expense tracking…
-            </div>
-          }
-        >
-          <EtmModule
-            unlockedKey={etmKey}
-            onUnlocked={rememberEtmUnlock}
-            onClose={() => setEtmOpen(false)}
-            onLocked={() => {
-              setEtmKey(null)
-              setEtm({ setUp: true, remembered: false })
-              setEtmOpen(false)
-            }}
-            onWiped={() => {
-              setEtmKey(null)
-              setEtm(undefined)
-              setEtmOpen(false)
-              flash('Expense tracking data was erased. Your budget is untouched.')
-            }}
-          />
-        </Suspense>
-      )}
     </div>
   )
 }
