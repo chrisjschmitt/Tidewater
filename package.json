@@ -13,9 +13,11 @@
     "app:mac": "bash scripts/build-mac-app.sh",
     "check:import": "esbuild scripts/check-import.ts --bundle --platform=node --format=esm --outfile=.tmp/check-import.mjs --log-level=error && node .tmp/check-import.mjs",
     "check:starter": "esbuild scripts/check-starter.ts --bundle --platform=node --format=esm --outfile=.tmp/check-starter.mjs --log-level=error && node .tmp/check-starter.mjs",
-    "check:assistant": "esbuild scripts/check-assistant.ts --bundle --platform=node --format=esm --outfile=.tmp/check-assistant.mjs --log-level=error && node .tmp/check-assistant.mjs"
+    "check:assistant": "esbuild scripts/check-assistant.ts --bundle --platform=node --format=esm --outfile=.tmp/check-assistant.mjs --log-level=error && node .tmp/check-assistant.mjs",
+    "check:etm": "esbuild scripts/check-etm.ts --bundle --platform=node --format=esm --outfile=.tmp/check-etm.mjs --log-level=error && node .tmp/check-etm.mjs"
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "idb-keyval": "^6.2.1",
     "papaparse": "^5.4.1",
     "react": "^18.3.1",

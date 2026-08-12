@@ -4,6 +4,7 @@ import type { Budget } from './types'
 const BUDGET_KEY = 'tidewater.budget'
 const SETTINGS_KEY = 'tidewater.settings'
 const CHAT_KEY = 'tidewater.chat'
+const ETM_KEY = 'tidewater.etm'
 
 export interface ChatMessage {
   id: number
@@ -98,20 +99,51 @@ function withDeadline<T>(work: Promise<T>, fallback: T): Promise<{ value: T; ok:
   })
 }
 
+/**
+ * Whether the optional expense tracking module has been set up here. This is
+ * the one thing about that module the main bundle knows: enough to label its
+ * entry point honestly, and nothing about what it holds. Everything else lives
+ * in its own encrypted database, loaded only when asked for.
+ */
+export interface EtmPresence {
+  setUp: boolean
+  remembered: boolean
+}
+
+export async function loadEtmPresence(): Promise<EtmPresence | undefined> {
+  try {
+    return await get<EtmPresence>(ETM_KEY)
+  } catch {
+    return undefined
+  }
+}
+
+export async function setEtmPresence(presence: EtmPresence | null): Promise<void> {
+  if (presence) await set(ETM_KEY, presence)
+  else await del(ETM_KEY)
+}
+
 export interface LoadResult {
   budget?: Budget
   settings: Settings
+  etm?: EtmPresence
   /** False when storage never answered — nothing entered will survive a reload. */
   storageOk: boolean
 }
 
 /** Always resolves, so the app can render even when storage is unreachable. */
 export async function loadAll(): Promise<LoadResult> {
-  const [budget, settings] = await Promise.all([
+  const [budget, settings, etm] = await Promise.all([
     withDeadline<Budget | undefined>(loadBudget(), undefined),
     withDeadline<Settings>(loadSettings(), DEFAULT_SETTINGS),
+    withDeadline<EtmPresence | undefined>(loadEtmPresence(), undefined),
   ])
-  return { budget: budget.value, settings: settings.value, storageOk: budget.ok && settings.ok }
+  return {
+    budget: budget.value,
+    settings: settings.value,
+    etm: etm.value,
+    storageOk: budget.ok && settings.ok,
+  }
 }
 
 export async function saveBudget(budget: Budget): Promise<void> {

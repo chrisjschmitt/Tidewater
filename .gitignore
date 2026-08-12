@@ -11,3 +11,10 @@ native/mac/Tidewater.iconset
 # Local Monarch exports and Numbers workbooks — often personal; keep off GitHub
 Test-Data/
 *.numbers
+
+# ETM planning data — real bank/card statements with account numbers in filenames; never commit
+planning-data/
+
+# Private ETM inputs — contain real account numbers and confidential workflow details; never commit
+docs/Workflow.md
+docs/ExpenseTrackingModuleSpecs.md

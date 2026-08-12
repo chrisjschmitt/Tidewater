@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChatPanel from './components/ChatPanel'
 import ChangelogModal from './components/ChangelogModal'
 import GoalsPanel from './components/GoalsPanel'
@@ -37,10 +37,18 @@ import {
   loadAll,
   saveBudget,
   saveSettings,
+  type EtmPresence,
   type Settings,
 } from './lib/storage'
 import type { Budget, ExpenseLine, Goal, GroupId, IncomeLine } from './lib/types'
 import { APP_VERSION } from './lib/version'
+
+/**
+ * The optional expense tracking module, in a chunk of its own. Anyone who does
+ * not open it never downloads it, which is what keeps the rest of Tidewater
+ * exactly the app it was.
+ */
+const EtmModule = lazy(() => import('./components/etm/EtmModule'))
 
 export default function App() {
   const [budget, setBudget] = useState<Budget | null>(null)
@@ -51,6 +59,9 @@ export default function App() {
   const [dataOpen, setDataOpen] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [etm, setEtm] = useState<EtmPresence | undefined>(undefined)
+  const [etmOpen, setEtmOpen] = useState(false)
+  const [etmKey, setEtmKey] = useState<CryptoKey | null>(null)
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -59,9 +70,10 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
-      const { budget: saved, settings: stored, storageOk } = await loadAll()
+      const { budget: saved, settings: stored, etm: etmPresence, storageOk } = await loadAll()
       if (saved) setBudget(saved)
       setSettings(stored)
+      setEtm(etmPresence)
       setReady(true)
       if (!storageOk) {
         setNotice(
@@ -80,6 +92,11 @@ export default function App() {
   const updateSettings = useCallback((next: Settings) => {
     setSettings(next)
     void saveSettings(next)
+  }, [])
+
+  const rememberEtmUnlock = useCallback((key: CryptoKey, remembered: boolean) => {
+    setEtmKey(key)
+    setEtm({ setUp: true, remembered })
   }, [])
 
   const flash = (message: string) => {
@@ -319,6 +336,11 @@ export default function App() {
                 {notice}
               </span>
             )}
+            {etmKey && (
+              <button onClick={() => setEtmOpen(true)} className="btn-quiet text-xs">
+                Expenses
+              </button>
+            )}
             <button onClick={() => setHelpOpen(true)} className="btn-quiet text-xs">
               Help
             </button>
@@ -414,7 +436,12 @@ export default function App() {
       <DataModal
         open={dataOpen}
         budget={budget}
+        etm={etm}
         onClose={() => setDataOpen(false)}
+        onOpenEtm={() => {
+          setDataOpen(false)
+          setEtmOpen(true)
+        }}
         onImportBackup={(file) => {
           setDataOpen(false)
           void handleFile(file)
@@ -455,6 +482,33 @@ export default function App() {
       )}
 
       {importProgress && <ImportProgress progress={importProgress} />}
+
+      {etmOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
+              Opening expense tracking…
+            </div>
+          }
+        >
+          <EtmModule
+            unlockedKey={etmKey}
+            onUnlocked={rememberEtmUnlock}
+            onClose={() => setEtmOpen(false)}
+            onLocked={() => {
+              setEtmKey(null)
+              setEtm({ setUp: true, remembered: false })
+              setEtmOpen(false)
+            }}
+            onWiped={() => {
+              setEtmKey(null)
+              setEtm(undefined)
+              setEtmOpen(false)
+              flash('Expense tracking data was erased. Your budget is untouched.')
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -557,17 +611,21 @@ function Stat({
 function DataModal({
   open,
   budget,
+  etm,
   onClose,
   onImportBackup,
   onReset,
   onLoadSample,
+  onOpenEtm,
 }: {
   open: boolean
   budget: Budget
+  etm?: EtmPresence
   onClose: () => void
   onImportBackup: (file: File) => void
   onReset: () => void
   onLoadSample: () => void
+  onOpenEtm: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const backupRef = useRef<HTMLInputElement>(null)
@@ -620,6 +678,16 @@ function DataModal({
           body="Replace what is on screen with a Tidewater JSON backup from this or another device."
           action="Choose JSON"
           onClick={() => backupRef.current?.click()}
+        />
+        <Row
+          title={etm?.setUp ? 'Expense tracking' : 'Enable expense tracking…'}
+          body={
+            etm?.setUp
+              ? 'Your real spending, encrypted on this device and kept apart from your budget.'
+              : 'Optional. Track what you actually spent alongside your plan, encrypted with a key you choose.'
+          }
+          action={etm?.setUp ? (etm.remembered ? 'Open' : 'Unlock') : 'Set up'}
+          onClick={onOpenEtm}
         />
         <Row
           title="Load Ted’s sample budget"
