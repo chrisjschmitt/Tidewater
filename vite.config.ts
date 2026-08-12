@@ -3,7 +3,16 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  /**
+   * `--mode public` builds a distribution with no expense tracking module at
+   * all: the entry point is hidden and the ETM chunk (crypto, vault, UI) is
+   * dead-code-eliminated, so it is not even downloadable. The default build
+   * keeps the module, so existing deploys are unchanged.
+   */
+  define: {
+    __ETM_AVAILABLE__: JSON.stringify(mode !== 'public'),
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -30,4 +39,4 @@ export default defineConfig({
       },
     }),
   ],
-})
+}))

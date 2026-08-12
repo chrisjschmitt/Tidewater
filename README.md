@@ -93,6 +93,15 @@ npm run build
 npm run preview
 ```
 
+To ship a build without the optional expense tracking module (no entry
+point, and none of its code in the bundle):
+
+```bash
+npm run build:public
+```
+
+`npm run dev:public` runs the dev server the same way.
+
 ## Three ways to start
 
 | Path | What happens |

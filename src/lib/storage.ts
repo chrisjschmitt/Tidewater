@@ -126,22 +126,29 @@ export async function setEtmPresence(presence: EtmPresence | null): Promise<void
 export interface LoadResult {
   budget?: Budget
   settings: Settings
-  etm?: EtmPresence
   /** False when storage never answered — nothing entered will survive a reload. */
   storageOk: boolean
 }
 
+/**
+ * The presence probe with the same hang protection as loadAll. Kept separate
+ * so builds shipped without the expense tracking module reference nothing of
+ * it — the call site is compile-time dead and this tree-shakes away.
+ */
+export async function probeEtmPresence(): Promise<EtmPresence | undefined> {
+  const probed = await withDeadline<EtmPresence | undefined>(loadEtmPresence(), undefined)
+  return probed.value
+}
+
 /** Always resolves, so the app can render even when storage is unreachable. */
 export async function loadAll(): Promise<LoadResult> {
-  const [budget, settings, etm] = await Promise.all([
+  const [budget, settings] = await Promise.all([
     withDeadline<Budget | undefined>(loadBudget(), undefined),
     withDeadline<Settings>(loadSettings(), DEFAULT_SETTINGS),
-    withDeadline<EtmPresence | undefined>(loadEtmPresence(), undefined),
   ])
   return {
     budget: budget.value,
     settings: settings.value,
-    etm: etm.value,
     storageOk: budget.ok && settings.ok,
   }
 }

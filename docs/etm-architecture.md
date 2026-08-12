@@ -143,6 +143,25 @@ The ETM UI and engine are loaded with a dynamic import triggered only after
 unlock. Users without the key download and execute the same app they do
 today, keeping the "no change for other users" promise literal.
 
+### Distribution builds without the module (implemented)
+
+The module may become a paid feature, so a build flavor exists that ships
+with **no trace of ETM at all** — not a hidden button, an absent one:
+
+- `npm run build` (and the existing Vercel deploy) includes the module,
+  exactly as before.
+- `npm run build:public` (Vite `--mode public`) sets the compile-time
+  constant `__ETM_AVAILABLE__` to `false` (see `vite.config.ts`). The
+  enablement row, the presence probe, its storage key, and the entire
+  lazy-loaded ETM chunk are dead-code-eliminated — the public bundle
+  contains no ETM code, strings, or storage keys, verified by grep.
+- `npm run dev:public` runs the dev server in the same flavor.
+
+Implementers: every new ETM touchpoint in the main bundle (entry points,
+probes, presence hints) must sit behind a compile-time
+`__ETM_AVAILABLE__` check so the public flavor stays clean. Re-verify with
+a public build before releases.
+
 ## 4. Data architecture
 
 A new IndexedDB database (`tidewater-etm`), independent of the existing

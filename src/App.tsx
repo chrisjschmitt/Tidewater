@@ -35,6 +35,7 @@ import {
   clearChat,
   downloadFile,
   loadAll,
+  probeEtmPresence,
   saveBudget,
   saveSettings,
   type EtmPresence,
@@ -46,9 +47,10 @@ import { APP_VERSION } from './lib/version'
 /**
  * The optional expense tracking module, in a chunk of its own. Anyone who does
  * not open it never downloads it, which is what keeps the rest of Tidewater
- * exactly the app it was.
+ * exactly the app it was. In `--mode public` builds the ternary is a
+ * compile-time `false`, so the chunk is never emitted at all.
  */
-const EtmModule = lazy(() => import('./components/etm/EtmModule'))
+const EtmModule = __ETM_AVAILABLE__ ? lazy(() => import('./components/etm/EtmModule')) : null
 
 export default function App() {
   const [budget, setBudget] = useState<Budget | null>(null)
@@ -70,7 +72,12 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
-      const { budget: saved, settings: stored, etm: etmPresence, storageOk } = await loadAll()
+      // The ternary is compile-time in public builds, so the probe — and the
+      // module's storage key with it — tree-shakes out of the bundle.
+      const [{ budget: saved, settings: stored, storageOk }, etmPresence] = await Promise.all([
+        loadAll(),
+        __ETM_AVAILABLE__ ? probeEtmPresence() : undefined,
+      ])
       if (saved) setBudget(saved)
       setSettings(stored)
       setEtm(etmPresence)
@@ -483,7 +490,7 @@ export default function App() {
 
       {importProgress && <ImportProgress progress={importProgress} />}
 
-      {etmOpen && (
+      {etmOpen && EtmModule && (
         <Suspense
           fallback={
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
@@ -679,16 +686,18 @@ function DataModal({
           action="Choose JSON"
           onClick={() => backupRef.current?.click()}
         />
-        <Row
-          title={etm?.setUp ? 'Expense tracking' : 'Enable expense tracking…'}
-          body={
-            etm?.setUp
-              ? 'Your real spending, encrypted on this device and kept apart from your budget.'
-              : 'Optional. Track what you actually spent alongside your plan, encrypted with a key you choose.'
-          }
-          action={etm?.setUp ? (etm.remembered ? 'Open' : 'Unlock') : 'Set up'}
-          onClick={onOpenEtm}
-        />
+        {__ETM_AVAILABLE__ && (
+          <Row
+            title={etm?.setUp ? 'Expense tracking' : 'Enable expense tracking…'}
+            body={
+              etm?.setUp
+                ? 'Your real spending, encrypted on this device and kept apart from your budget.'
+                : 'Optional. Track what you actually spent alongside your plan, encrypted with a key you choose.'
+            }
+            action={etm?.setUp ? (etm.remembered ? 'Open' : 'Unlock') : 'Set up'}
+            onClick={onOpenEtm}
+          />
+        )}
         <Row
           title="Load Ted’s sample budget"
           body="Replaces what is on screen with the example plan."

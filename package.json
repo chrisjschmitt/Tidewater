@@ -6,7 +6,9 @@
   "description": "Tidewater — a calm, abundance-minded personal budgeting PWA. All data stays on your device.",
   "scripts": {
     "dev": "vite",
+    "dev:public": "vite --mode public",
     "build": "tsc -b && vite build",
+    "build:public": "tsc -b && vite build --mode public",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "icons": "bash scripts/build-icons.sh",
