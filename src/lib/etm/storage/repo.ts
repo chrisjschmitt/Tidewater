@@ -1,6 +1,13 @@
 import { withDefaults, type EtmConfig } from '../config'
 import type { ImportPlan } from '../importer'
-import { monthOf, type Account, type ImportBatch, type Transaction } from '../types'
+import {
+  monthOf,
+  type Account,
+  type BalanceSnapshot,
+  type ImportBatch,
+  type ReconciliationRecord,
+  type Transaction,
+} from '../types'
 import { openEtmDb, type EtmDb } from './db'
 import { allSealed, deleteSealed, getSealed, putSealed, sealedIds } from './records'
 
@@ -82,6 +89,44 @@ export function removeTransaction(key: CryptoKey, transaction: Transaction): Pro
     if (kept.length === 0) await deleteSealed(db, 'transactions', month)
     else await putSealed(db, 'transactions', key, month, kept)
   })
+}
+
+// --- balances --------------------------------------------------------------
+
+export function loadBalances(key: CryptoKey): Promise<BalanceSnapshot[]> {
+  return withDb(async (db) => {
+    const balances = await allSealed<BalanceSnapshot>(db, 'balances', key)
+    return balances.sort((a, z) => a.date.localeCompare(z.date))
+  })
+}
+
+export function saveBalance(key: CryptoKey, snapshot: BalanceSnapshot): Promise<void> {
+  return withDb((db) => putSealed(db, 'balances', key, snapshot.id, snapshot))
+}
+
+export function deleteBalance(id: string): Promise<void> {
+  return withDb((db) => deleteSealed(db, 'balances', id))
+}
+
+// --- reconciliations -------------------------------------------------------
+
+export function loadReconciliations(key: CryptoKey): Promise<ReconciliationRecord[]> {
+  return withDb(async (db) => {
+    const records = await allSealed<ReconciliationRecord>(db, 'reconciliations', key)
+    return records.sort((a, z) => a.month.localeCompare(z.month))
+  })
+}
+
+/** The month is the id, so closing a month twice replaces rather than repeats. */
+export function saveReconciliation(
+  key: CryptoKey,
+  record: ReconciliationRecord,
+): Promise<void> {
+  return withDb((db) => putSealed(db, 'reconciliations', key, record.month, record))
+}
+
+export function deleteReconciliation(month: string): Promise<void> {
+  return withDb((db) => deleteSealed(db, 'reconciliations', month))
 }
 
 // --- imports ---------------------------------------------------------------

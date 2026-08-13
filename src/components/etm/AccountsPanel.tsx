@@ -56,6 +56,7 @@ export default function AccountsPanel({ accounts, onSave, onDelete, transactionC
                   )}
                   {account.currency === 'USD' && <Pill>USD</Pill>}
                   {account.funding && <Pill>Funding</Pill>}
+                  {account.mainCard && <Pill>Main card</Pill>}
                   {account.savingsDestination && <Pill>Savings</Pill>}
                   {account.excludedFromBudget && <Pill>Outside the budget</Pill>}
                 </p>
@@ -111,6 +112,7 @@ export function blankAccount(monarchName = ''): Account {
     currency: 'CAD',
     monarchName,
     funding: false,
+    mainCard: false,
     savingsDestination: false,
     excludedFromBudget: false,
   }
@@ -246,6 +248,11 @@ export function AccountForm({
             label="Everything is paid from this account"
             checked={draft.funding}
             onChange={(v) => set('funding', v)}
+          />
+          <Check
+            label="Everyday purchases go on this card, cleared each month"
+            checked={draft.mainCard}
+            onChange={(v) => set('mainCard', v)}
           />
           <Check
             label="Surplus is transferred here"

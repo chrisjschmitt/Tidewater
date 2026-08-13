@@ -9,6 +9,7 @@ import ImportProgress, { type ImportProgressState } from './components/ImportPro
 import IncomeCard from './components/IncomeCard'
 import Modal from './components/Modal'
 import Onboarding from './components/Onboarding'
+import OptionalFeatureBoundary from './components/OptionalFeatureBoundary'
 import SummaryRing from './components/SummaryRing'
 import type { DashboardActuals } from './lib/etm/aggregate'
 import {
@@ -371,38 +372,46 @@ export default function App() {
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
         {(etmOpen || etmKey) && EtmModule && (
-          <Suspense
-            fallback={
-              etmOpen ? (
-                <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
-                  Opening expense tracking…
-                </div>
-              ) : null
-            }
+          <OptionalFeatureBoundary
+            onDismiss={() => {
+              setEtmOpen(false)
+              setEtmKey(null)
+              setEtmActuals(null)
+            }}
           >
-            <EtmModule
-              open={etmOpen}
-              unlockedKey={etmKey}
-              budget={budget}
-              openCategory={etmCategory}
-              onCloseCategory={() => setEtmCategory(null)}
-              onActuals={setEtmActuals}
-              onUnlocked={rememberEtmUnlock}
-              onOpen={() => setEtmOpen(true)}
-              onClose={() => setEtmOpen(false)}
-              onLocked={() => {
-                setEtmKey(null)
-                setEtm({ setUp: true, remembered: false })
-                setEtmOpen(false)
-              }}
-              onWiped={() => {
-                setEtmKey(null)
-                setEtm(undefined)
-                setEtmOpen(false)
-                flash('Expense tracking data was erased. Your budget is untouched.')
-              }}
-            />
-          </Suspense>
+            <Suspense
+              fallback={
+                etmOpen ? (
+                  <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
+                    Opening expense tracking…
+                  </div>
+                ) : null
+              }
+            >
+              <EtmModule
+                open={etmOpen}
+                unlockedKey={etmKey}
+                budget={budget}
+                openCategory={etmCategory}
+                onCloseCategory={() => setEtmCategory(null)}
+                onActuals={setEtmActuals}
+                onUnlocked={rememberEtmUnlock}
+                onOpen={() => setEtmOpen(true)}
+                onClose={() => setEtmOpen(false)}
+                onLocked={() => {
+                  setEtmKey(null)
+                  setEtm({ setUp: true, remembered: false })
+                  setEtmOpen(false)
+                }}
+                onWiped={() => {
+                  setEtmKey(null)
+                  setEtm(undefined)
+                  setEtmOpen(false)
+                  flash('Expense tracking data was erased. Your budget is untouched.')
+                }}
+              />
+            </Suspense>
+          </OptionalFeatureBoundary>
         )}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(320px,380px)_1fr]">

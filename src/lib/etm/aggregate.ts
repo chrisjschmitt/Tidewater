@@ -2,16 +2,15 @@ import { GROUPS, GROUP_BY_ID, looksLikeIncome } from '../categories'
 import type { Budget, Group, GroupId } from '../types'
 import { DEFAULT_CONFIG } from './config'
 import { includes, monthsInPeriod, type Period } from './period'
-import type { Currency, Transaction } from './types'
+import type { Currency, Money, Transaction } from './types'
+
+export type { Money }
 
 /**
  * All aggregation, as pure functions of (transactions, period, filters).
  * A few thousand rows is small enough to total in memory every render, so
  * there is no index to keep in step with the data.
  */
-
-/** Amounts never mix across currencies (§7), so every total carries both. */
-export type Money = Record<Currency, number>
 
 export const zeroMoney = (): Money => ({ CAD: 0, USD: 0 })
 
@@ -130,14 +129,16 @@ export function aggregate(
 
   for (const transaction of transactions) {
     if (!includes(period, transaction.date)) continue
-    if (excluded.has(transaction.accountId)) continue
     if (transaction.internal) {
       internal++
       continue
     }
 
     // Held apart before anything else sees it, so an advance cannot net
-    // against the category it was charged to.
+    // against the category it was charged to. This runs ahead of the excluded
+    // accounts on purpose: an account kept out of the family budget is
+    // typically a personal card tracked *for* reimbursement, so dropping its
+    // advances here would empty the very view they exist for.
     if (isReimbursable(transaction, reimbursableTag)) {
       const tags = bucketOf(transaction, reimbursableTag)
       const label = bucketLabel(tags)
@@ -149,6 +150,8 @@ export function aggregate(
       reimbursable.count++
       continue
     }
+
+    if (excluded.has(transaction.accountId)) continue
 
     counted++
 

@@ -5,24 +5,43 @@ import {
   addManualTransaction,
   commitImport,
   deleteAccount,
+  deleteBalance,
+  deleteReconciliation,
   loadAccounts,
+  loadBalances,
   loadBatches,
   loadConfig,
+  loadReconciliations,
   loadTransactions,
   removeTransaction,
   saveAccount,
+  saveBalance,
   saveConfig,
+  saveReconciliation,
   undoBatch,
 } from '../../lib/etm/storage/repo'
-import { monthOf, type Account, type ImportBatch, type Transaction } from '../../lib/etm/types'
+import {
+  monthOf,
+  type Account,
+  type BalanceSnapshot,
+  type ImportBatch,
+  type ReconciliationRecord,
+  type Transaction,
+} from '../../lib/etm/types'
 
 export interface EtmData {
   loading: boolean
   accounts: Account[]
   transactions: Transaction[]
   batches: ImportBatch[]
+  balances: BalanceSnapshot[]
+  reconciliations: ReconciliationRecord[]
   config: EtmConfig
   saveSettings: (config: EtmConfig) => Promise<void>
+  recordBalance: (snapshot: BalanceSnapshot) => Promise<void>
+  removeBalance: (snapshot: BalanceSnapshot) => Promise<void>
+  recordMonth: (record: ReconciliationRecord) => Promise<void>
+  reopenMonth: (month: string) => Promise<void>
   /** Months holding data, oldest first — what the period selector offers. */
   months: string[]
   transactionCounts: Map<string, number>
@@ -43,21 +62,28 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [batches, setBatches] = useState<ImportBatch[]>([])
+  const [balances, setBalances] = useState<BalanceSnapshot[]>([])
+  const [reconciliations, setReconciliations] = useState<ReconciliationRecord[]>([])
   const [config, setConfig] = useState<EtmConfig>(DEFAULT_CONFIG)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
 
   const reload = useCallback(async () => {
-    const [nextAccounts, nextTransactions, nextBatches, nextConfig] = await Promise.all([
-      loadAccounts(unlockedKey),
-      loadTransactions(unlockedKey),
-      loadBatches(unlockedKey),
-      loadConfig(unlockedKey),
-    ])
+    const [nextAccounts, nextTransactions, nextBatches, nextConfig, nextBalances, nextRecords] =
+      await Promise.all([
+        loadAccounts(unlockedKey),
+        loadTransactions(unlockedKey),
+        loadBatches(unlockedKey),
+        loadConfig(unlockedKey),
+        loadBalances(unlockedKey),
+        loadReconciliations(unlockedKey),
+      ])
     setAccounts(nextAccounts)
     setTransactions(nextTransactions)
     setBatches(nextBatches)
     setConfig(nextConfig)
+    setBalances(nextBalances)
+    setReconciliations(nextRecords)
   }, [unlockedKey])
 
   useEffect(() => {
@@ -115,6 +141,45 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     [unlockedKey],
   )
 
+  const recordBalance = useCallback(
+    async (snapshot: BalanceSnapshot) => {
+      await saveBalance(unlockedKey, snapshot)
+      setBalances(await loadBalances(unlockedKey))
+      flash(`Balance recorded for ${snapshot.date}.`)
+    },
+    [unlockedKey, flash],
+  )
+
+  const removeBalance = useCallback(
+    async (snapshot: BalanceSnapshot) => {
+      await deleteBalance(snapshot.id)
+      setBalances(await loadBalances(unlockedKey))
+    },
+    [unlockedKey],
+  )
+
+  const recordMonth = useCallback(
+    async (record: ReconciliationRecord) => {
+      await saveReconciliation(unlockedKey, record)
+      setReconciliations(await loadReconciliations(unlockedKey))
+      flash(
+        record.status === 'reconciled'
+          ? `${record.month} is closed.`
+          : `${record.month} saved as still open.`,
+      )
+    },
+    [unlockedKey, flash],
+  )
+
+  const reopenMonth = useCallback(
+    async (month: string) => {
+      await deleteReconciliation(month)
+      setReconciliations(await loadReconciliations(unlockedKey))
+      flash(`${month} is open again.`)
+    },
+    [unlockedKey, flash],
+  )
+
   const removeAccount = useCallback(
     async (account: Account) => {
       await deleteAccount(account.id)
@@ -165,8 +230,14 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     accounts,
     transactions,
     batches,
+    balances,
+    reconciliations,
     config,
     saveSettings,
+    recordBalance,
+    removeBalance,
+    recordMonth,
+    reopenMonth,
     months,
     transactionCounts,
     notice,

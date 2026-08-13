@@ -10,7 +10,14 @@ import {
   NO_BUCKET,
   type Money,
 } from '../../lib/etm/aggregate'
-import { DEFAULT_CONFIG, type EtmConfig } from '../../lib/etm/config'
+import {
+  DEFAULT_CONFIG,
+  bucketName,
+  owedBy,
+  settingFor,
+  withBucketSetting,
+  type EtmConfig,
+} from '../../lib/etm/config'
 import { amountIn } from '../../lib/etm/format'
 import { includes, periodLabel, type Period } from '../../lib/etm/period'
 import type { Account, Transaction } from '../../lib/etm/types'
@@ -106,11 +113,12 @@ export default function ReimbursablePanel({
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-ink-900">
-                    {bucket.label}
+                    {bucketName(config, bucket.label)}
                     {bucket.label === NO_BUCKET && <Note>tag these to sort them</Note>}
                   </span>
                   <span className="block text-[11px] text-ink-400">
                     {bucket.count} transaction{bucket.count === 1 ? '' : 's'}
+                    {owedBy(config, bucket.label) && ` · owed by ${owedBy(config, bucket.label)}`}
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
@@ -127,6 +135,11 @@ export default function ReimbursablePanel({
 
               {openBucket === bucket.label && (
                 <div className="animate-fade border-t border-sand-200">
+                  <BucketSettingForm
+                    config={config}
+                    bucket={bucket.label}
+                    onChange={onConfigChange}
+                  />
                   <TransactionTable
                     rows={rowsFor(bucket.label)}
                     empty="Nothing here in this period."
@@ -145,6 +158,60 @@ export default function ReimbursablePanel({
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+/**
+ * Who owes a bucket, edited where the bucket is rather than on a settings
+ * screen. Leaving both fields empty removes the entry, so configuration only
+ * ever holds what the user actually said.
+ */
+function BucketSettingForm({
+  config,
+  bucket,
+  onChange,
+}: {
+  config: EtmConfig
+  bucket: string
+  onChange: (config: EtmConfig) => void
+}) {
+  const current = settingFor(config, bucket)
+  const [owner, setOwner] = useState(current?.owedBy ?? '')
+  const [name, setName] = useState(current?.displayName ?? '')
+  const dirty = owner !== (current?.owedBy ?? '') || name !== (current?.displayName ?? '')
+
+  return (
+    <div className="flex flex-wrap items-end gap-3 border-b border-sand-200 px-4 py-3">
+      <label className="block">
+        <span className="label">Owed by</span>
+        <input
+          className="field w-40 text-sm"
+          value={owner}
+          placeholder="Nobody yet"
+          onChange={(e) => setOwner(e.target.value)}
+        />
+      </label>
+      <label className="block">
+        <span className="label">Call it</span>
+        <input
+          className="field w-56 text-sm"
+          value={name}
+          placeholder={bucket}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </label>
+      <button
+        onClick={() => onChange(withBucketSetting(config, { bucket, owedBy: owner, displayName: name }))}
+        className="btn-ghost text-xs"
+        disabled={!dirty}
+      >
+        Save
+      </button>
+      <p className="w-full text-[11px] text-ink-400">
+        Used by the month-end reimbursement step, which turns this into “ask
+        {owner ? ` ${owner}` : ' them'} for this much”.
+      </p>
     </div>
   )
 }

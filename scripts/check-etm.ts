@@ -40,10 +40,25 @@ import {
   sealSentinel,
   sentinelMatches,
 } from '../src/lib/etm/crypto.ts'
+import { DEFAULT_CONFIG, withBucketSetting } from '../src/lib/etm/config.ts'
 import { findUnmatchedAccounts, planImport } from '../src/lib/etm/importer.ts'
+import {
+  StatementFormatError,
+  parseStatementCsv,
+  parseStatementDate,
+} from '../src/lib/etm/statement.ts'
+import {
+  computeSavings,
+  dayBefore,
+  findUntidy,
+  latestSnapshot,
+  reconcile,
+  reimbursementPivot,
+  type Reconciliation,
+} from '../src/lib/etm/workflow.ts'
 import { createManualTransaction } from '../src/lib/etm/manual.ts'
 import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
-import type { Account, Transaction } from '../src/lib/etm/types.ts'
+import type { Account, BalanceSnapshot, Transaction } from '../src/lib/etm/types.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
@@ -146,7 +161,7 @@ console.log('\n=== Account matching ===')
 const accounts: Account[] = [
   account('Everyday spending', 'chequing', 'CAD', 'Chequing (...1001)', { funding: true, float: 500 }),
   account('Rainy day', 'savings', 'CAD', 'Savings (...2002)', { savingsDestination: true }),
-  account('Blue card', 'credit', 'CAD', 'Visa (...4242)'),
+  account('Blue card', 'credit', 'CAD', 'Visa (...4242)', { mainCard: true }),
   account('Pocket cash', 'chequing', 'CAD', 'Cash'),
   account('Travel card', 'credit', 'USD', 'US Card (...7788)', { excludedFromBudget: true }),
 ]
@@ -541,8 +556,286 @@ check('filters combine', combined.length === 2 && round(-sumOf(combined).CAD) ==
 const totals = runningTotals(groceriesOnly)
 check('a running subtotal accumulates', totals.length === 2 && round(totals[1]!.CAD) === -345)
 
+// ---------------------------------------------------------------------------
+// The monthly workflow
+// ---------------------------------------------------------------------------
+
+console.log('\n=== Monthly savings ===')
+
+// Hand calculation: 4,200 in the chequing account, 500 of it left as float,
+// 1,300 owed on the card and 250 charged but not yet posted.
+// 4200 − 500 − 1300 − 250 = 2150.
+const workflowAccounts: Account[] = [
+  account('Everyday', 'chequing', 'CAD', 'Chequing', { funding: true, float: 500 }),
+  account('Aeroplan', 'credit', 'CAD', 'Visa', { mainCard: true }),
+  account('Rainy day', 'savings', 'CAD', 'Savings', { savingsDestination: true }),
+]
+const balances: BalanceSnapshot[] = [
+  balance('acct-everyday', '2025-12-31', 4200),
+  balance('acct-aeroplan', '2025-12-31', 1300, 250),
+]
+
+const savings = computeSavings(workflowAccounts, balances, '2025-12-31')
+check('the savings figure is cash less float less what is owed', round(savings.total.CAD) === 2150, `${round(savings.total.CAD)}`)
+check('it is built from named parts, not a bare number', savings.parts.length === 4, `${savings.parts.length}`)
+check('nothing is missing when every balance is in', savings.missing.length === 0)
+check(
+  'the savings destination is not part of the sum',
+  !savings.parts.some((p) => p.accountId === 'acct-rainy-day'),
+)
+
+// A card balance is what is owed, so it subtracts however the user signs it.
+const signed = computeSavings(workflowAccounts, [
+  balance('acct-everyday', '2025-12-31', 4200),
+  balance('acct-aeroplan', '2025-12-31', -1300, 250),
+], '2025-12-31')
+check('a card balance typed negative still subtracts', round(signed.total.CAD) === 2150, `${round(signed.total.CAD)}`)
+
+const short = computeSavings(workflowAccounts, [
+  balance('acct-everyday', '2025-12-31', 900),
+  balance('acct-aeroplan', '2025-12-31', 1300),
+], '2025-12-31')
+check('a shortfall comes out negative rather than clamped', round(short.total.CAD) === -900, `${round(short.total.CAD)}`)
+
+const absent = computeSavings(workflowAccounts, [balance('acct-everyday', '2025-12-31', 4200)], '2025-12-31')
+check('an account with no balance is named', absent.missing.join(',') === 'Aeroplan', absent.missing.join(','))
+check('and the figure says so rather than quietly reading zero', absent.parts.some((p) => p.missing))
+
+// Currencies never meet (§7): a USD card owes USD, and no rate exists to
+// turn that into the CAD figure.
+const usdCard = [...workflowAccounts, account('Travel', 'credit', 'USD', 'US Card', { mainCard: true })]
+const twoCurrencies = computeSavings(usdCard, [...balances, balance('acct-travel', '2025-12-31', 300)], '2025-12-31')
+check('a USD card produces its own figure', round(twoCurrencies.total.USD) === -300, `${round(twoCurrencies.total.USD)}`)
+check('and leaves the CAD one alone', round(twoCurrencies.total.CAD) === 2150)
+
+check(
+  'a stale balance is used but dated, so it can be seen to be stale',
+  latestSnapshot([balance('acct-everyday', '2025-10-31', 10)], 'acct-everyday', '2025-12-31')?.date === '2025-10-31',
+)
+check(
+  'a balance from after the date is not used',
+  latestSnapshot([balance('acct-everyday', '2026-01-15', 10)], 'acct-everyday', '2025-12-31') === undefined,
+)
+
+console.log('\n=== Reimbursement pivot ===')
+
+const pivot = reimbursementPivot(all, '2025-12', DEFAULT_CONFIG)
+check('one row per bucket per currency', pivot.length === 3, `${pivot.length}`)
+check('largest first', round(pivot[0]!.amount) === 410 && pivot[0]!.bucket === 'No bucket', `${round(pivot[0]!.amount)}`)
+check('a bucket keeps its own currency', pivot.some((r) => r.currency === 'USD' && round(r.amount) === 24))
+check(
+  'the pivot agrees with the reimbursable totals',
+  round(pivot.filter((r) => r.currency === 'CAD').reduce((s, r) => s + r.amount, 0)) === round(dec.reimbursable.spend.CAD),
+)
+check(
+  'a card kept out of the family budget still appears here',
+  pivot.some((r) => r.currency === 'USD'),
+)
+check('every row can be opened onto its transactions', pivot.every((r) => r.transactionIds.length === r.count))
+check('an unconfigured bucket still shows, with nobody named', pivot.every((r) => r.owedBy === ''))
+
+const named = withBucketSetting(DEFAULT_CONFIG, {
+  bucket: 'Chris Personal + Healthcare',
+  owedBy: 'Chris',
+  displayName: 'Chris — physio',
+})
+const namedPivot = reimbursementPivot(all, '2025-12', named)
+const chrisRow = namedPivot.find((r) => r.bucket === 'Chris Personal + Healthcare')
+check('configuration names who owes', chrisRow?.owedBy === 'Chris', chrisRow?.owedBy)
+check('and can rename the row without changing the tags', chrisRow?.label === 'Chris — physio', chrisRow?.label)
+check('the amount is untouched by naming it', round(chrisRow?.amount ?? 0) === 140)
+check(
+  'clearing a setting removes it rather than storing a blank',
+  withBucketSetting(named, { bucket: 'Chris Personal + Healthcare', owedBy: '', displayName: '' }).buckets.length === 0,
+)
+
+const settled = reimbursementPivot(all, '2025-12', named, {
+  settled: [{ bucket: 'No bucket', currency: 'CAD' }],
+})
+check('a recorded transfer marks its row', settled.filter((r) => r.settled).length === 1)
+
+console.log('\n=== Reconciliation ===')
+
+// Hand calculation, one account at a time.
+const recAccounts: Account[] = [
+  account('Everyday', 'chequing', 'CAD', 'Chequing', { funding: true }),
+  account('Aeroplan', 'credit', 'CAD', 'Visa', { mainCard: true }),
+]
+const recRows: Transaction[] = [
+  tx('r1', '2025-12-05', 'acct-everyday', -300),
+  tx('r2', '2025-12-20', 'acct-everyday', 800),
+  // A transfer changes no spending but very much changes a balance.
+  tx('r3', '2025-12-28', 'acct-everyday', -200, { internal: true }),
+  tx('r4', '2025-12-09', 'acct-aeroplan', -450),
+]
+// Chequing: 1,000 → 1,300 is +300, and the rows come to −300 + 800 − 200 = +300.
+// Card: owed 200 → owed 650 is +450 owed, which is −450 in the rows' language.
+const recBalances: BalanceSnapshot[] = [
+  balance('acct-everyday', '2025-11-30', 1000),
+  balance('acct-everyday', '2025-12-31', 1300),
+  balance('acct-aeroplan', '2025-11-30', 200),
+  balance('acct-aeroplan', '2025-12-31', 650),
+]
+
+const rec = reconcile(recRows, recAccounts, recBalances, '2025-12', 5)
+check('a month that adds up is balanced', rec.balanced)
+check('with no residual left over', round(rec.residual.CAD) === 0, `${round(rec.residual.CAD)}`)
+check('a transfer counts toward the balance it moved', round(byAccount(rec, 'acct-everyday').flow) === 300)
+check(
+  'a rising card balance reads as spending, not income',
+  round(byAccount(rec, 'acct-aeroplan').observed ?? 0) === -450,
+  `${round(byAccount(rec, 'acct-aeroplan').observed ?? 0)}`,
+)
+check('both accounts were anchored', rec.accounts.every((a) => a.anchored))
+check('nothing is offered as unexplained when nothing is off', rec.unexplained.length === 0)
+
+// The month opens where the last one closed, so one balance a month is enough.
+check('the opening balance chains from the previous close', byAccount(rec, 'acct-everyday').opening?.date === '2025-11-30')
+check('the day before a month start is the previous month end', dayBefore('2025-12-01') === '2025-11-30')
+check('and across a year boundary', dayBefore('2025-01-01') === '2024-12-31')
+check('and across a leap day', dayBefore('2024-03-01') === '2024-02-29')
+
+// Forty dollars that no row explains.
+const off = reconcile(recRows, recAccounts, [
+  ...recBalances.filter((b) => b.accountId !== 'acct-everyday' || b.date !== '2025-12-31'),
+  balance('acct-everyday', '2025-12-31', 1340),
+], '2025-12', 5)
+check('a gap the rows do not explain is caught', !off.balanced)
+check('and reported to the cent', round(off.residual.CAD) === 40, `${round(off.residual.CAD)}`)
+check('on the account it is in', !byAccount(off, 'acct-everyday').withinTolerance && byAccount(off, 'acct-aeroplan').withinTolerance)
+check(
+  'the rows to chase are that account\u2019s, largest first',
+  off.unexplained.length === 3 && off.unexplained[0]!.id === 'r2',
+  off.unexplained.map((t) => t.id).join(','),
+)
+
+const tolerated = reconcile(recRows, recAccounts, [
+  ...recBalances.filter((b) => b.accountId !== 'acct-everyday' || b.date !== '2025-12-31'),
+  balance('acct-everyday', '2025-12-31', 1303),
+], '2025-12', 5)
+check('a few dollars either way still closes', tolerated.balanced)
+check('but the residual is still shown, not swallowed', round(tolerated.residual.CAD) === 3)
+
+const unanchored = reconcile(recRows, recAccounts, [balance('acct-everyday', '2025-11-30', 1000)], '2025-12', 5)
+check('an account with no closing balance is named, not ignored', unanchored.notAnchored.join(',') === 'Everyday,Aeroplan', unanchored.notAnchored.join(','))
+check('and does not block the month from closing', unanchored.balanced)
+
+console.log('\n=== Statement CSVs (balances only) ===')
+
+const bankStatement = `2025-12-01,OPENING,,,1000.00
+2025-12-05,GREEN BASKET MARKET,165.00,,835.00
+2025-12-20,NORTHWIND LABS,,800.00,1635.00`
+const bank = parseStatementCsv(bankStatement)
+check('the closing balance is the latest date', bank.balance === 1635 && bank.date === '2025-12-20', `${bank.balance} on ${bank.date}`)
+check('every row is counted', bank.rows === 3)
+check('and the first date is reported', bank.firstDate === '2025-12-01')
+
+// Card exports write MM/DD/YYYY, and often newest first.
+const cardStatement = `12/29/2025,SKYWAY AIR,410.00,,650.00
+12/09/2025,HARBOUR RAIL,52.00,,240.00
+12/01/2025,PAYMENT THANK YOU,,800.00,188.00`
+const card = parseStatementCsv(cardStatement)
+check('a card date is read as month first', card.date === '2025-12-29', card.date)
+check('a newest-first file still closes on the latest date', card.balance === 650, `${card.balance}`)
+
+check('an unambiguous day-first date is not thrown away', parseStatementDate('13/01/2025') === '2025-01-13', parseStatementDate('13/01/2025'))
+check('a two-digit year is taken as this century', parseStatementDate('12/29/25') === '2025-12-29')
+check('an impossible date is refused', parseStatementDate('13/13/2025') === '')
+
+check(
+  'headings are tolerated',
+  parseStatementCsv('Date,Description,Debit,Credit,Balance\n2025-12-31,X,,,42.00').balance === 42,
+)
+check('money is read through symbols and brackets', parseStatementCsv('2025-12-31,X,,,"$1,234.56"').balance === 1234.56)
+check('a file with nothing readable is refused', throwsSync(() => parseStatementCsv('nothing here at all')))
+check('an empty file is refused', throwsSync(() => parseStatementCsv('')))
+check(
+  'the refusal explains the shape expected',
+  refusalMentions('nothing here at all', 'running balance'),
+)
+
+console.log('\n=== Tidying up ===')
+
+const untidy = findUntidy(all, accounts, '2025-12', DEFAULT_CONFIG)
+check('nothing in the fixture is uncategorized', untidy.uncategorized.length === 0, `${untidy.uncategorized.length}`)
+check(
+  'an untagged purchase on a reimbursement-only card is offered',
+  untidy.untaggedCandidates.length === 1 && untidy.untaggedCandidates[0]!.merchant === 'Cloudline Software',
+  untidy.untaggedCandidates.map((t) => t.merchant).join(','),
+)
+
+const withUncategorized = findUntidy(
+  [...all, tx('u1', '2025-12-02', 'acct-everyday', -12, { category: 'Uncategorized' })],
+  accounts,
+  '2025-12',
+  DEFAULT_CONFIG,
+)
+check('an uncategorized row is surfaced', withUncategorized.uncategorized.length === 1)
+
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)
+
+function byAccount(reconciliation: Reconciliation, accountId: string) {
+  return reconciliation.accounts.find((a) => a.accountId === accountId)!
+}
+
+function balance(accountId: string, date: string, amount: number, pending?: number): BalanceSnapshot {
+  return {
+    id: `bal-${accountId}-${date}`,
+    accountId,
+    date,
+    balance: amount,
+    ...(pending === undefined ? {} : { pending }),
+    source: 'manual',
+  }
+}
+
+function tx(
+  id: string,
+  date: string,
+  accountId: string,
+  amount: number,
+  extra: Partial<Transaction> = {},
+): Transaction {
+  return {
+    id,
+    date,
+    merchant: id,
+    originalStatement: '',
+    notes: '',
+    amount,
+    currency: 'CAD',
+    accountId,
+    monarchAccount: '',
+    category: 'Groceries',
+    groupId: 'food',
+    internal: false,
+    tags: [],
+    owner: '',
+    reviewed: true,
+    source: 'monarch',
+    importBatchId: 'b1',
+    ...extra,
+  }
+}
+
+function throwsSync(work: () => unknown): boolean {
+  try {
+    work()
+    return false
+  } catch {
+    return true
+  }
+}
+
+function refusalMentions(text: string, phrase: string): boolean {
+  try {
+    parseStatementCsv(text)
+    return false
+  } catch (err) {
+    return err instanceof StatementFormatError && err.message.includes(phrase)
+  }
+}
 
 function findRow(comparison: BudgetComparison, groupId: GroupId, name: string) {
   return comparison.groups
@@ -564,6 +857,7 @@ function account(
     currency,
     monarchName,
     funding: false,
+    mainCard: false,
     savingsDestination: false,
     excludedFromBudget: false,
     ...extra,

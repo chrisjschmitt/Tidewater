@@ -4,6 +4,7 @@ import BudgetPanel from './BudgetPanel'
 import ImportPanel from './ImportPanel'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
+import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
 import type { EtmData } from './useEtmData'
 import type { Period } from '../../lib/etm/period'
@@ -19,9 +20,10 @@ interface Props {
   onWipe: () => void
 }
 
-type Tab = 'budget' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
+type Tab = 'month' | 'budget' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
 
 const TABS: Array<[Tab, string]> = [
+  ['month', 'Month end'],
   ['budget', 'Budget'],
   ['reimbursable', 'Reimbursable'],
   ['transactions', 'Transactions'],
@@ -43,6 +45,12 @@ export default function EtmArea({
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
   const [confirmingWipe, setConfirmingWipe] = useState(false)
+
+  // The month-end screen settles one month at a time, so it keeps a month of
+  // its own rather than following a period that may span a year.
+  const [workMonth, setWorkMonth] = useState(
+    () => data.months.at(-1) ?? new Date().toISOString().slice(0, 7),
+  )
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-sand-50 animate-fade">
@@ -99,6 +107,10 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
+            {tab === 'month' && (
+              <WorkflowPanel data={data} month={workMonth} onMonthChange={setWorkMonth} />
+            )}
+
             {tab === 'budget' && (
               <BudgetPanel
                 budget={budget}

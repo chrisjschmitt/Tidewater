@@ -7,6 +7,12 @@ export type Currency = 'CAD' | 'USD'
 
 export const CURRENCIES: Currency[] = ['CAD', 'USD']
 
+/**
+ * A total held per currency. The two are never added together (§7), so every
+ * figure in the module carries both and shows whichever is present.
+ */
+export type Money = Record<Currency, number>
+
 export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
   chequing: 'Chequing',
   savings: 'Savings',
@@ -27,14 +33,66 @@ export interface Account {
   lastFour?: string
   /** The account string as it appears in Monarch exports, used for matching. */
   monarchName: string
-  /** Pays for everything; the anchor of the monthly savings calculation. */
+  /** Holds the cash the month is settled from, and carries the float. */
   funding: boolean
+  /**
+   * A card everyday purchases go on, cleared each month. What is owed on it
+   * is subtracted from the funding balance before anything is swept away.
+   * More than one may be marked; they are summed per currency.
+   */
+  mainCard: boolean
   /** Where a monthly surplus is transferred. */
   savingsDestination: boolean
   /** Tracked for reimbursement only, kept out of the family budget. */
   excludedFromBudget: boolean
   /** Minimum balance left in the account, used by the savings formula. */
   float?: number
+}
+
+/**
+ * What an account held on one date — the anchor reconciliation measures
+ * against. Statement CSVs supply these; they are never a second source of
+ * transactions (§9).
+ */
+export interface BalanceSnapshot {
+  id: string
+  accountId: string
+  date: string
+  /**
+   * On a card this is what is owed, entered positive. Nothing here is signed
+   * by account kind: the reconciliation applies that, in one place.
+   */
+  balance: number
+  /** Card charges that have not posted yet, and so appear in no export. */
+  pending?: number
+  source: 'manual' | 'statement'
+  /** Set when a statement supplied it, for provenance. */
+  fileName?: string
+}
+
+export type ReconciliationStatus = 'open' | 'reconciled'
+
+/** One month's close, kept so a year can be reviewed without recomputing it. */
+export interface ReconciliationRecord {
+  /** The month itself, `YYYY-MM` — one record per month, so it is the id. */
+  month: string
+  status: ReconciliationStatus
+  closedAt?: string
+  /** The savings figure as it stood when the month was closed. */
+  savings?: Money
+  /** Reimbursement transfers the user recorded having asked for. */
+  settled: SettledTransfer[]
+  /** What the balances said, less what the rows said, at the close. */
+  residual: Money
+  notes: string
+}
+
+export interface SettledTransfer {
+  bucket: string
+  owedBy: string
+  amount: number
+  currency: Currency
+  recordedAt: string
 }
 
 export type TransactionSource = 'monarch' | 'manual'

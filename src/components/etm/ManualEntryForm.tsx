@@ -39,6 +39,7 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
       currency: 'CAD',
       monarchName: '',
       funding: false,
+      mainCard: false,
       savingsDestination: false,
       excludedFromBudget: false,
     }

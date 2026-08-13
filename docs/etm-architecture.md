@@ -1,6 +1,6 @@
 # Expense Tracking Module (ETM) — Systems Architecture & Implementation Plan
 
-Status: **in progress** — Phases 1–3 (§10) are built; Phases 4–5 are still proposed.
+Status: **in progress** — Phases 1–4 (§10) are built; Phase 5 is still proposed.
 
 Inputs: `docs/ExpenseTrackingModuleSpecs.md`, `docs/Workflow.md` (both private,
 gitignored), `docs/product-spec.md`, `docs/category-mapping.md`, and the sample
@@ -276,9 +276,12 @@ Five rules settle what the numbers mean, and every view obeys them:
   excluded from budget-vs-actual everywhere (bars, ring, drill-ins) and
   counted instead in a per-bucket "Reimbursable" section of the Expenses
   area (bucket = the transaction's other tags), which is also the input to
-  the Phase 4 reimbursement pivot. They stay fully visible, with a marker,
+  the reimbursement pivot. They stay fully visible, with a marker,
   in the Transactions view and exports, and the tie-out holds: total out =
-  budget spending + reimbursable spending.
+  budget spending + reimbursable spending. They are counted on **every**
+  account, including one flagged as kept out of the family budget: that
+  flag suppresses budget spending only, since such an account is usually a
+  personal card tracked precisely so its advances can be claimed back.
 
 Two details the reimbursable rule left open, settled with the owner in
 building it. A bucket is only obvious when there is exactly one other tag, so
@@ -347,23 +350,28 @@ A new screen presenting the monthly cycle as a gentle checklist. Every
 number it produces is explained on screen, because the goal is assisting a
 human workflow, not replacing judgment.
 
-1. **Import** — load the latest Monarch export (and statement CSVs or
-   manual balance entries).
-2. **Tidy** — surface uncategorized transactions, untagged candidates for
-   the reimbursable tag, and a place to add cash transactions manually.
-3. **Monthly savings** — computes: funding-account balance − float − main
-   card balance − main card pending charges. Balances come from the latest
-   snapshots; the result comes with a plain-language suggestion (transfer
-   surplus to the savings destination, or top up a shortfall) that the user
-   confirms and records — ETM never moves money.
-4. **Reimbursements** — the pivot the user currently builds by hand in a
+The order below is the owner's actual cycle (confirmed Aug 2026) and is not
+arbitrary: the claims go out *before* the month ends so the repayments land
+inside it, while the balances can only be recorded once it has.
+
+1. **Tidy** — load the latest Monarch export, then surface uncategorized
+   transactions and untagged candidates for the reimbursable tag. This
+   comes first because the next step is only as good as the tags under it.
+2. **Reimbursements** — the pivot the user currently builds by hand in a
    spreadsheet: all transactions carrying the reimbursable tag, grouped by
-   configured bucket, subtotaled, and expressed as "transfer N from
-   account A to the funding account". Recorded transfers are noted on the
-   reconciliation record.
+   derived bucket, subtotaled per currency, and expressed as an amount to
+   ask a named person for. Done a business day or so before month end.
+   Recorded transfers are noted on the reconciliation record.
+3. **Closing balances** — what each account closed the month at, from a
+   statement CSV or typed in. Card balances are entered as what is owed,
+   plus any charges that have not posted yet.
+4. **Monthly savings** — computes: funding-account balance − float − main
+   card balance − main card pending charges, per currency. The result comes
+   with a plain-language suggestion (transfer the surplus to the savings
+   destination, or top up a shortfall) — ETM never moves money.
 5. **Reconcile** — compares the month's net transaction flow against the
-   change in balance snapshots. Within tolerance → mark the month
-   **reconciled** and store the snapshot. Outside tolerance → show the
+   change in balance snapshots, per account. Within tolerance → mark the
+   month **reconciled** and store the record. Outside tolerance → show the
    residual and the largest unexplained items to chase.
 
 A year view lists the twelve months with reconciliation status, supporting
@@ -473,8 +481,42 @@ fixture.
   records, year view.
 - **Exit criteria:** with fixture balances, the computed savings figure
   and pivot match hand calculations; a month can be closed within
-  tolerance; the residual view lists unexplained items. *(Covers the
-  "workflow" criteria.)*
+  tolerance; the residual view lists unexplained items. *(Met: `check:etm`
+  works each figure against a hand calculation — savings, the pivot, the
+  sign handling on a card, the chained opening balance, tolerance either
+  side, and the statement parser's two date formats. In the browser, the
+  sample statement gave 2025-12-30 / $5,128.42, savings came to $3,078.42,
+  December reconciled to "agrees exactly" and closed, and the year strip
+  moved to "1 of twelve months closed".)*
+
+#### Decisions settled during Phase 4
+
+- **The main card is not the funding account.** The savings formula names
+  two roles: an account holding cash and carrying the float, and one or
+  more cards everyday purchases go on that are cleared each month. Both are
+  flags on an account (`funding`, `mainCard`), so a household can name
+  whichever accounts it actually uses.
+- **Reconciliation is per account, and the month opens where the last one
+  closed.** Chaining means one balance an account a month rather than two.
+  An account without both anchors is listed as not anchored rather than
+  quietly assumed to be fine, and it never blocks a close.
+- **A month can be closed with a difference.** The residual is recorded on
+  the month's record, not hidden. Tolerance is configuration, defaulting to
+  a few dollars — enough for a rounding, small enough that a genuinely
+  missing transaction still shows.
+- **Buckets stay derived; configuration only annotates them.** Who owes a
+  bucket and what to call it are optional, so the pivot is complete before
+  any of it is filled in and nothing can go uncounted for want of a
+  setting.
+- **Reimbursables are counted on every account, including those kept out of
+  the family budget.** Such an account is usually a personal card tracked
+  precisely so its advances can be claimed back, so excluding it would
+  empty the view it exists for. The exclusion flag now affects budget
+  spending only.
+- **Card balances are entered as what is owed, positive.** The sign is
+  applied in one place — the reconciliation negates a card's balance change
+  so it speaks the same language as the rows, and the savings figure always
+  subtracts. Pending charges are typed in because they appear in no export.
 
 ### Phase 5 — Reporting, backup, polish
 
