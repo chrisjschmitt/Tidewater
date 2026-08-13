@@ -764,6 +764,38 @@ check(
   untidy.untaggedCandidates.map((t) => t.merchant).join(','),
 )
 
+// A business account is kept out of the family budget too, and nothing on it
+// is ever claimed back. Asking about its every expense would be noise forever.
+const business = account('Photography', 'chequing', 'CAD', 'Business', { excludedFromBudget: true })
+const businessRows = [
+  ...all,
+  tx('biz1', '2025-12-04', business.id, -3.95, { category: 'Bank Fees', groupId: 'personal' }),
+  tx('biz2', '2025-12-11', business.id, -220, { category: 'Software', groupId: 'personal' }),
+]
+const withBusiness = findUntidy(businessRows, [...accounts, business], '2025-12', DEFAULT_CONFIG)
+check(
+  'an excluded account that never claims anything is left alone',
+  !withBusiness.untaggedCandidates.some((t) => t.accountId === business.id),
+  withBusiness.untaggedCandidates.map((t) => t.merchant).join(','),
+)
+check(
+  'while an account that does claim is still asked about',
+  withBusiness.untaggedCandidates.length === 1,
+  `${withBusiness.untaggedCandidates.length}`,
+)
+
+const claimed = findUntidy(
+  [...businessRows, tx('biz3', '2025-11-20', business.id, -60, { tags: ['Reimbursable'] })],
+  [...accounts, business],
+  '2025-12',
+  DEFAULT_CONFIG,
+)
+check(
+  'one claim on the account is enough to start asking, even from another month',
+  claimed.untaggedCandidates.filter((t) => t.accountId === business.id).length === 2,
+  `${claimed.untaggedCandidates.filter((t) => t.accountId === business.id).length}`,
+)
+
 const withUncategorized = findUntidy(
   [...all, tx('u1', '2025-12-02', 'acct-everyday', -12, { category: 'Uncategorized' })],
   accounts,

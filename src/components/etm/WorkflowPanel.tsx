@@ -381,12 +381,13 @@ function Tidy({ untidy, tag }: { untidy: ReturnType<typeof findUntidy>; tag: str
         <div>
           <p className="text-sm font-medium text-ink-900">
             {untidy.untaggedCandidates.length} purchase
-            {untidy.untaggedCandidates.length === 1 ? '' : 's'} on a card kept out of
-            the budget, with no “{tag}” tag
+            {untidy.untaggedCandidates.length === 1 ? '' : 's'} with no “{tag}” tag,
+            on a card you usually claim from
           </p>
           <p className="mb-2 text-xs text-ink-400">
             Either the tag was forgotten, or these really are personal. Only you
-            can say which, so nothing is assumed.
+            can say which, so nothing is assumed. Accounts you have never claimed
+            anything from are not asked about at all.
           </p>
           <TransactionTable rows={untidy.untaggedCandidates.slice(0, 10)} empty="" />
         </div>

@@ -326,7 +326,7 @@ export function dayBefore(date: string): string {
 
 export interface Untidy {
   uncategorized: Transaction[]
-  /** Spending on a card kept out of the budget, but never tagged as owed. */
+  /** Spending on a card claims usually come from, but never tagged as owed. */
   untaggedCandidates: Transaction[]
   unreviewed: number
 }
@@ -336,6 +336,14 @@ export interface Untidy {
  * purchase on an account tracked only for reimbursement that carries no
  * reimbursable tag is either a forgotten tag or a genuine personal expense,
  * and only the user knows which.
+ *
+ * Which accounts those are is inferred rather than configured, because being
+ * kept out of the family budget does not on its own mean claims happen there
+ * — a separate business account is out of the budget too, and asking about a
+ * missing tag on every one of its expenses would be noise forever. So an
+ * account only qualifies once it has actually carried the tag at some point.
+ * The cost is that the first claim on a brand-new card goes unflagged, which
+ * is the better way to be wrong: the app should not presume.
  */
 export function findUntidy(
   transactions: Transaction[],
@@ -344,8 +352,13 @@ export function findUntidy(
   config: EtmConfig,
 ): Untidy {
   const period = monthPeriod(month)
+  const hasClaimed = new Set(
+    transactions
+      .filter((t) => isReimbursable(t, config.reimbursableTag))
+      .map((t) => t.accountId),
+  )
   const forReimbursement = new Set(
-    accounts.filter((a) => a.excludedFromBudget).map((a) => a.id),
+    accounts.filter((a) => a.excludedFromBudget && hasClaimed.has(a.id)).map((a) => a.id),
   )
   const uncategorized: Transaction[] = []
   const untaggedCandidates: Transaction[] = []

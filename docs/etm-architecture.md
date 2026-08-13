@@ -357,6 +357,11 @@ inside it, while the balances can only be recorded once it has.
 1. **Tidy** — load the latest Monarch export, then surface uncategorized
    transactions and untagged candidates for the reimbursable tag. This
    comes first because the next step is only as good as the tags under it.
+   An account qualifies as a candidate source only once it has actually
+   carried the tag: being kept out of the family budget does not on its own
+   mean claims happen there (a separate business account is out of the
+   budget too), and asking about every one of its expenses would be noise
+   forever.
 2. **Reimbursements** — the pivot the user currently builds by hand in a
    spreadsheet: all transactions carrying the reimbursable tag, grouped by
    derived bucket, subtotaled per currency, and expressed as an amount to
