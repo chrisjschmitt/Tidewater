@@ -10,6 +10,7 @@ import IncomeCard from './components/IncomeCard'
 import Modal from './components/Modal'
 import Onboarding from './components/Onboarding'
 import OptionalFeatureBoundary from './components/OptionalFeatureBoundary'
+import EtmOpening from './components/etm/EtmOpening'
 import SummaryRing from './components/SummaryRing'
 import type { DashboardActuals } from './lib/etm/aggregate'
 import {
@@ -379,15 +380,7 @@ export default function App() {
               setEtmActuals(null)
             }}
           >
-            <Suspense
-              fallback={
-                etmOpen ? (
-                  <div className="fixed inset-0 z-40 flex items-center justify-center bg-sand-50 text-sm text-ink-400">
-                    Opening expense tracking…
-                  </div>
-                ) : null
-              }
-            >
+            <Suspense fallback={etmOpen ? <EtmOpening onClose={() => setEtmOpen(false)} /> : null}>
               <EtmModule
                 open={etmOpen}
                 unlockedKey={etmKey}

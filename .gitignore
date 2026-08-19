@@ -15,6 +15,8 @@ Test-Data/
 # ETM planning data — real bank/card statements with account numbers in filenames; never commit
 planning-data/
 
-# Private ETM inputs — contain real account numbers and confidential workflow details; never commit
+# Private ETM / forecasting inputs — contain real account numbers and confidential workflow details; never commit
 docs/Workflow.md
 docs/ExpenseTrackingModuleSpecs.md
+docs/Forecasting Module Spec.md
+docs/ForecastingModuleSpecs.md

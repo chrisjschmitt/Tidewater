@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import CategoryModal from './CategoryModal'
-import EtmArea from './EtmArea'
 import EtmGate from './EtmGate'
+import EtmOpening from './EtmOpening'
 import EtmStrip from './EtmStrip'
 import { defaultPeriod } from './PeriodSelector'
 import { useEtmData } from './useEtmData'
@@ -14,6 +14,8 @@ import {
   wipeVault,
 } from '../../lib/etm/storage/vault'
 import type { Budget } from '../../lib/types'
+
+const EtmArea = lazy(() => import('./EtmArea'))
 
 interface Props {
   /** Held by the app so stepping back to the budget does not re-lock. */
@@ -39,7 +41,7 @@ interface Props {
  * opens it.
  */
 export default function EtmModule(props: Props) {
-  const { unlockedKey, onUnlocked, onClose } = props
+  const { unlockedKey, open, onUnlocked, onClose } = props
   const [mode, setMode] = useState<'checking' | 'setup' | 'unlock'>('checking')
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function EtmModule(props: Props) {
   }, [unlockedKey, onUnlocked])
 
   if (unlockedKey) return <Unlocked {...props} unlockedKey={unlockedKey} />
-  if (mode === 'checking') return null
+  if (mode === 'checking') return open ? <EtmOpening onClose={onClose} /> : null
   return <EtmGate mode={mode} onClose={onClose} onUnlocked={onUnlocked} />
 }
 
@@ -84,13 +86,16 @@ function Unlocked({
   onClose,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
-  const [period, setPeriod] = useState<Period | null>(null)
+  const [period, setPeriod] = useState<Period>(() => defaultPeriod([]))
+  const [periodSettled, setPeriodSettled] = useState(false)
 
   // The period settles once the months are known, so a fixture or an archive
   // that ends in the past opens on a month that has something in it.
   useEffect(() => {
-    if (!data.loading && !period) setPeriod(defaultPeriod(data.months))
-  }, [data.loading, data.months, period])
+    if (data.loading || periodSettled) return
+    setPeriod(defaultPeriod(data.months))
+    setPeriodSettled(true)
+  }, [data.loading, data.months, periodSettled])
 
   const excluded = useMemo(
     () => new Set(data.accounts.filter((a) => a.excludedFromBudget).map((a) => a.id)),
@@ -116,8 +121,6 @@ function Unlocked({
 
   // The dashboard behind should read as it always has once the module is gone.
   useEffect(() => () => onActuals(null), [onActuals])
-
-  if (!period) return null
 
   const drillDown = openCategory && (
     <CategoryModal
@@ -151,21 +154,23 @@ function Unlocked({
 
   return (
     <>
-      <EtmArea
-        data={data}
-        budget={budget}
-        period={period}
-        onPeriodChange={setPeriod}
-        onClose={onClose}
-        onLock={() => {
-          void forgetRememberedKey()
-          onLocked()
-        }}
-        onWipe={() => {
-          void wipeVault()
-          onWiped()
-        }}
-      />
+      <Suspense fallback={<EtmOpening afterUnlock onClose={onClose} />}>
+        <EtmArea
+          data={data}
+          budget={budget}
+          period={period}
+          onPeriodChange={setPeriod}
+          onClose={onClose}
+          onLock={() => {
+            void forgetRememberedKey()
+            onLocked()
+          }}
+          onWipe={() => {
+            void wipeVault()
+            onWiped()
+          }}
+        />
+      </Suspense>
       {drillDown}
     </>
   )

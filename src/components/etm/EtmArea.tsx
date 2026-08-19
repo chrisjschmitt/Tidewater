@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
+import ForecastPanel from './ForecastPanel'
 import ImportPanel from './ImportPanel'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
@@ -20,11 +21,12 @@ interface Props {
   onWipe: () => void
 }
 
-type Tab = 'month' | 'budget' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
+type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
 
 const TABS: Array<[Tab, string]> = [
   ['month', 'Month end'],
   ['budget', 'Budget'],
+  ['forecast', 'Forecast'],
   ['reimbursable', 'Reimbursable'],
   ['transactions', 'Transactions'],
   ['import', 'Import'],
@@ -118,6 +120,17 @@ export default function EtmArea({
                 transactions={data.transactions}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
+              />
+            )}
+
+            {tab === 'forecast' && (
+              <ForecastPanel
+                transactions={data.transactions}
+                budget={budget}
+                config={data.forecastConfig}
+                reimbursableParentTag={data.config.reimbursableTag}
+                onConfigChange={(config) => void data.saveForecastSettings(config)}
+                onOpenTidy={() => setTab('month')}
               />
             )}
 
