@@ -117,7 +117,12 @@ export default function EtmArea({
         ) : (
           <>
             {tab === 'month' && (
-              <WorkflowPanel data={data} month={workMonth} onMonthChange={setWorkMonth} />
+              <WorkflowPanel
+                data={data}
+                budget={budget}
+                month={workMonth}
+                onMonthChange={setWorkMonth}
+              />
             )}
 
             {tab === 'budget' && (
@@ -125,6 +130,7 @@ export default function EtmArea({
                 budget={budget}
                 accounts={data.accounts}
                 transactions={data.transactions}
+                reconciliations={data.reconciliations}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
               />

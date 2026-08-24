@@ -42,6 +42,11 @@ import {
   sentinelMatches,
 } from '../src/lib/etm/crypto.ts'
 import { DEFAULT_CONFIG, withBucketSetting } from '../src/lib/etm/config.ts'
+import {
+  closedPlanTrend,
+  planSpendAtClose,
+  withPlanAtClose,
+} from '../src/lib/etm/closedPlan.ts'
 import { findUnmatchedAccounts, planImport } from '../src/lib/etm/importer.ts'
 import {
   StatementFormatError,
@@ -59,7 +64,7 @@ import {
 } from '../src/lib/etm/workflow.ts'
 import { createManualTransaction } from '../src/lib/etm/manual.ts'
 import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
-import type { Account, BalanceSnapshot, Transaction } from '../src/lib/etm/types.ts'
+import type { Account, BalanceSnapshot, ReconciliationRecord, Transaction } from '../src/lib/etm/types.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
@@ -755,6 +760,51 @@ check('but the residual is still shown, not swallowed', round(tolerated.residual
 const unanchored = reconcile(recRows, recAccounts, [balance('acct-everyday', '2025-11-30', 1000)], '2025-12', 5)
 check('an account with no closing balance is named, not ignored', unanchored.notAnchored.join(',') === 'Everyday,Aeroplan', unanchored.notAnchored.join(','))
 check('and does not block the month from closing', unanchored.balanced)
+
+console.log('\n=== Typical-month spend kept at close ===')
+
+const closePlan: Budget = {
+  ...plan,
+  expenses: [
+    { id: 'e1', name: 'Rent', groupId: 'home', amount: 1600 },
+    { id: 'e2', name: 'Groceries', groupId: 'food', amount: 400.55 },
+  ],
+  goals: [{ id: 'g1', name: 'Vacation', kind: 'savings', monthly: 200, target: 5000, current: 0, annualRate: 0 }],
+}
+check('the kept figure is expense spend, not goals', planSpendAtClose(closePlan) === 2000.55)
+
+const openRecord: ReconciliationRecord = {
+  month: '2026-08',
+  status: 'open',
+  settled: [],
+  residual: { CAD: 0, USD: 0 },
+  notes: '',
+}
+check('an open month does not keep a plan', withPlanAtClose(openRecord, closePlan).plannedSpend === undefined)
+
+const firstClose = withPlanAtClose({ ...openRecord, status: 'reconciled' }, closePlan)
+check('the first close keeps today’s typical-month spend', firstClose.plannedSpend === 2000.55)
+
+const laterBudget: Budget = {
+  ...closePlan,
+  expenses: [{ id: 'e1', name: 'Rent', groupId: 'home', amount: 2500 }],
+}
+check(
+  'a later slider change does not rewrite a kept plan',
+  withPlanAtClose(firstClose, laterBudget).plannedSpend === 2000.55,
+)
+
+const trend = closedPlanTrend(
+  [
+    firstClose,
+    { ...openRecord, month: '2026-07', status: 'reconciled' },
+    { ...firstClose, month: '2026-09', plannedSpend: 2100 },
+    { ...openRecord, month: '2026-06' },
+  ],
+  (month) => (month === '2026-08' ? 1890.1 : 2200),
+)
+check('the trend is closed months that have a kept plan, oldest first', trend.map((row) => row.month).join(',') === '2026-08,2026-09')
+check('August actual sits beside the kept plan', trend[0]?.planned === 2000.55 && trend[0]?.actual === 1890.1)
 
 console.log('\n=== Statement CSVs (balances only) ===')
 

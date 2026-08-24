@@ -230,7 +230,12 @@ Lets the user review and undo an import.
 **ReconciliationRecord** — one per month: the inputs used (balances,
 pending amounts), the computed savings figure, the reimbursement pivot
 snapshot, transfers the user recorded, the residual delta, status
-(open / reconciled), and notes.
+(open / reconciled), notes, and **`plannedSpend`**: the typical-month
+dashboard expense total as it stood when the month was first closed.
+Later slider changes do not rewrite it. Opening the month again drops
+the record, including that figure. The Budget tab charts closed months
+as chosen spend beside Budget-tab actuals. This is not Forecast’s
+calendar snapshot, and it is not a per-line copy of the plan.
 
 **EtmConfig** — the user's workflow, expressed as configuration rather than
 code: which tag marks a transaction reimbursable, the list of reimbursement
@@ -523,8 +528,12 @@ inside it, while the balances can only be recorded once it has.
    destination, or top up a shortfall) — ETM never moves money.
 5. **Reconcile** — compares the month's net transaction flow against the
    change in balance snapshots, per account. Within tolerance → mark the
-   month **reconciled** and store the record. Outside tolerance → show the
-   residual and the largest unexplained items to chase.
+   month **reconciled**, store the record, and keep that month’s
+   typical-month spend (`plannedSpend`) for the Budget-tab trend. Outside
+   tolerance → show the residual and the largest unexplained items to chase.
+   Closing with a difference is allowed; the residual is recorded. A month
+   closed before this field existed has no trend bar until it is closed
+   again.
 
 A year view lists the twelve months with reconciliation status, supporting
 the year-end goal (all months closed before January) and leaving room for

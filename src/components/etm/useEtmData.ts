@@ -223,7 +223,7 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
       setReconciliations(await loadReconciliations(unlockedKey))
       flash(
         record.status === 'reconciled'
-          ? `${record.month} is closed.`
+          ? `${record.month} is closed.${typeof record.plannedSpend === 'number' ? ' That month’s typical-month spend is kept.' : ''}`
           : `${record.month} saved as still open.`,
       )
     },

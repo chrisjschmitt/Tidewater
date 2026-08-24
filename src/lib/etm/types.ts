@@ -84,6 +84,11 @@ export interface ReconciliationRecord {
   settled: SettledTransfer[]
   /** What the balances said, less what the rows said, at the close. */
   residual: Money
+  /**
+   * Typical-month spend (dashboard expense total) as it stood when the month
+   * was first closed. Later slider changes do not rewrite it.
+   */
+  plannedSpend?: number
   notes: string
 }
 

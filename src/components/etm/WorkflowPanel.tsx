@@ -5,6 +5,7 @@ import type { EtmData } from './useEtmData'
 import { presentIn } from '../../lib/etm/aggregate'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
+import { moneyPrecise } from '../../lib/format'
 import {
   closingFor,
   computeSavings,
@@ -15,10 +16,13 @@ import {
   type Reconciliation,
   type Savings,
 } from '../../lib/etm/workflow'
+import { withPlanAtClose } from '../../lib/etm/closedPlan'
 import type { Account, ReconciliationRecord, SettledTransfer } from '../../lib/etm/types'
+import type { Budget } from '../../lib/types'
 
 interface Props {
   data: EtmData
+  budget: Budget
   month: string
   onMonthChange: (month: string) => void
 }
@@ -28,7 +32,7 @@ interface Props {
  * money, and nothing here is required — a month can be closed, left open, or
  * ignored entirely, and the rest of the module carries on regardless.
  */
-export default function WorkflowPanel({ data, month, onMonthChange }: Props) {
+export default function WorkflowPanel({ data, budget, month, onMonthChange }: Props) {
   const record = data.reconciliations.find((r) => r.month === month)
   const closed = record?.status === 'reconciled'
 
@@ -61,14 +65,20 @@ export default function WorkflowPanel({ data, month, onMonthChange }: Props) {
   )
 
   const save = (changes: Partial<ReconciliationRecord>) =>
-    void data.recordMonth({
-      month,
-      status: 'open',
-      settled: record?.settled ?? [],
-      residual: reconciliation.residual,
-      notes: record?.notes ?? '',
-      ...changes,
-    })
+    void data.recordMonth(
+      withPlanAtClose(
+        {
+          month,
+          status: 'open',
+          settled: record?.settled ?? [],
+          residual: reconciliation.residual,
+          notes: record?.notes ?? '',
+          plannedSpend: record?.plannedSpend,
+          ...changes,
+        },
+        budget,
+      ),
+    )
 
   return (
     <div className="space-y-6">
@@ -135,7 +145,7 @@ export default function WorkflowPanel({ data, month, onMonthChange }: Props) {
       <Step
         n={5}
         title="Reconcile"
-        blurb="What the balances say, against what the transactions say. Then close the month."
+        blurb="What the balances say, against what the transactions say. Closing also keeps this month’s typical-month spend so the Budget tab can show how the plan has moved."
       >
         <Reconcile
           reconciliation={reconciliation}
@@ -143,6 +153,7 @@ export default function WorkflowPanel({ data, month, onMonthChange }: Props) {
           onToleranceChange={(tolerance) => void data.saveSettings({ ...data.config, tolerance })}
           closed={closed}
           closedAt={record?.closedAt}
+          plannedSpend={record?.plannedSpend}
           onClose={() =>
             save({
               status: 'reconciled',
@@ -566,6 +577,7 @@ function Reconcile({
   onToleranceChange,
   closed,
   closedAt,
+  plannedSpend,
   onClose,
   onReopen,
 }: {
@@ -574,6 +586,7 @@ function Reconcile({
   onToleranceChange: (tolerance: number) => void
   closed: boolean
   closedAt?: string
+  plannedSpend?: number
   onClose: () => void
   onReopen: () => void
 }) {
@@ -661,7 +674,11 @@ function Reconcile({
         {closed ? (
           <>
             <span className="text-xs text-tide-700">
-              Closed{closedAt ? ` on ${closedAt.slice(0, 10)}` : ''}.
+              Closed{closedAt ? ` on ${closedAt.slice(0, 10)}` : ''}
+              {typeof plannedSpend === 'number'
+                ? ` · typical-month spend of ${moneyPrecise(plannedSpend)} kept`
+                : ''}
+              .
             </span>
             <button onClick={onReopen} className="btn-ghost text-xs">
               Open it again

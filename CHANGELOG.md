@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.7 — 2026-08-24
+
+### Added
+- Closing a month keeps that month’s typical-month spend. The Budget tab charts those chosen totals beside what actually posted, so you can see how the plan has moved.
+
 ## 0.5.6 — 2026-08-24
 
 ### Added

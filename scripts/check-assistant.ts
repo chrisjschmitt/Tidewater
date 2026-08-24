@@ -316,6 +316,10 @@ check(
   /period/i.test(howBudget) && /tie-out/i.test(howBudget) && !howBudget.includes('Monthly income:'),
 )
 check(
+  'how to use Budget mentions chosen spend kept at close',
+  /closed/i.test(howBudget) && /chose|chosen/i.test(howBudget),
+)
+check(
   'how to use Reimbursable names buckets and the hold-out',
   /bucket/i.test(howReimbTab) && /hold/i.test(howReimbTab) && /family/i.test(howReimbTab),
 )

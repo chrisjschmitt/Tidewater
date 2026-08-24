@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import CategoryTransactions from './CategoryTransactions'
+import ClosedPlanTrend from './ClosedPlanTrend'
 import Modal from '../Modal'
 import { moneyPrecise } from '../../lib/format'
 import {
@@ -11,15 +12,17 @@ import {
   type Money,
   type PeriodActuals,
 } from '../../lib/etm/aggregate'
+import { closedPlanTrend } from '../../lib/etm/closedPlan'
 import { amountIn } from '../../lib/etm/format'
-import { periodLabel, type Period } from '../../lib/etm/period'
-import type { Account, Transaction } from '../../lib/etm/types'
+import { monthKeys, monthPeriod, periodLabel, type Period } from '../../lib/etm/period'
+import type { Account, ReconciliationRecord, Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
 
 interface Props {
   budget: Budget | null
   accounts: Account[]
   transactions: Transaction[]
+  reconciliations: ReconciliationRecord[]
   period: Period
   reimbursableTag: string
 }
@@ -28,6 +31,7 @@ export default function BudgetPanel({
   budget,
   accounts,
   transactions,
+  reconciliations,
   period,
   reimbursableTag,
 }: Props) {
@@ -45,6 +49,17 @@ export default function BudgetPanel({
     () => (budget ? compareToBudget(budget, actuals) : null),
     [budget, actuals],
   )
+  const trend = useMemo(
+    () =>
+      closedPlanTrend(reconciliations, (month) =>
+        aggregate(transactions, monthPeriod(month), {
+          excludeAccountIds: excluded,
+          reimbursableTag,
+        }).spend.CAD,
+      ),
+    [reconciliations, transactions, excluded, reimbursableTag],
+  )
+  const highlighted = useMemo(() => new Set(monthKeys(period)), [period])
 
   const excludedNames = accounts.filter((a) => a.excludedFromBudget).map((a) => a.nickname)
 
@@ -100,6 +115,8 @@ export default function BudgetPanel({
           </p>
         )}
       </section>
+
+      <ClosedPlanTrend points={trend} highlighted={highlighted} />
 
       <section className="card p-6">
         <h2 className="text-base font-semibold tracking-tight text-ink-900">By group</h2>
