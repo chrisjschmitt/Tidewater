@@ -13,6 +13,7 @@ import OptionalFeatureBoundary from './components/OptionalFeatureBoundary'
 import EtmOpening from './components/etm/EtmOpening'
 import SummaryRing from './components/SummaryRing'
 import type { DashboardActuals } from './lib/etm/aggregate'
+import type { EtmChatSnapshot } from './lib/etmChat'
 import {
   balanceTone,
   freeAfterExpenses,
@@ -68,9 +69,11 @@ export default function App() {
   const [etmOpen, setEtmOpen] = useState(false)
   const [etmKey, setEtmKey] = useState<CryptoKey | null>(null)
   const [etmState, setEtmActuals] = useState<DashboardActuals | null>(null)
+  const [etmChat, setEtmChat] = useState<EtmChatSnapshot | null>(null)
   const [etmCategory, setEtmCategory] = useState<string | null>(null)
   // Folds to a constant null in public builds, so no comparison markup ships.
   const etmActuals = __ETM_AVAILABLE__ ? etmState : null
+  const etmContext = __ETM_AVAILABLE__ ? etmChat : null
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -378,6 +381,7 @@ export default function App() {
               setEtmOpen(false)
               setEtmKey(null)
               setEtmActuals(null)
+              setEtmChat(null)
             }}
           >
             <Suspense fallback={etmOpen ? <EtmOpening onClose={() => setEtmOpen(false)} /> : null}>
@@ -388,18 +392,22 @@ export default function App() {
                 openCategory={etmCategory}
                 onCloseCategory={() => setEtmCategory(null)}
                 onActuals={setEtmActuals}
+                onEtmContext={setEtmChat}
                 onUnlocked={rememberEtmUnlock}
                 onOpen={() => setEtmOpen(true)}
                 onClose={() => setEtmOpen(false)}
+                onOpenChat={() => setChatOpen(true)}
                 onLocked={() => {
                   setEtmKey(null)
                   setEtm({ setUp: true, remembered: false })
                   setEtmOpen(false)
+                  setEtmChat(null)
                 }}
                 onWiped={() => {
                   setEtmKey(null)
                   setEtm(undefined)
                   setEtmOpen(false)
+                  setEtmChat(null)
                   flash('Expense tracking data was erased. Your budget is untouched.')
                 }}
                 onGoalsChange={setGoals}
@@ -494,6 +502,7 @@ export default function App() {
         budget={budget}
         settings={settings}
         onSettingsChange={updateSettings}
+        etmContext={etmContext}
       />
 
       <ImportReview
@@ -539,7 +548,7 @@ export default function App() {
         }}
       />
 
-      {!chatOpen && (
+      {!chatOpen && !etmOpen && (
         <button
           onClick={() => setChatOpen(true)}
           className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-tide-600 text-white shadow-lg transition hover:bg-tide-700 hover:shadow-xl"

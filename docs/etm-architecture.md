@@ -1,8 +1,8 @@
 # Expense Tracking Module (ETM) — Systems Architecture & Implementation Plan
 
-Status: **in progress** — Phases 1–4 (§10) are built; Phase 5 (vault JSON
-backup) and Phase 6 (Ask a question + ETM snapshot) are still proposed.
-They are independent: do not fold Phase 6 into Phase 5.
+Status: **in progress** — Phases 1–4 and 6 (§10) are built; Phase 5 (vault JSON
+backup) is still proposed. They are independent: do not fold Phase 6 into
+Phase 5.
 
 Inputs: `docs/ExpenseTrackingModuleSpecs.md`, `docs/Workflow.md` (both private,
 gitignored), `docs/product-spec.md`, `docs/category-mapping.md`, and the sample
@@ -124,9 +124,10 @@ Three layers, mirroring the existing app's structure:
 **Ask a question** stays in the core app (`ChatPanel` in the main bundle).
 When ETM is unlocked, the lazy chunk may hand it a compact snapshot of
 totals and classifications already computed for the dashboard overlay and
-Forecast — optional extra context, not a new server, not a second chat,
-and not an import of `src/lib/forecast/` into `App.tsx`. Locked, or with
-no ETM, chat is unchanged: typical-month Budget only. See §5.1.
+Forecast — optional extra context, not a new server, not a second
+Forecast UI, and not an import of `src/lib/forecast/` into `App.tsx`.
+Locked, or with no ETM, chat is unchanged: typical-month Budget only.
+See §5.1.
 
 ## 3. Module gating and key security
 
@@ -367,7 +368,7 @@ separated, never mixed into CAD totals. Reimbursables are here like anything
 else, marked but never filtered out: this view is the whole record, and the
 one place to confirm what the budget set aside.
 
-### 5.1 Ask a question and ETM (proposed, not built)
+### 5.1 Ask a question and ETM (implemented)
 
 This is **not** the month-end checklist in §6. **Ask a question** is the
 product-spec chat: a floating panel in the main bundle that answers from
@@ -375,20 +376,18 @@ the typical-month Budget. This subsection records how that panel may, once
 expense tracking is unlocked, also see ETM and Forecast *patterns* — still
 without ever seeing the ledger.
 
-Forecast is already shipped. This work is a **later phase** (§10 Phase 6).
-It is **not** Phase 5 (encrypted vault JSON backup). Do not fold them
-together, and do not wait for backup to start this.
+Forecast is already shipped. This work is **Phase 6** (§10). It is **not**
+Phase 5 (encrypted vault JSON backup). Do not fold them together.
 
 #### Why this exists
 
 Today `src/lib/assistant.ts` builds `budgetSummaryText(budget)` — income,
 planned spend by group, goals — and both local regex intents and optional
 cloud (the user’s OpenAI or Anthropic key, after acknowledgement) answer
-from that plan alone. `ChatPanel` is imported from `src/App.tsx`. Help
-currently overclaims that chat can “analyze spending patterns.” It cannot:
-it has never seen actuals or Forecast. The intended fix is a compact
-snapshot of numbers ETM and Forecast already compute, not a dump of
-transactions.
+from that plan. When ETM is unlocked, `EtmModule` also hands `App` a
+compact `EtmChatSnapshot` (built in `src/lib/forecast/chatSnapshot.ts`,
+never imported from `App.tsx`). `ChatPanel` / `answer()` receive that
+finished DTO. Locked or absent → plan-only, identical to before.
 
 #### Settled design — do not reopen
 
@@ -433,7 +432,8 @@ serialized), for example:
 | Figure | Grain / notes |
 | --- | --- |
 | Plan vs actual by group and category | Dashboard overlay grain; Budget-tab actuals (reimbursable family held out) |
-| Forecast per category | Type (monthly / seasonal / annual / irregular), likely, typical months, low-sample |
+| Reimbursable-tab actuals | Reimbursable section grain: whole family for the period on screen, by bucket and category; posted-by-month on the Forecast strip. Not Budget-tab actuals. Some buckets also appear in Forecast household (allow-list) or Forecast vacation — name the series. |
+| Forecast per category | Type, likely, typical months, low-sample, window total / averages, posted actuals by month on the Forecast strip (prior 12 full months + current) |
 | Current month | Actual to date, remain / remain lines, overlay monthly + overlay lines. Overlay is the irregular smear, **not** in the Forecast column — overlay vs calendar vs plan is defined in `docs/forecasting-architecture.md` §7 |
 | Household vs vacation | Same allow-list / vacation tags as Forecast; name the series on every total |
 | Recommended set-aside vs typical-month plan | Forecast’s likely set-aside beside the core Budget plan; chat does not rewrite either |
@@ -463,43 +463,33 @@ The acknowledgement copy must say so.
 | Settings acknowledgement: spending/forecast summary leaves the device, not the vault; keys stay on device | A second passphrase, a second vault, or any server of Tidewater’s |
 | Help copy that stops overclaiming “analyze spending patterns,” and that names ETM/Forecast only behind `__ETM_AVAILABLE__` | Implementing Phase 5 (filtered CSV export, encrypted ETM section in the JSON backup) |
 
-#### Implementation notes for a later agent
+#### Implementation notes
 
-Proposed, not built. Do not start this as a side quest of Phase 5.
+Built. Do not reopen §5.1. Files:
 
-Likely files:
-
-- `src/lib/assistant.ts` — optional context on `localAnswer` / `cloudAnswer` /
-  `answer()`; new local intents; existing `SYSTEM_PROMPT` voice unchanged.
-- `src/components/ChatPanel.tsx` — optional `etmContext` (or serialized DTO);
-  acknowledgement copy.
-- A **new helper** inside `src/components/etm/` or `src/lib/forecast/` that
-  **only the ETM module calls**. It reads numbers the overlay and Forecast
-  engine already have. It must not be imported from `App.tsx`.
-- `src/App.tsx` — plumb an optional string (or finished DTO) from the
-  unlocked ETM tree into `ChatPanel`, the way `actuals={etmActuals}` already
-  works. Do not add `lib/forecast` or `ForecastPanel` imports; `check:forecast`
-  will fail if you do.
-- `src/components/HelpModal.tsx` — fix the overclaim when this phase ships;
-  gate any ETM/Forecast wording with `__ETM_AVAILABLE__`.
-- `scripts/check-assistant.ts` — synthetic fixtures only (Ted’s sample budget
-  plus invented ETM/Forecast snapshot text). Never personal CSVs.
+- `src/lib/etmChat.ts` — DTO, labelled-text formatter, local ETM replies.
+- `src/lib/forecast/chatSnapshot.ts` — builder; **only the ETM module calls it**.
+- `src/lib/assistant.ts` — optional snapshot on `localAnswer` / `cloudAnswer` /
+  `answer()`; ETM intents ahead of plan intents; `SYSTEM_PROMPT` voice unchanged.
+- `src/components/ChatPanel.tsx` — optional `etmContext`; acknowledgement copy.
+- `src/components/etm/EtmModule.tsx` — builds the snapshot and passes it up
+  the way `actuals` already works.
+- `src/App.tsx` — plumbs the finished DTO into `ChatPanel`. Does not import
+  `lib/forecast` or `ForecastPanel`.
+- `src/components/HelpModal.tsx` — no “analyze spending patterns”; ETM/Forecast
+  wording behind `__ETM_AVAILABLE__`.
+- `scripts/check-assistant.ts` — Ted’s sample budget plus invented snapshot
+  text. Never personal CSVs.
 
 Gates: `npm run typecheck`, `npm run check:etm`, `npm run check:forecast`
 (bundle isolation), `npm run check:assistant`.
 
-#### Help / copy (current vs intended)
+#### Help / copy
 
-**Current (overclaim):** Help’s assistant summary says chat can “analyze
-spending patterns.” The panel body describes a local assistant that answers
-“about your spending” from on-device numbers. Those numbers are the
-typical-month **plan**. Settings still say “a summary of your budget”
-leaves the device.
-
-**When Phase 6 is implemented:** say what is actually true — plan always;
-actuals and forecast patterns only while expense tracking is unlocked;
-cloud still a compact summary, not the vault. Until then, do not implement
-the copy fix as a silent drive-by; it belongs with the snapshot.
+**True now:** plan always; actuals and forecast patterns only while expense
+tracking is unlocked; cloud is a compact summary (plan plus snapshot when
+unlocked), not the vault. Help no longer says chat can “analyze spending
+patterns.” ETM/Forecast wording is behind `__ETM_AVAILABLE__`.
 
 ## 6. Workflow screen (reconciliation assistant)
 
@@ -568,9 +558,9 @@ currency. (Monarch amounts are used exactly as exported.)
 - No currency conversion.
 - No smartphone layout (unchanged from the product spec: future).
 - No server-side anything.
-- Chat never receives the ledger. When Phase 6 lands, **Ask a question**
-  may see a compact ETM/Forecast snapshot (§5.1); it does not become a
-  second Forecast UI, and it does not wait on Phase 5 backup.
+- Chat never receives the ledger. **Ask a question** may see a compact
+  ETM/Forecast snapshot (§5.1); it does not become a second Forecast UI,
+  and it does not wait on Phase 5 backup.
 
 ### 9.1 Future direction: direct bank aggregation (e.g. Plaid)
 
@@ -598,7 +588,7 @@ not close them during implementation:
 
 ## 10. Implementation plan
 
-Five phases, each independently shippable and gated by the existing checks
+Six phases, each independently shippable and gated by the existing checks
 (`npm run typecheck` plus a new `check:etm` script). Real personal data is
 never used in tests; the existing synthetic `monarch-fixture.csv` is
 extended with tags, owners, and multiple accounts to become the ETM
@@ -691,26 +681,25 @@ fixture.
 - **Exit criteria:** the two "reporting" criteria pass; a backup restored
   onto a fresh browser profile with the key reproduces the ETM state.
 
-### Phase 6 — Ask a question and ETM snapshot (proposed)
+### Phase 6 — Ask a question and ETM snapshot (implemented)
 
-**Not built.** Forecast is already shipped. This phase does **not** depend
-on Phase 5 and must not be folded into it. Do not reopen §5.1.
+Forecast is already shipped. This phase does **not** depend on Phase 5 and
+must not be folded into it. Do not reopen §5.1.
 
-- Compact snapshot builder in the lazy ETM chunk (dashboard overlay grain
-  + Forecast classifications / current-month remain / overlay vs calendar
-  vs plan / household vs vacation / set-aside vs typical-month plan).
-  Every figure names its series so Budget-tab actuals and Forecast
-  household are not collapsed.
-- Optional `etmContext` (string or small DTO serialized to text) from the
-  unlocked ETM module → `App` → `ChatPanel` / `answer()`. Locked or absent
-  → today’s plan-only behaviour.
+- Compact snapshot builder in the lazy ETM chunk (`buildChatSnapshot`):
+  dashboard overlay grain + Forecast classifications / current-month remain /
+  overlay vs calendar vs plan / household vs vacation / set-aside vs
+  typical-month plan. Every figure names its series so Budget-tab actuals
+  and Forecast household are not collapsed.
+- Optional `etmContext` DTO from the unlocked ETM module → `App` →
+  `ChatPanel` / `answer()`. Locked or absent → plan-only behaviour.
 - Local intents that distinguish “what did I spend / what does Forecast
   say” from “what is the typical-month plan.”
-- Cloud: append the same snapshot to the existing system context; update
-  acknowledgement copy (spending/forecast summary leaves the device, not
-  the vault). Keys stay on device.
-- Help: stop overclaiming “analyze spending patterns”; gate ETM/Forecast
-  wording behind `__ETM_AVAILABLE__`.
+- Cloud: append the same snapshot to the existing system context; acknowledgement
+  copy (spending/forecast summary leaves the device, not the vault). Keys stay
+  on device.
+- Help: no “analyze spending patterns”; ETM/Forecast wording behind
+  `__ETM_AVAILABLE__`.
 - **Exit criteria:** locked / public build: chat and the main bundle are
   unchanged (no `lib/forecast` / `ForecastPanel` in `App.tsx`;
   `check:forecast` grep still passes). Unlocked: a synthetic snapshot
@@ -728,3 +717,6 @@ on Phase 5 and must not be folded into it. Do not reopen §5.1.
 | Key forgotten | Wipe and re-import from Monarch exports; stated plainly in the unlock UI |
 | Accounts not present in Monarch (e.g. others' accounts) | Reimbursements are computed purely from tags, so untracked accounts need no data |
 | Scope creep into bank-statement transaction import | Explicitly out of scope (§9); balances only |
+| Chat treating Budget actuals and Forecast household as one number | Snapshot must name the series (§5.1); do not collapse |
+| Forecast engine leaking into the main bundle via chat | Keep the `App.tsx` grep in `check:forecast`; pass finished text only |
+| Folding the chat snapshot into Phase 5 backup | Independent later phase (§10 Phase 6); do not wait on or merge with vault JSON backup |

@@ -159,7 +159,7 @@ Forecast tab (“Import a Monarch export in Expenses first”) is enough.
 **Ask a question is not a second Forecast UI.** Overlay vs calendar vs
 plan (§7), household vs vacation (§5), and recommended set-aside stay
 defined and edited on this tab. When ETM is unlocked, those **Forecast
-numbers may be part of the compact chat snapshot** — totals and
+numbers are part of the compact chat snapshot** — totals and
 classifications, never the ledger. See `docs/etm-architecture.md` §5.1.
 
 ---
@@ -174,7 +174,7 @@ classifications, never the ledger. See `docs/etm-architecture.md` §5.1.
 | Vacation | Configurable tag, default `Reimbursable: Vacation Account`. Never on the household allow-list. Forecast and budget it on its own card. Paid from the vacation savings goal / account, not from the monthly household plan. |
 | Internal movements | Excluded here as in ETM (`Transfer`, `Credit Card Payment`, … via `isInternalCategory`). |
 | Core `Budget` | Remains a **single typical-month plan** for household life. Forecasting does not rewrite it. Known costs are **placed on a month** (`knownFutures`). The unpredictable **overlay** is the leftover irregular mass that has not been placed yet. There is no v1 “apply to my typical month” action. |
-| Ask a question | Forecast figures (type, likely, typical months, overlay vs calendar vs plan, household vs vacation, recommended set-aside) may appear in the **compact chat snapshot** once ETM is unlocked (`docs/etm-architecture.md` §5.1). Chat reads that summary; it does not classify, place known futures, or rewrite this tab. |
+| Ask a question | Forecast figures (type, likely, typical months, overlay vs calendar vs plan, household vs vacation, recommended set-aside) appear in the **compact chat snapshot** once ETM is unlocked (`docs/etm-architecture.md` §5.1). Chat reads that summary; it does not classify, place known futures, or rewrite this tab. |
 | Public build | No new compile-time flag. `__ETM_AVAILABLE__` already drops the parent bundle. |
 | Dashboard overlay | Optional later (Phase 5). First ship is the Forecast tab. Do not thread a new `DashboardForecast` type into `GroupBars` / `SummaryRing` until the engine is stable. |
 

@@ -19,6 +19,7 @@ interface Props {
   onClose: () => void
   onLock: () => void
   onWipe: () => void
+  onOpenChat: () => void
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
 }
 
@@ -45,6 +46,7 @@ export default function EtmArea({
   onClose,
   onLock,
   onWipe,
+  onOpenChat,
   onApplyHouseholdContribution,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
@@ -101,6 +103,9 @@ export default function EtmArea({
             </button>
             <button onClick={onClose} className="btn-ghost text-xs">
               Back to budget
+            </button>
+            <button onClick={onOpenChat} className="btn-primary text-xs">
+              Ask a question
             </button>
           </div>
         </div>

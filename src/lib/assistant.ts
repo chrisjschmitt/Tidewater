@@ -6,19 +6,26 @@ import {
   totalIncome,
   unallocated,
 } from './budget'
+import {
+  ETM_SERIES_NOTE,
+  exampleQuestions,
+  formatEtmChatSnapshot,
+  replyActualSpend,
+  replyForecast,
+  replyPlanVsActual,
+  replyReimbursable,
+  type EtmChatSnapshot,
+} from './etmChat'
+import { appGuideContext, replyAppGuide } from './appGuide'
 import { money, monthsToText, percent } from './format'
 import { monthsToTarget } from './goals'
 import { DEFAULT_MODELS, activeConfig, type Settings } from './storage'
 import type { Budget } from './types'
 
-export const EXAMPLE_QUESTIONS = [
-  'Where does most of my money go?',
-  'How can I balance my budget without giving up much?',
-  'How much am I keeping each month?',
-  'When will I reach my savings goal?',
-  'Can I afford a $2,000 trip this year?',
-  'What could I spend a little more on?',
-]
+export type { EtmChatSnapshot } from './etmChat'
+export { exampleQuestions }
+
+export const EXAMPLE_QUESTIONS = exampleQuestions()
 
 /** A compact, human-readable snapshot used by both the local and cloud answers. */
 export function budgetSummaryText(b: Budget): string {
@@ -60,6 +67,7 @@ export function budgetSummaryText(b: Budget): string {
 const SYSTEM_PROMPT = `You are the assistant inside Tidewater, a personal budgeting app built around an abundance mindset.
 Your voice is calm, warm, and never judgemental. You never shame the user for how they spend.
 You focus on what the user already has and how it can serve the life they want, rather than on restriction.
+You also help the user use Tidewater itself (dashboard, import, goals, and — when the how-to says so — Expenses, Forecast, and Reimbursable). Use the how-to notes you are given; do not invent screens or buttons.
 Answer in 2-4 short paragraphs or a short list. Use the numbers you are given; do not invent figures.
 Amounts are Canadian dollars per month unless stated otherwise.`
 
@@ -69,7 +77,7 @@ Amounts are Canadian dollars per month unless stated otherwise.`
 
 interface Intent {
   test: RegExp
-  reply: (b: Budget, q: string) => string
+  reply: (b: Budget, q: string, etm?: EtmChatSnapshot | null) => string
 }
 
 /**
@@ -79,7 +87,7 @@ interface Intent {
  * needs scoring across intents rather than this ordered list. See the README.
  */
 
-const INTENTS: Intent[] = [
+const PLAN_INTENTS: Intent[] = [
   {
     test: /(where|what).*(money|spend|go)|biggest|largest|most/i,
     reply: (b) => {
@@ -201,12 +209,53 @@ const INTENTS: Intent[] = [
   },
 ]
 
-export function localAnswer(question: string, budget: Budget): string {
+const GUIDE_INTENTS: Intent[] = [
+  {
+    test: /how do i|how to (use|import|unlock|add|set|open|enable|backup|restore|change)|where (is|do i find|can i find)|help me (use|with) (the |this )?app|using (the |this )?app|how does (this |the )?app work|what (does|do) (the )?(forecast|expenses?|reimbursable|budget|month[- ]?end|transactions?|accounts?|import) tab|(month[- ]?end|forecast|reimbursable|budget|transactions|accounts|import) tab/i,
+    reply: (_b, q) =>
+      replyAppGuide(q) ??
+      'I can help with using Tidewater. Try how to import, how to add a goal, or how to use Expenses.',
+  },
+]
+
+const ETM_INTENTS: Intent[] = __ETM_AVAILABLE__
+  ? [
+      {
+        test: /\breimburs/i,
+        reply: (b, q, etm) => replyReimbursable(b, etm, q),
+      },
+      {
+        test: /(histor(?:y|ical|ically).{0,40}spend|spend(?:ing)? on |spent on |what (did|have) i spend|how much (did|have) i (actually )?spend|actual (spend|spending)|spent (this|last|so far|in)|where did (my|the) money go)/i,
+        reply: (b, q, etm) => replyActualSpend(b, etm, q),
+      },
+      {
+        test: /\bforecast\b|set-aside|set aside|overlay|remain(?:ing)? (?:this|the) month|household vs vacation/i,
+        reply: (b, _q, etm) => replyForecast(b, etm),
+      },
+      {
+        test: /(compare|compared|vs\.? actual|against (?:the )?plan|over (?:the )?plan|under (?:the )?plan|budget vs|plan vs)/i,
+        reply: (b, _q, etm) => replyPlanVsActual(b, etm),
+      },
+    ]
+  : []
+
+const INTENTS: Intent[] = [...GUIDE_INTENTS, ...ETM_INTENTS, ...PLAN_INTENTS]
+
+export function localAnswer(question: string, budget: Budget, etm?: EtmChatSnapshot | null): string {
   const intent = INTENTS.find((i) => i.test.test(question))
-  if (intent) return intent.reply(budget, question)
-  return `I can answer that best with numbers from your plan. Here is where things stand:\n\n${budgetSummaryText(
+  if (intent) return intent.reply(budget, question, etm)
+  return `I can answer from your plan, or help you use Tidewater. Here is where the plan stands:\n\n${budgetSummaryText(
     budget,
-  )}\n\nTry asking about where your money goes, how to balance the month, or when a goal will be reached.`
+  )}\n\nTry asking about where your money goes, how to import, or how to use Expenses.`
+}
+
+/** System context sent to an optional cloud provider. Snapshot is totals only. */
+export function assistantSystemContext(budget: Budget, etm?: EtmChatSnapshot | null): string {
+  const guide = appGuideContext()
+  if (__ETM_AVAILABLE__ && etm) {
+    return `${SYSTEM_PROMPT}\n\n${guide}\n\n${ETM_SERIES_NOTE}\n\nThe user's current typical-month plan:\n${budgetSummaryText(budget)}\n\nSpending and forecast snapshot (derived totals and classifications only; not the vault, not transactions, not merchants):\n${formatEtmChatSnapshot(etm)}`
+  }
+  return `${SYSTEM_PROMPT}\n\n${guide}\n\nThe user's current budget:\n${budgetSummaryText(budget)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -217,8 +266,9 @@ export async function cloudAnswer(
   question: string,
   budget: Budget,
   settings: Settings,
+  etm?: EtmChatSnapshot | null,
 ): Promise<string> {
-  const context = `${SYSTEM_PROMPT}\n\nThe user's current budget:\n${budgetSummaryText(budget)}`
+  const context = assistantSystemContext(budget, etm)
   const config = activeConfig(settings)
   if (!config) throw new Error('No provider is configured.')
 
@@ -266,11 +316,12 @@ export async function answer(
   question: string,
   budget: Budget,
   settings: Settings,
+  etm?: EtmChatSnapshot | null,
 ): Promise<{ text: string; usedCloud: boolean }> {
   const config = activeConfig(settings)
   if (config?.apiKey && settings.cloudAcknowledged) {
     try {
-      return { text: await cloudAnswer(question, budget, settings), usedCloud: true }
+      return { text: await cloudAnswer(question, budget, settings, etm), usedCloud: true }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       const hint = /404|not_found|does not exist/i.test(detail)
@@ -280,10 +331,11 @@ export async function answer(
         text: `I could not reach your assistant provider (${detail}).${hint}\n\nHere is what I can tell you from your own data instead:\n\n${localAnswer(
           question,
           budget,
+          etm,
         )}`,
         usedCloud: false,
       }
     }
   }
-  return { text: localAnswer(question, budget), usedCloud: false }
+  return { text: localAnswer(question, budget, etm), usedCloud: false }
 }

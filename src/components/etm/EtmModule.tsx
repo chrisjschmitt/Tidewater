@@ -6,14 +6,17 @@ import EtmStrip from './EtmStrip'
 import { defaultPeriod } from './PeriodSelector'
 import { useEtmData } from './useEtmData'
 import { aggregate, dashboardActuals, type DashboardActuals } from '../../lib/etm/aggregate'
-import { periodLabel, type Period } from '../../lib/etm/period'
+import { periodLabel, today, type Period } from '../../lib/etm/period'
 import {
   forgetRememberedKey,
   readVaultMeta,
   rememberedKey,
   wipeVault,
 } from '../../lib/etm/storage/vault'
+import { buildChatSnapshot } from '../../lib/forecast/chatSnapshot'
+import { forecast } from '../../lib/forecast/forecast'
 import { withHouseholdContribution } from '../../lib/forecast/snapshot'
+import type { EtmChatSnapshot } from '../../lib/etmChat'
 import type { Budget, Goal } from '../../lib/types'
 
 const EtmArea = lazy(() => import('./EtmArea'))
@@ -28,11 +31,13 @@ interface Props {
   openCategory: string | null
   onCloseCategory: () => void
   onActuals: (actuals: DashboardActuals | null) => void
+  onEtmContext: (snapshot: EtmChatSnapshot | null) => void
   onUnlocked: (key: CryptoKey, remembered: boolean) => void
   onLocked: () => void
   onWiped: () => void
   onOpen: () => void
   onClose: () => void
+  onOpenChat: () => void
   onGoalsChange?: (goals: Goal[]) => void
 }
 
@@ -82,10 +87,12 @@ function Unlocked({
   openCategory,
   onCloseCategory,
   onActuals,
+  onEtmContext,
   onLocked,
   onWiped,
   onOpen,
   onClose,
+  onOpenChat,
   onGoalsChange,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
@@ -118,12 +125,40 @@ function Unlocked({
     [data.transactions, period, excluded, reimbursableTag],
   )
 
+  const forecastResult = useMemo(
+    () => forecast(data.transactions, budget, data.forecastConfig, today(), reimbursableTag),
+    [data.transactions, budget, data.forecastConfig, reimbursableTag],
+  )
+
+  const chatSnapshot = useMemo(() => {
+    if (!actuals || !period) return null
+    return buildChatSnapshot({
+      budget,
+      actuals,
+      periodLabel: periodLabel(period),
+      forecast: forecastResult,
+      transactions: data.transactions,
+      reimbursableTag,
+    })
+  }, [actuals, budget, forecastResult, period, data.transactions, reimbursableTag])
+
   useEffect(() => {
     onActuals(actuals && period ? dashboardActuals(actuals, periodLabel(period)) : null)
   }, [actuals, period, onActuals])
 
+  useEffect(() => {
+    if (data.loading) return
+    onEtmContext(chatSnapshot)
+  }, [chatSnapshot, data.loading, onEtmContext])
+
   // The dashboard behind should read as it always has once the module is gone.
-  useEffect(() => () => onActuals(null), [onActuals])
+  useEffect(
+    () => () => {
+      onActuals(null)
+      onEtmContext(null)
+    },
+    [onActuals, onEtmContext],
+  )
 
   const drillDown = openCategory && (
     <CategoryModal
@@ -164,6 +199,7 @@ function Unlocked({
           period={period}
           onPeriodChange={setPeriod}
           onClose={onClose}
+          onOpenChat={onOpenChat}
           onLock={() => {
             void forgetRememberedKey()
             onLocked()

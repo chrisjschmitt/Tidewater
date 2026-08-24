@@ -186,13 +186,16 @@ Valid groups: `home`, `food`, `transport`, `health`, `personal`, `joy`, `family`
 
 ## The assistant
 
-The chat button answers questions about your own budget. By default it runs entirely on your
-device using a rules-based assistant — no network calls, nothing leaves the browser.
+The chat button answers questions about your typical-month plan and how to use Tidewater. By default it runs entirely on your
+device using a rules-based assistant — no network calls, nothing leaves the browser. While expense
+tracking is unlocked, it can also see a compact snapshot of actuals and Forecast patterns (totals
+and classifications). It never sees the ledger, merchants, or the vault.
 
 You can optionally supply your own OpenAI or Anthropic API key under *Settings* in the chat panel.
-If you do, a summary of your budget (totals, categories, goals) is sent to that provider when you
-ask a question. Tidewater asks you to confirm that explicitly first, and your key is stored only on
-this device. If a request fails, it falls back to the local answer.
+If you do, a summary of your plan (totals, categories, goals) is sent to that provider when you
+ask a question. If expense tracking is unlocked, the same compact spending/forecast snapshot is
+included — still not transactions. Tidewater asks you to confirm that explicitly first, and your
+key is stored only on this device. If a request fails, it falls back to the local answer.
 
 Each provider keeps its own key and model, so switching between them never sends the wrong key.
 
@@ -253,7 +256,8 @@ docs/             product spec and category mapping
 npm run typecheck       # TypeScript
 npm run check:import    # Ted + Noel budgets and monarch-fixture.csv (plus local Test-Data if present)
 npm run check:starter   # generates starter budgets for three household shapes
-npm run check:assistant "Where does my money go?"   # shows the local answer for a question
+npm run check:assistant                         # local intents, including plan vs a synthetic ETM snapshot
+npm run check:assistant "Where does my money go?"   # also prints the local answer for a question
 npm run check:forecast  # synthetic forecast fixture (classifications, coverage, snapshots)
 ```
 

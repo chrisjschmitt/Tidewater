@@ -41,8 +41,9 @@ acknowledgement.
 - `npm run dev` — Vite on http://localhost:5173
 - `npm run typecheck` — `tsc -b --noEmit` (SW Gate-3 check)
 - `npm run build` — `tsc -b && vite build` (SW Gate-3 check)
-- `npm run check:import` / `check:starter` / `check:assistant` — local
-  sanity; not pipeline checks (assistant needs a quoted question arg).
+- `npm run check:import` / `check:starter` / `check:assistant` / `check:etm` /
+  `check:forecast` — local sanity. `check:assistant` asserts plan-only vs
+  synthetic snapshot intents; a quoted question arg still prints the answer.
 
 ## Gotchas
 - **Privacy invariant:** never add a backend that stores budget data; never

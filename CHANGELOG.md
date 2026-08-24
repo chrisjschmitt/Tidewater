@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.6 — 2026-08-24
+
+### Added
+- Ask a question walkthroughs for every Expenses tab: Month end, Budget, Forecast, Reimbursable, Transactions, Import, and Accounts.
+
+## 0.5.5 — 2026-08-24
+
+### Fixed
+- Ask a question can walk through the Month end checklist (tidy, reimbursements, closing balances, savings, reconcile).
+
+## 0.5.4 — 2026-08-24
+
+### Added
+- Ask a question can walk through using Tidewater (import, goals, Expenses, Forecast, Reimbursable), not only the numbers.
+
+## 0.5.3 — 2026-08-24
+
+### Fixed
+- Ask a question can see Reimbursable-tab actuals by bucket and month, so that section is not only a held-out footnote on the Budget tab.
+
+## 0.5.2 — 2026-08-24
+
+### Fixed
+- Ask a question can see Forecast lookback spend by category and month, so a historical question is not limited to the period on the Budget tab.
+
+## 0.5.1 — 2026-08-24
+
+### Fixed
+- Ask a question is available from the expenses screen header, so chat is not trapped behind that overlay.
+
+## 0.5.0 — 2026-08-24
+
+### Added
+- Ask a question can use a compact spending and forecast snapshot while expense tracking is unlocked (plan vs actual, household vs vacation, overlay vs calendar vs typical-month plan). Locked and public builds stay plan-only. The vault and ledger never go to chat.
+
+### Changed
+- Help and cloud acknowledgement no longer claim chat can analyze spending patterns. Cloud still sends a compact summary, not the vault.
+
 ## 0.4.4 — 2026-08-24
 
 ### Added

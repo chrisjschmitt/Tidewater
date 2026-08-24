@@ -24,6 +24,8 @@ import {
   snapshotId,
   withHouseholdContribution,
 } from '../src/lib/forecast/snapshot.ts'
+import { buildChatSnapshot } from '../src/lib/forecast/chatSnapshot.ts'
+import { formatEtmChatSnapshot } from '../src/lib/etmChat.ts'
 import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot } from '../src/lib/forecast/types.ts'
 import {
   appearedSubtags,
@@ -42,6 +44,8 @@ import {
   withVacationTag,
 } from '../src/lib/forecast/universe.ts'
 import { parseMonarchCsv, type MonarchRow } from '../src/lib/etm/monarch.ts'
+import { aggregate } from '../src/lib/etm/aggregate.ts'
+import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
 import type { Currency, Transaction } from '../src/lib/etm/types.ts'
 import type { Budget } from '../src/lib/types.ts'
 
@@ -618,11 +622,74 @@ try {
 }
 check('a wrong key cannot read a forecast snapshot', wrongSnapRejected)
 
+console.log('\n=== Chat snapshot (derived totals, never the ledger) ===')
+const august = monthPeriod('2026-08')
+const augustActuals = aggregate(transactions, august)
+const chatSnap = buildChatSnapshot({
+  budget,
+  actuals: augustActuals,
+  periodLabel: periodLabel(august),
+  forecast: result,
+  transactions,
+})
+const chatText = formatEtmChatSnapshot(chatSnap)
+const fixtureMerchants = [
+  'Pier Housekeeping',
+  'Cedar Market',
+  'Cove Pharmacy',
+  'Nimbus Software',
+  'Coast Mutual',
+  'Pebble Gifts',
+  'Chequing (...1001)',
+  'US Card (...7788)',
+]
+check('chat snapshot names Budget-tab actuals', chatText.includes('Budget-tab actuals'))
+check('chat snapshot names Forecast household', chatText.includes('Forecast household'))
+check('chat snapshot names Forecast vacation', chatText.includes('Forecast vacation'))
+check('chat snapshot names Reimbursable-tab actuals', chatText.includes('Reimbursable-tab actuals'))
+check(
+  'chat snapshot includes Reimbursable buckets, not merchant rows',
+  chatText.includes('Healthcare Account') &&
+    chatText.includes('Business Account') &&
+    chatText.includes('Vacation Account') &&
+    !chatText.includes('Cove Pharmacy') &&
+    !chatText.includes('Lakeside Inn'),
+)
+check(
+  'chat snapshot includes Reimbursable months before as-of August',
+  (() => {
+    const line = chatText.split('\n').find((row) => row.includes('Bucket Healthcare Account')) ?? ''
+    return line.includes('2026-07') || line.includes('2026-06')
+  })(),
+)
+check('chat snapshot names overlay as not the Forecast column', /overlay.*not the Forecast column/i.test(chatText))
+check('chat snapshot names the typical-month plan beside set-aside', chatText.includes('Typical-month plan'))
+check(
+  'chat snapshot has no merchant, account, or statement strings',
+  fixtureMerchants.every((name) => !chatText.includes(name)),
+)
+check('chat snapshot includes Harbor Dues as a category, not a merchant row', chatText.includes('Harbor Dues'))
+check(
+  'chat snapshot includes Harbor Dues monthly actuals before as-of August',
+  (() => {
+    const line = chatText.split('\n').find((row) => row.includes('[forecast-household, CAD] Harbor Dues')) ?? ''
+    return line.includes('2026-07') && /window/i.test(line)
+  })(),
+)
+check(
+  'chat snapshot includes Market Basket monthly actuals before as-of August',
+  (() => {
+    const line = chatText.split('\n').find((row) => row.includes('[forecast-household, CAD] Market Basket')) ?? ''
+    return line.includes('2026-06') || line.includes('2026-07')
+  })(),
+)
+check('USD household is named and not added into CAD', /Forecast household \(USD\)/.test(chatText) && chatText.includes('Cloud Software'))
+
 console.log('\n=== Main bundle stays clear of forecasting ===')
 const appSource = readFileSync('src/App.tsx', 'utf8')
 check(
   'App.tsx does not import the forecast engine or panel',
-  !appSource.includes('lib/forecast') && !appSource.includes('ForecastPanel'),
+  !appSource.includes('lib/forecast') && !appSource.includes('ForecastPanel') && !appSource.includes('chatSnapshot'),
 )
 const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }
 const versionSource = readFileSync('src/lib/version.ts', 'utf8')

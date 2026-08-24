@@ -123,7 +123,9 @@ const TOPICS: Topic[] = [
     id: 'assistant',
     title: 'Using the chat assistant',
     category: 'Assistant',
-    summary: 'Ask questions about your budget, analyze spending patterns, or get advice using the local or cloud assistant.',
+    summary: __ETM_AVAILABLE__
+      ? 'Ask about your typical-month plan, how to use Tidewater, and while expense tracking is unlocked, about actuals and forecast patterns — never the ledger.'
+      : 'Ask about your typical-month plan or how to use Tidewater, using the local or optional cloud assistant.',
     content: (
       <div className="space-y-3 text-sm leading-relaxed text-ink-600">
         <p>
@@ -131,10 +133,24 @@ const TOPICS: Topic[] = [
         </p>
         <ul className="list-disc space-y-1.5 pl-5 text-ink-700">
           <li>
-            <strong>Local Rule Assistant:</strong> Answer instant questions about your spending, goals, or unallocated funds without sending data anywhere.
+            <strong>On this device:</strong> Instant answers from your typical-month plan — groups,
+            goals, and unallocated funds — and how to use the dashboard, Import, and Your data,
+            without sending data anywhere.
           </li>
+          {__ETM_AVAILABLE__ && (
+            <li>
+              <strong>While expense tracking is unlocked:</strong> The same panel can also see a
+              compact snapshot of actuals and Forecast patterns (totals and classifications). It
+              never sees individual transactions, merchants, or the vault. Ask “what did I spend”
+              versus “what is the typical-month plan” to keep those series distinct. Ask “how do I
+              use the Forecast tab” for a walkthrough rather than the figures.
+            </li>
+          )}
           <li>
-            <strong>Optional Cloud AI:</strong> Optionally enter your own OpenAI or Anthropic API key in Assistant Settings for deeper conversational guidance. Keys stay on your device.
+            <strong>Optional cloud:</strong> Enter your own OpenAI or Anthropic API key in Assistant
+            Settings for deeper conversational guidance. A compact summary of the plan
+            {__ETM_AVAILABLE__ ? ' — and, if unlocked, of spending/forecast totals —' : ''} may
+            leave the device after you acknowledge that. Keys stay here. The vault never leaves.
           </li>
         </ul>
       </div>
@@ -191,7 +207,7 @@ export default function HelpModal({ open, onClose, onOpenChat }: Props) {
         <div className="flex items-center justify-between gap-4">
           {onOpenChat ? (
             <button onClick={onOpenChat} className="btn-quiet text-xs">
-              💬 Have a question? Ask the assistant
+              Have a question? Ask the assistant
             </button>
           ) : (
             <div />

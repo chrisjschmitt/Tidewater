@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { EXAMPLE_QUESTIONS, answer } from '../lib/assistant'
+import { exampleQuestions, answer } from '../lib/assistant'
+import type { EtmChatSnapshot } from '../lib/etmChat'
 import {
   RECOMMENDED_MODELS,
   listModels,
@@ -28,18 +29,34 @@ interface Props {
   budget: Budget
   settings: Settings
   onSettingsChange: (settings: Settings) => void
+  /** Finished ETM/Forecast totals, only while expense tracking is unlocked. */
+  etmContext?: EtmChatSnapshot | null
 }
 
 /** Say plainly where answers are coming from right now, not where they could. */
-function statusLine(settings: Settings): string {
+function statusLine(settings: Settings, etm?: EtmChatSnapshot | null): string {
   const config = activeConfig(settings)
-  if (!config) return 'Answered on this device, from your own numbers'
+  const from = __ETM_AVAILABLE__ && etm
+    ? 'from your plan plus a spending/forecast snapshot'
+    : 'from your own numbers'
+  if (!config) return `Answered on this device, ${from}`
   if (!config.apiKey) return 'Add a key in Settings, or keep using on-device answers'
-  if (!settings.cloudAcknowledged) return 'Confirm in Settings before your budget is sent anywhere'
+  if (!settings.cloudAcknowledged) {
+    return __ETM_AVAILABLE__
+      ? 'Confirm in Settings before a summary is sent anywhere'
+      : 'Confirm in Settings before your budget is sent anywhere'
+  }
   return `Using ${settings.provider} · ${config.model}`
 }
 
-export default function ChatPanel({ open, onClose, budget, settings, onSettingsChange }: Props) {
+export default function ChatPanel({
+  open,
+  onClose,
+  budget,
+  settings,
+  onSettingsChange,
+  etmContext,
+}: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [input, setInput] = useState('')
@@ -80,7 +97,7 @@ export default function ChatPanel({ open, onClose, budget, settings, onSettingsC
     setMessages((m) => [...m, { id: Date.now(), role: 'user', text }])
     setBusy(true)
     try {
-      const result = await answer(text, budget, settings)
+      const result = await answer(text, budget, settings, etmContext)
       setMessages((m) => [
         ...m,
         { id: Date.now() + 1, role: 'assistant', text: result.text, cloud: result.usedCloud },
@@ -97,18 +114,18 @@ export default function ChatPanel({ open, onClose, budget, settings, onSettingsC
 
   return (
     <>
-      {open && <div className="fixed inset-0 z-40 bg-ink-900/10 animate-fade" onClick={onClose} />}
+      {open && <div className="fixed inset-0 z-50 bg-ink-900/10 animate-fade" onClick={onClose} />}
 
       <aside
         ref={panelRef}
-        className={`fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l border-sand-200 bg-sand-50 shadow-2xl transition-transform duration-300 ${
+        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-sand-200 bg-sand-50 shadow-2xl transition-transform duration-300 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <header className="flex items-center justify-between border-b border-sand-200 bg-white/60 px-5 py-4">
           <div>
-            <h2 className="text-sm font-semibold text-ink-900">Ask about your money</h2>
-            <p className="text-xs text-ink-400">{statusLine(settings)}</p>
+            <h2 className="text-sm font-semibold text-ink-900">Ask a question</h2>
+            <p className="text-xs text-ink-400">{statusLine(settings, etmContext)}</p>
           </div>
           <div className="flex items-center gap-1">
             {messages.length > 0 && (
@@ -137,18 +154,23 @@ export default function ChatPanel({ open, onClose, budget, settings, onSettingsC
         </header>
 
         {showSettings && (
-          <AssistantSettings settings={settings} onChange={onSettingsChange} />
+          <AssistantSettings
+            settings={settings}
+            onChange={onSettingsChange}
+            etmUnlocked={Boolean(__ETM_AVAILABLE__ && etmContext)}
+          />
         )}
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
           {messages.length === 0 && (
             <div className="animate-fade">
               <p className="text-sm text-ink-500">
-                Ask anything about your plan. Nothing here is a judgement — it is just your own
-                numbers, read back to you.
+                {__ETM_AVAILABLE__ && etmContext
+                  ? 'Ask about your typical-month plan, how to use Tidewater, what actually posted, or what Forecast recommends setting aside. Nothing here is a judgement — and individual transactions stay on this device.'
+                  : 'Ask about your plan, or how to use Tidewater. Nothing here is a judgement — it is just your own numbers, read back to you.'}
               </p>
               <div className="mt-4 space-y-2">
-                {EXAMPLE_QUESTIONS.map((q) => (
+                {exampleQuestions(__ETM_AVAILABLE__ ? etmContext : null).map((q) => (
                   <button
                     key={q}
                     onClick={() => send(q)}
@@ -423,9 +445,11 @@ function sameModelFamily(current: string, recommendation: string): boolean {
 function AssistantSettings({
   settings,
   onChange,
+  etmUnlocked,
 }: {
   settings: Settings
   onChange: (s: Settings) => void
+  etmUnlocked: boolean
 }) {
   const provider = settings.provider
   const config = activeConfig(settings)
@@ -448,8 +472,21 @@ function AssistantSettings({
       {provider !== 'local' && config && (
         <div className="mt-3 space-y-3">
           <div className="rounded-2xl border border-shell-300/60 bg-shell-300/10 px-4 py-3 text-xs text-ink-700">
-            A summary of your budget — income, spending by category, and goals — will be sent to{' '}
-            {provider}. Your key is stored only on this device and is never sent anywhere else.
+            {__ETM_AVAILABLE__ ? (
+              <>
+                A summary of your typical-month plan — income, planned spending by category, and
+                goals — will be sent to {provider}.{' '}
+                {etmUnlocked
+                  ? 'Because expense tracking is unlocked, a compact spending and forecast summary (totals and classifications only) goes too. Transactions, merchants, and the vault stay on this device.'
+                  : 'If you later unlock expense tracking, a compact spending and forecast summary may be included as well. The vault never leaves this device.'}{' '}
+                Your key is stored only on this device and is never sent anywhere else.
+              </>
+            ) : (
+              <>
+                A summary of your budget — income, spending by category, and goals — will be sent to{' '}
+                {provider}. Your key is stored only on this device and is never sent anywhere else.
+              </>
+            )}
           </div>
 
           <div>
@@ -481,7 +518,9 @@ function AssistantSettings({
               onChange={(e) => onChange({ ...settings, cloudAcknowledged: e.target.checked })}
               className="mt-0.5 h-4 w-4 rounded border-sand-300 text-tide-600 focus:ring-tide-500/30"
             />
-            I understand my budget summary will leave this device when I ask a question.
+            {__ETM_AVAILABLE__
+              ? 'I understand a compact summary leaves this device when I ask a question. The vault never does.'
+              : 'I understand my budget summary will leave this device when I ask a question.'}
           </label>
         </div>
       )}
