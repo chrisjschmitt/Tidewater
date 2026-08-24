@@ -1,8 +1,24 @@
 import { useEffect, useState } from 'react'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
-import type { CurrentMonthView, KnownFuture, MonthPoint, SetAside, VarianceRow } from '../../lib/forecast/types'
-import { controlWindowBadge, controlWindowDetail, doubleCountCopy } from './forecastCopy'
+import { forecastMix } from '../../lib/forecast/forecast'
+import type {
+  CurrentMonthView,
+  ForecastMix,
+  ForecastMixLine,
+  KnownFuture,
+  MonthPoint,
+  OverlayBreakdown,
+  SetAside,
+  VarianceRow,
+} from '../../lib/forecast/types'
+import {
+  controlWindowBadge,
+  controlWindowDetail,
+  doubleCountCopy,
+  remainReasonCopy,
+  typeLabel,
+} from './forecastCopy'
 
 interface Props {
   point: MonthPoint
@@ -10,6 +26,7 @@ interface Props {
   setAside: SetAside
   usd?: { actual: number; calendar: number }
   placements: KnownFuture[]
+  overlayBreakdown: OverlayBreakdown
   doubleCounts: Array<{ category: string; month: string }>
   onPlace: (row: { category: string; amount: number }) => void
   onRemove: (id: string) => void
@@ -21,6 +38,7 @@ export default function ForecastMonthCard({
   setAside,
   usd,
   placements,
+  overlayBreakdown,
   doubleCounts,
   onPlace,
   onRemove,
@@ -38,6 +56,7 @@ export default function ForecastMonthCard({
   )
   const lumpy = lumps.length > 0 && forecast > setAside.likely * 1.05
   const placeLabel = `Place in ${monthName(point.month)}`
+  const mix = point.kind === 'future' ? forecastMix(point, placements) : null
 
   return (
     <section className="card p-6">
@@ -79,6 +98,42 @@ export default function ForecastMonthCard({
         )}
       </div>
 
+      {isCurrent && current.remainLines.length > 0 && (
+        <div className="mt-4">
+          <p className="text-[11px] uppercase tracking-wider text-ink-400">How that leftover adds up</p>
+          <p className="mt-1 text-sm text-ink-500">
+            Forecast to month-end is actual to today plus these lines. Irregular spend that has
+            not started this month stays in the overlay until it is pinned.
+          </p>
+          <ul className="mt-2 divide-y divide-sand-200/80">
+            {current.remainLines.map((line) => (
+              <li key={line.key} className="flex items-baseline justify-between gap-4 py-1.5">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-ink-900">{line.label}</span>
+                  <span className="text-xs text-ink-400">{remainReasonCopy(line.reason)}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-sm tabular-nums text-ink-700">
+                    {amountIn(line.remain, 'CAD')}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-ink-400">
+                    {line.actual > 0
+                      ? `${amountIn(line.actual, 'CAD')} spent of ${amountIn(line.typical, 'CAD')}`
+                      : `${amountIn(line.typical, 'CAD')} typical`}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {mix && <ForecastMixList mix={mix} onRemove={onRemove} />}
+
+      {point.kind !== 'current' && overlayBreakdown.monthly > 0 && (
+        <OverlayRemainder overlay={overlayBreakdown} />
+      )}
+
       {usd && (usd.actual !== 0 || usd.calendar !== 0) && (
         <p className="mt-3 text-xs text-ink-400">
           USD sits alongside, never added in: {amountIn(usd.actual, 'USD')} so far, forecast{' '}
@@ -91,7 +146,7 @@ export default function ForecastMonthCard({
         {setAside.overlay > 0
           ? `, of which ${amountIn(setAside.overlay, 'CAD')} is still unplaced irregular cost.`
           : '.'}{' '}
-        {lumpy
+        {lumpy && point.kind !== 'future'
           ? `This month carries ${lumps.map((row) => row.label).join(', ')}, so it sits above that typical month.`
           : isCurrent && forecast + 0.01 < plan
             ? 'There looks to be spare room against the plan.'
@@ -114,7 +169,7 @@ export default function ForecastMonthCard({
         />
       )}
 
-      {placements.length > 0 && (
+      {placements.length > 0 && point.kind !== 'future' && (
         <div className="mt-5">
           <p className="text-[11px] uppercase tracking-wider text-ink-400">Placed on this month</p>
           <ul className="mt-2 divide-y divide-sand-200/80">
@@ -148,6 +203,114 @@ export default function ForecastMonthCard({
         </div>
       )}
     </section>
+  )
+}
+
+function ForecastMixList({
+  mix,
+  onRemove,
+}: {
+  mix: ForecastMix
+  onRemove: (id: string) => void
+}) {
+  const groups: Array<{ key: 'monthly' | 'lumpy' | 'pinned'; label: string; lines: ForecastMixLine[] }> = [
+    { key: 'monthly', label: 'Every month', lines: mix.monthly },
+    { key: 'lumpy', label: 'Usual this month', lines: mix.lumpy },
+    { key: 'pinned', label: 'Pinned on this month', lines: mix.pinned },
+  ]
+  if (mix.monthly.length + mix.lumpy.length + mix.pinned.length === 0) return null
+
+  return (
+    <div className="mt-4">
+      <p className="text-[11px] uppercase tracking-wider text-ink-400">What this forecast is</p>
+      <p className="mt-1 text-sm text-ink-500">
+        These lines add to the Forecast column. The residual overlay is not in this list.
+      </p>
+      {groups.map(
+        (group) =>
+          group.lines.length > 0 && (
+            <div key={group.key} className="mt-3">
+              <p className="text-[11px] uppercase tracking-wider text-ink-400">{group.label}</p>
+              <ul className="mt-1 divide-y divide-sand-200/80">
+                {group.lines.map((line) => (
+                  <li
+                    key={line.placementId ?? `${group.key}-${line.key}`}
+                    className="flex items-baseline justify-between gap-3 py-1.5"
+                  >
+                    <span className="min-w-0 truncate text-sm text-ink-900">
+                      {line.label}
+                      {line.recurrence && (
+                        <span className="ml-2 text-[11px] uppercase tracking-wider text-ink-400">
+                          {line.recurrence === 'annual' ? 'each year' : 'once'}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-baseline gap-3">
+                      <span className="text-sm tabular-nums text-ink-700">{amountIn(line.amount, 'CAD')}</span>
+                      {line.placementId && (
+                        <button onClick={() => onRemove(line.placementId!)} className="btn-quiet text-xs">
+                          Remove
+                        </button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+      )}
+    </div>
+  )
+}
+
+function OverlayRemainder({ overlay }: { overlay: OverlayBreakdown }) {
+  const [open, setOpen] = useState(false)
+  const shareTotal = overlay.lines.reduce((sum, line) => sum + line.share, 0)
+
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="text-left text-[11px] font-medium uppercase tracking-wider text-ink-400 hover:text-ink-700"
+        aria-expanded={open}
+      >
+        {open ? 'Hide what is still unplaced' : 'What is still unplaced'}
+      </button>
+      {open && (
+        <div className="mt-2">
+          <p className="text-sm text-ink-500">
+            These irregular lines are smeared across the window. They are not in the Forecast
+            column, and they are the same remainder on every month.
+          </p>
+          {overlay.placedNextYear > 0 && (
+            <p className="mt-1 text-sm text-ink-500">
+              Pins in the next twelve months take {amountIn(overlay.placedNextYear, 'CAD')} off this
+              remainder before it is spread.
+            </p>
+          )}
+          <ul className="mt-2 divide-y divide-sand-200/80">
+            {overlay.lines.map((line) => (
+              <li key={line.key} className="flex items-baseline justify-between gap-4 py-1.5">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-ink-900">{line.label}</span>
+                  <span className="text-xs text-ink-400">{typeLabel('irregular', line.lowSample)}</span>
+                </span>
+                <span className="shrink-0 text-sm tabular-nums text-ink-700">
+                  {amountIn(line.share, 'CAD')}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {Math.abs(shareTotal - overlay.monthly) > 0.02 && overlay.placedNextYear === 0 && (
+            <p className="mt-2 text-xs text-ink-400">
+              After leaving the largest irregulars aside, the remainder on the card is{' '}
+              {amountIn(overlay.monthly, 'CAD')}.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

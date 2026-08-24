@@ -25,6 +25,8 @@ import {
   taggingGaps,
   vacationTagOptions,
   withAllowListedTag,
+  withCategoryTypicalMonths,
+  withCategoryTypeOverride,
   withVacationTag,
 } from '../../lib/forecast/universe'
 import type { Transaction } from '../../lib/etm/types'
@@ -292,6 +294,7 @@ export default function ForecastPanel({
                 : undefined
             }
             placements={placements}
+            overlayBreakdown={household.overlay}
             doubleCounts={monthWarnings}
             onPlace={(row) => placeKnownFuture(row)}
             onRemove={removeKnownFuture}
@@ -332,6 +335,13 @@ export default function ForecastPanel({
               placeKnownFuture(draft)
               setOpenCategory(null)
             }}
+            overrideType={
+              selectedCategory ? config.categoryOverrides[selectedCategory.key]?.type : undefined
+            }
+            onOverrideType={(key, type) => onConfigChange(withCategoryTypeOverride(config, key, type))}
+            onOverrideMonths={(key, months) =>
+              onConfigChange(withCategoryTypicalMonths(config, key, months))
+            }
           />
         </>
       )}

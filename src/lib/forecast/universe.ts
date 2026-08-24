@@ -5,7 +5,7 @@ import {
   normalizeTag,
 } from '../etm/tags'
 import type { Transaction } from '../etm/types'
-import type { Assignment, ForecastConfig } from './types'
+import type { Assignment, CategoryOverride, ExpenseType, ForecastConfig } from './types'
 
 export { isParentOnlyReimbursable, isReimbursableFamily, normalizeTag }
 
@@ -180,6 +180,66 @@ export function withVacationTag(
     ? config.reimbursableAllowList.filter((item) => normalizeTag(item) !== key)
     : config.reimbursableAllowList
   return { ...config, reimbursableAllowList, vacationTags }
+}
+
+const isLumpyType = (type: ExpenseType | undefined): boolean =>
+  type === 'seasonal' || type === 'predictable-annual'
+
+const isEmptyOverride = (override: CategoryOverride): boolean =>
+  override.type == null &&
+  override.amount == null &&
+  override.typicalMonths == null &&
+  !override.ignoreOutliers
+
+function withOverrideRecord(
+  config: ForecastConfig,
+  key: string,
+  override: CategoryOverride,
+): ForecastConfig {
+  const categoryOverrides = { ...config.categoryOverrides }
+  if (isEmptyOverride(override)) delete categoryOverrides[key]
+  else categoryOverrides[key] = override
+  return { ...config, categoryOverrides }
+}
+
+export function uniqueCalendarMonths(months: number[]): number[] {
+  return [...new Set(months.filter((month) => Number.isInteger(month) && month >= 1 && month <= 12))].sort(
+    (a, z) => a - z,
+  )
+}
+
+/**
+ * Persist a type override. `'auto'` clears type and typical months so
+ * classification runs again. Switching onto seasonal or annual drops any
+ * saved months so the window's present months apply until the user edits them.
+ */
+export function withCategoryTypeOverride(
+  config: ForecastConfig,
+  key: string,
+  type: ExpenseType | 'auto',
+): ForecastConfig {
+  const current: CategoryOverride = { ...(config.categoryOverrides[key] ?? {}) }
+  if (type === 'auto') {
+    delete current.type
+    delete current.typicalMonths
+    return withOverrideRecord(config, key, current)
+  }
+  const previous = current.type
+  current.type = type
+  if (!isLumpyType(type)) delete current.typicalMonths
+  else if (previous && !isLumpyType(previous)) delete current.typicalMonths
+  return withOverrideRecord(config, key, current)
+}
+
+/** Persist typical months for a seasonal or annual override. */
+export function withCategoryTypicalMonths(
+  config: ForecastConfig,
+  key: string,
+  typicalMonths: number[],
+): ForecastConfig {
+  const current: CategoryOverride = { ...(config.categoryOverrides[key] ?? {}) }
+  current.typicalMonths = uniqueCalendarMonths(typicalMonths)
+  return withOverrideRecord(config, key, current)
 }
 
 export const isUncategorizedCategory = (category: string): boolean =>

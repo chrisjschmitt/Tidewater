@@ -1,4 +1,4 @@
-import type { ExpenseType } from '../../lib/forecast/types'
+import type { ExpenseType, RemainReason } from '../../lib/forecast/types'
 
 export const TYPE_LABEL: Record<ExpenseType, string> = {
   'predictable-monthly': 'Predictable monthly',
@@ -39,6 +39,13 @@ export function seenCopy(occurrences: number, typicalMonthNames: string[]): stri
 
 export function controlWindowBadge(outside: boolean): string {
   return outside ? 'Outside ±5%' : 'Inside ±5%'
+}
+
+export function remainReasonCopy(reason: RemainReason): string {
+  if (reason === 'monthly') return 'leftover of the typical monthly amount'
+  if (reason === 'in-progress-irregular') return 'when it is present, minus spent so far'
+  if (reason === 'expected-lump') return 'usual this month, nothing posted yet'
+  return 'pinned on this month, still unpaid'
 }
 
 export function controlWindowDetail(outside: boolean, forecast: number, plan: number): string {

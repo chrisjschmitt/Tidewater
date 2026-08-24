@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import Modal from '../Modal'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
-import type { CategoryForecast, DoubleCountWarning } from '../../lib/forecast/types'
+import type { CategoryForecast, DoubleCountWarning, ExpenseType } from '../../lib/forecast/types'
 import { confidenceLabel, doubleCountCopy, seenCopy, typeLabel } from './forecastCopy'
 
 interface Props {
@@ -12,7 +12,22 @@ interface Props {
   doubleCounts: DoubleCountWarning[]
   onSelect: (key: string | null) => void
   onPin: (draft: { category: string; amount: number; recurrence: 'once' | 'annual' }) => void
+  onOverrideType: (key: string, type: ExpenseType | 'auto') => void
+  onOverrideMonths: (key: string, typicalMonths: number[]) => void
+  /** Explicit type override for the open card; omitted means History. */
+  overrideType?: ExpenseType
 }
+
+const TYPE_CHOICES: Array<[ExpenseType | 'auto', string]> = [
+  ['auto', 'History'],
+  ['predictable-monthly', 'Monthly'],
+  ['variable-monthly', 'Variable'],
+  ['predictable-annual', 'Annual'],
+  ['seasonal', 'Seasonal'],
+  ['irregular', 'Irregular'],
+]
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export default function ForecastCategories({
   categories,
@@ -21,8 +36,17 @@ export default function ForecastCategories({
   doubleCounts,
   onSelect,
   onPin,
+  onOverrideType,
+  onOverrideMonths,
+  overrideType,
 }: Props) {
   if (categories.length === 0) return null
+
+  const subtitle = selected
+    ? selected.overridden
+      ? `${typeLabel(selected.type, selected.lowSample)} · set by you`
+      : typeLabel(selected.type, selected.lowSample)
+    : undefined
 
   return (
     <>
@@ -46,12 +70,15 @@ export default function ForecastCategories({
                   <span className="block truncate text-sm font-medium text-ink-900">{category.label}</span>
                   <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
                     <Badge>{typeLabel(category.type, category.lowSample)}</Badge>
+                    {category.overridden && <Badge quiet>set by you</Badge>}
                     {category.lowSample && <Badge quiet>low sample</Badge>}
-                    {category.typicalMonthNames.length > 0 && category.type !== 'predictable-monthly' && category.type !== 'variable-monthly' && (
-                      <span className="text-[11px] text-ink-400">
-                        usually {category.typicalMonthNames.join(', ')}
-                      </span>
-                    )}
+                    {category.typicalMonthNames.length > 0 &&
+                      category.type !== 'predictable-monthly' &&
+                      category.type !== 'variable-monthly' && (
+                        <span className="text-[11px] text-ink-400">
+                          usually {category.typicalMonthNames.join(', ')}
+                        </span>
+                      )}
                   </span>
                 </span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-700">
@@ -64,18 +91,16 @@ export default function ForecastCategories({
         </ul>
       </section>
 
-      <Modal
-        open={selected !== null}
-        onClose={() => onSelect(null)}
-        title={selected?.label ?? ''}
-        subtitle={selected ? typeLabel(selected.type, selected.lowSample) : undefined}
-      >
+      <Modal open={selected !== null} onClose={() => onSelect(null)} title={selected?.label ?? ''} subtitle={subtitle}>
         {selected && (
           <CategoryDetail
             category={selected}
             focusedMonth={focusedMonth}
             doubleCounts={doubleCounts}
             onPin={onPin}
+            overrideType={overrideType}
+            onOverrideType={(type) => onOverrideType(selected.key, type)}
+            onOverrideMonths={(months) => onOverrideMonths(selected.key, months)}
           />
         )}
       </Modal>
@@ -94,11 +119,17 @@ function CategoryDetail({
   focusedMonth,
   doubleCounts,
   onPin,
+  overrideType,
+  onOverrideType,
+  onOverrideMonths,
 }: {
   category: CategoryForecast
   focusedMonth: string
   doubleCounts: DoubleCountWarning[]
   onPin: (draft: { category: string; amount: number; recurrence: 'once' | 'annual' }) => void
+  overrideType?: ExpenseType
+  onOverrideType: (type: ExpenseType | 'auto') => void
+  onOverrideMonths: (typicalMonths: number[]) => void
 }) {
   const defaultAmount = pinDefault(category)
   const [amount, setAmount] = useState(defaultAmount)
@@ -112,11 +143,21 @@ function CategoryDetail({
     doubleCounts.some(
       (warning) => warning.month === focusedMonth && warning.category === category.label,
     )
+  const selectedType: ExpenseType | 'auto' = overrideType ?? 'auto'
+  const lumpy = category.type === 'seasonal' || category.type === 'predictable-annual'
+  const historyDiffers = category.type !== category.suggestedType
 
   useEffect(() => {
     setAmount(defaultAmount)
     setRecurrence('once')
   }, [category.key, defaultAmount])
+
+  const toggleMonth = (month: number) => {
+    const next = category.typicalMonths.includes(month)
+      ? category.typicalMonths.filter((value) => value !== month)
+      : [...category.typicalMonths, month]
+    onOverrideMonths(next)
+  }
 
   return (
     <div className="space-y-4 text-sm text-ink-500">
@@ -124,7 +165,7 @@ function CategoryDetail({
         {confidenceLabel(category.confidence)}. {seenCopy(category.occurrences, category.typicalMonthNames)}
       </p>
 
-      {category.typicalMonthNames.length > 0 && (
+      {category.typicalMonthNames.length > 0 && !lumpy && (
         <p>
           Typical month{category.typicalMonthNames.length === 1 ? '' : 's'}:{' '}
           {category.typicalMonthNames.join(', ')}.
@@ -145,6 +186,64 @@ function CategoryDetail({
       )}
 
       {category.drift && <p>{sentenceCase(category.drift)}.</p>}
+
+      <div className="rounded-2xl bg-white/70 px-4 py-4">
+        <p className="text-[11px] uppercase tracking-wider text-ink-400">How this line is forecast</p>
+        <p className="mt-1">
+          {historyDiffers
+            ? `History called this ${typeLabel(category.suggestedType, category.lowSample).toLowerCase()}. Seasonal and annual land only on the months you check — they do not add on top of the monthly plan.`
+            : 'Seasonal and annual land only on the months you check. That does not add on top of the monthly plan, and it leaves the overlay if the line was irregular.'}
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-1">
+          {TYPE_CHOICES.map(([id, label]) => {
+            const active = selectedType === id
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onOverrideType(id)}
+                className={
+                  active
+                    ? 'rounded-full bg-tide-600 px-3 py-1.5 text-xs font-medium text-white'
+                    : 'btn-quiet text-xs'
+                }
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        {lumpy && (
+          <div className="mt-3">
+            <p className="text-[11px] uppercase tracking-wider text-ink-400">Typical months</p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {MONTH_SHORT.map((label, index) => {
+                const month = index + 1
+                const active = category.typicalMonths.includes(month)
+                return (
+                  <button
+                    key={month}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={label}
+                    onClick={() => toggleMonth(month)}
+                    className={
+                      active
+                        ? 'rounded-full bg-tide-600 px-2.5 py-1 text-xs font-medium text-white'
+                        : 'btn-quiet text-xs'
+                    }
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="rounded-2xl bg-white/70 px-4 py-4">
         <p className="text-[11px] uppercase tracking-wider text-ink-400">Pin as known future</p>

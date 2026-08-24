@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.4 — 2026-08-24
+
+### Added
+- Future month cards list what makes up the Forecast column (every-month lines, then seasonal and annual that land that month, then pins), and a collapsed remainder list for what is still in the overlay.
+
+## 0.4.3 — 2026-08-24
+
+### Added
+- Forecast category cards can override type, and typical months when the line is seasonal or annual, so a cost like gas can sit on the calendar without pinning it on top of the plan.
+
+## 0.4.2 — 2026-08-24
+
+### Changed
+- Current-month forecast finishes established irregular lines toward “when it is present” once they have posted this month, and lists those leftovers on the month card.
+
 ## 0.4.1 — 2026-08-24
 
 ### Changed

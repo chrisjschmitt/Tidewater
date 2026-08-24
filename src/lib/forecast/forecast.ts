@@ -15,12 +15,14 @@ import type {
   CurrentMonthView,
   DoubleCountWarning,
   ForecastConfig,
+  ForecastMix,
   ForecastResult,
   HouseholdForecast,
   KnownFuture,
   MonthCategoryAmount,
   MonthPoint,
   OverlayBreakdown,
+  RemainLine,
   SeriesId,
   SetAside,
   VarianceRow,
@@ -241,6 +243,48 @@ function placedAmount(
   return { amount: 0, source: 'none' }
 }
 
+const pinTotalFor = (placements: KnownFuture[], key: string): number =>
+  placements.reduce((sum, future) => (nameKey(future.category) === key ? sum + future.amount : sum), 0)
+
+const byAmount = (a: { amount: number; label: string }, z: { amount: number; label: string }) =>
+  Math.abs(z.amount) - Math.abs(a.amount) || a.label.localeCompare(z.label)
+
+/**
+ * Split a month’s Forecast column into every-month lines, lumpy lines that
+ * land this month, and pins. Pins that sit on a category already in the
+ * calendar are taken off that line so the three groups still add to the column.
+ */
+export function forecastMix(point: MonthPoint, placements: KnownFuture[] = []): ForecastMix {
+  const monthly: ForecastMix['monthly'] = []
+  const lumpy: ForecastMix['lumpy'] = []
+  for (const row of point.byCategory) {
+    const pin = pinTotalFor(placements, row.key)
+    const amount = roundCents(row.forecast - pin)
+    if (Math.abs(amount) < 0.005) continue
+    const line = { key: row.key, label: row.label, amount, source: row.source }
+    if (row.source === 'monthly') monthly.push(line)
+    else if (row.source === 'annual' || row.source === 'seasonal') lumpy.push(line)
+  }
+  monthly.sort(byAmount)
+  lumpy.sort(byAmount)
+  const pinned = placements
+    .filter((future) => future.amount !== 0)
+    .map((future) => ({
+      key: nameKey(future.category),
+      label: future.category,
+      amount: future.amount,
+      source: 'known-future' as const,
+      placementId: future.id,
+      recurrence: future.recurrence,
+    }))
+  const total = roundCents(
+    monthly.reduce((sum, line) => sum + line.amount, 0) +
+      lumpy.reduce((sum, line) => sum + line.amount, 0) +
+      pinned.reduce((sum, line) => sum + line.amount, 0),
+  )
+  return { monthly, lumpy, pinned, total }
+}
+
 function topIrregularMonths(
   categories: CategoryForecast[],
   series: CategorySeries[],
@@ -290,12 +334,23 @@ function overlayFor(
     }
   }
   const unplaced = Math.max(0, afterOutliers - placedNextYear)
+  const lines = categories
+    .filter((category) => category.type === 'irregular')
+    .map((category) => ({
+      key: category.key,
+      label: category.label,
+      share: n > 0 ? roundCents(category.windowTotal / n) : 0,
+      lowSample: category.lowSample,
+    }))
+    .filter((line) => line.share !== 0)
+    .sort((a, z) => Math.abs(z.share) - Math.abs(a.share) || a.label.localeCompare(z.label))
   return {
     irregularWindowTotal: roundCents(irregularTotal),
     placedNextYear: roundCents(placedNextYear),
     unplaced: roundCents(unplaced),
     monthly: n > 0 ? roundCents(unplaced / n) : 0,
     excludedOutliers: excludedOutliers.map((item) => ({ ...item, amount: roundCents(item.amount) })),
+    lines,
   }
 }
 
@@ -468,13 +523,33 @@ function currentMonthView(args: {
   const byKey = new Map(series.map((item) => [item.key, item]))
   const actualToDate = totalInMonth(actuals, month)
   const postedTypicalKeys: string[] = []
-  let remain = 0
+  const remainByKey = new Map<string, RemainLine>()
   let remainHigh = 0
+
+  const consider = (line: RemainLine) => {
+    const remainAmt = roundCents(Math.max(0, line.remain))
+    if (remainAmt <= 0) return
+    const next: RemainLine = {
+      ...line,
+      typical: roundCents(line.typical),
+      actual: roundCents(line.actual),
+      remain: remainAmt,
+    }
+    const prev = remainByKey.get(line.key)
+    if (!prev || next.remain > prev.remain) remainByKey.set(line.key, next)
+  }
 
   for (const category of categories) {
     const actual = spendInMonth(actuals, category.key, month)
     if (category.type === 'predictable-monthly' || category.type === 'variable-monthly') {
-      remain += Math.max(0, category.likely - actual)
+      consider({
+        key: category.key,
+        label: category.label,
+        typical: category.likely,
+        actual,
+        remain: Math.max(0, category.likely - actual),
+        reason: 'monthly',
+      })
       remainHigh += Math.max(0, category.high - actual)
       continue
     }
@@ -487,21 +562,53 @@ function currentMonthView(args: {
         continue
       }
       const expected = placedAmount(category, byKey.get(category.key), lookback, month).amount
-      remain += expected
+      consider({
+        key: category.key,
+        label: category.label,
+        typical: expected,
+        actual,
+        remain: expected,
+        reason: 'expected-lump',
+      })
       remainHigh += Math.max(expected, category.high)
+      continue
+    }
+    if (category.type === 'irregular' && actual > 0 && !category.lowSample) {
+      const leftover = Math.max(0, category.meanPresent - actual)
+      consider({
+        key: category.key,
+        label: category.label,
+        typical: category.meanPresent,
+        actual,
+        remain: leftover,
+        reason: 'in-progress-irregular',
+      })
+      remainHigh += leftover
     }
   }
 
   const posted = new Set(postedTypicalKeys)
-  let knownOutstanding = 0
   for (const future of futuresFor(config, month, 'household')) {
     const key = nameKey(future.category)
     if (posted.has(key)) continue
     const actual = spendInMonth(actuals, key, month)
-    knownOutstanding += Math.max(0, future.amount - actual)
+    const leftover = Math.max(0, future.amount - actual)
+    const label = categories.find((c) => c.key === key)?.label ?? future.category
+    consider({
+      key,
+      label,
+      typical: future.amount,
+      actual,
+      remain: leftover,
+      reason: 'known-future',
+    })
+    remainHigh += leftover
   }
-  remain += knownOutstanding
-  remainHigh += knownOutstanding
+
+  const remainLines = [...remainByKey.values()].sort(
+    (a, z) => z.remain - a.remain || a.label.localeCompare(z.label),
+  )
+  const remain = remainLines.reduce((sum, line) => sum + line.remain, 0)
 
   const forecastEom = actualToDate + remain
   const plan = totalExpenses(budget) + futureTotal(config, month, 'household')
@@ -535,6 +642,7 @@ function currentMonthView(args: {
       plan,
     ),
     postedTypicalKeys,
+    remainLines,
   }
 }
 

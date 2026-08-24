@@ -11,6 +11,7 @@ import { walkForward } from '../src/lib/forecast/backtest.ts'
 import { cvOf } from '../src/lib/forecast/classify.ts'
 import {
   forecast,
+  forecastMix,
   isOutsideControlWindow,
   lookbackMonths,
 } from '../src/lib/forecast/forecast.ts'
@@ -36,6 +37,8 @@ import {
   tagSelected,
   taggingGaps,
   withAllowListedTag,
+  withCategoryTypicalMonths,
+  withCategoryTypeOverride,
   withVacationTag,
 } from '../src/lib/forecast/universe.ts'
 import { parseMonarchCsv, type MonarchRow } from '../src/lib/etm/monarch.ts'
@@ -217,6 +220,28 @@ check('March forecast includes the Dock Club annual', (march?.byCategory.find((c
 check('April does not place Dock Club', !april?.byCategory.some((c) => c.key === nameKey('Dock Club') && c.forecast > 0))
 check('December places Shore Gifts', (december?.byCategory.find((c) => c.key === nameKey('Shore Gifts'))?.forecast ?? 0) === 50)
 check('June places Shore Gifts', (june?.byCategory.find((c) => c.key === nameKey('Shore Gifts'))?.forecast ?? 0) === 50)
+const marchMix = forecastMix(march!)
+check('March mix totals the forecast column', marchMix.total === march?.calendar, `mix ${marchMix.total} calendar ${march?.calendar}`)
+check(
+  'March names Harbor Dues as every-month',
+  marchMix.monthly.some((line) => line.key === nameKey('Harbor Dues') && line.amount === 400),
+)
+check(
+  'March puts Dock Club with the lumpy lines',
+  marchMix.lumpy.some((line) => line.key === nameKey('Dock Club') && line.amount === 180),
+)
+check('April mix does not place Dock Club', forecastMix(april!).lumpy.every((line) => line.key !== nameKey('Dock Club')))
+check(
+  'overlay lines are the irregulars, smeared',
+  result.cad.household.overlay.lines.some((line) => line.key === nameKey('Engine Repair') && line.share === 100),
+)
+check(
+  'overlay line shares add to window total / N',
+  near(
+    result.cad.household.overlay.lines.reduce((sum, line) => sum + line.share, 0),
+    IRREGULAR_TOTAL / N24,
+  ),
+)
 check('irregular Engine Repair is not projected onto a future month', !result.cad.household.calendar.some((p) => p.kind === 'future' && p.byCategory.some((c) => c.key === nameKey('Engine Repair') && c.forecast > 0 && c.source !== 'known-future')))
 check('the household strip is 24 months', result.cad.household.calendar.length === 24)
 check(
@@ -268,6 +293,12 @@ check(
     !isOutsideControlWindow(decAfter?.calendar ?? 0, decAfter?.plan ?? 0),
 )
 check('December plan includes the known future', decAfter?.plan === TYPICAL + PLACE)
+const decMix = forecastMix(decAfter!, placed.knownFutures)
+check(
+  'December mix lists the pinned repair',
+  decMix.pinned.some((line) => line.key === nameKey('Engine Repair') && line.amount === PLACE),
+)
+check('December mix totals the forecast column', decMix.total === decAfter?.calendar, `mix ${decMix.total} calendar ${decAfter?.calendar}`)
 
 console.log('\n=== Current-month remainder ===')
 const current = result.cad.household.currentMonth
@@ -275,6 +306,125 @@ check('August actual to date is 1280 (dues + basket + pharmacy + posted insuranc
 check('posted Harbor Insurance is not left as a remainder', current.postedTypicalKeys.includes(nameKey('Harbor Insurance')))
 check('forecast to month-end does not double-count the posted annual', current.forecastEom === 1480, `got ${current.forecastEom}`)
 check('Market Basket remainder is 200', current.remain === 200, `got ${current.remain}`)
+check(
+  'the leftover list adds up to remain',
+  round(current.remainLines.reduce((sum, line) => sum + line.remain, 0)) === current.remain,
+)
+check('Market Basket is named in the leftover list', current.remainLines.some((line) => line.key === nameKey('Market Basket') && line.remain === 200))
+
+function fxTx(id: string, date: string, category: string, amount: number): Transaction {
+  return {
+    id,
+    date,
+    merchant: id,
+    originalStatement: '',
+    notes: '',
+    amount,
+    currency: 'CAD',
+    accountId: 'cad',
+    monarchAccount: '',
+    category,
+    groupId: groupForCategory(category),
+    internal: false,
+    tags: [],
+    owner: 'Sam',
+    reviewed: true,
+    source: 'monarch',
+    importBatchId: 'fixture',
+  }
+}
+
+const coffeeHist = ['01', '02', '03', '04', '05', '06', '07'].map((mm, i) =>
+  fxTx(`coffee-${i}`, `2025-${mm}-10`, 'Pier Coffee', -100),
+)
+const withCoffee = forecast(
+  [...transactions, ...coffeeHist, fxTx('coffee-aug', '2026-08-12', 'Pier Coffee', -40)],
+  budget,
+  base,
+  ASOF,
+)
+const coffee = cat(withCoffee, 'Pier Coffee')
+const coffeeMonth = withCoffee.cad.household.currentMonth
+check('an established irregular is not low sample', coffee?.type === 'irregular' && coffee?.lowSample === false, `${coffee?.type} low=${coffee?.lowSample}`)
+check('when-present for Pier Coffee is 100', coffee?.meanPresent === 100, `${coffee?.meanPresent}`)
+check(
+  'in-progress irregular finishes toward when-present',
+  coffeeMonth.remain === 260,
+  `got ${coffeeMonth.remain}`,
+)
+check(
+  'the leftover list names the in-progress irregular',
+  coffeeMonth.remainLines.some(
+    (line) => line.key === nameKey('Pier Coffee') && line.remain === 60 && line.reason === 'in-progress-irregular',
+  ),
+)
+
+const coffeeHistoryOnly = forecast([...transactions, ...coffeeHist], budget, base, ASOF)
+check(
+  'an unposted irregular still adds no remainder',
+  coffeeHistoryOnly.cad.household.currentMonth.remain === 200,
+  `got ${coffeeHistoryOnly.cad.household.currentMonth.remain}`,
+)
+
+const withLantern = forecast(
+  [...transactions, fxTx('lan-aug', '2026-08-12', 'Lantern App', -10)],
+  budget,
+  base,
+  ASOF,
+)
+check(
+  'a low-sample irregular does not invent a remainder even if it has posted',
+  withLantern.cad.household.currentMonth.remain === 200,
+  `got ${withLantern.cad.household.currentMonth.remain}`,
+)
+
+console.log('\n=== Type override ===')
+const repairKey = nameKey('Engine Repair')
+const seasonalRepair = withCategoryTypeOverride(base, repairKey, 'seasonal')
+check(
+  'a type-only override does not freeze typical months',
+  seasonalRepair.categoryOverrides[repairKey]?.type === 'seasonal' &&
+    seasonalRepair.categoryOverrides[repairKey]?.typicalMonths == null,
+)
+const seasonalResult = forecast(transactions, budget, seasonalRepair, ASOF)
+const seasonalCat = cat(seasonalResult, 'Engine Repair')
+check(
+  'overriding irregular to seasonal uses the months it was present',
+  seasonalCat?.type === 'seasonal' &&
+    seasonalCat.suggestedType === 'irregular' &&
+    seasonalCat.overridden &&
+    seasonalCat.typicalMonths.join() === '1',
+)
+check(
+  'January then places the seasonal amount',
+  (monthPoint(seasonalResult, '2027-01')?.byCategory.find((c) => c.key === repairKey)?.forecast ?? 0) === 2400,
+)
+check(
+  'September still does not place it',
+  !monthPoint(seasonalResult, '2026-09')?.byCategory.some((c) => c.key === repairKey && c.forecast > 0),
+)
+check(
+  'the seasonal override does not raise the monthly plan',
+  monthPoint(seasonalResult, '2026-09')?.plan === TYPICAL,
+)
+check(
+  'leaving irregular shrinks the overlay by the window total',
+  near(seasonalResult.cad.household.overlay.monthly, (IRREGULAR_TOTAL - 2400) / N24),
+  `got ${seasonalResult.cad.household.overlay.monthly}`,
+)
+
+const relocated = withCategoryTypicalMonths(seasonalRepair, repairKey, [1, 6, 7, 8, 9, 10, 11, 12])
+const relocatedResult = forecast(transactions, budget, relocated, ASOF)
+check(
+  'typical-month override places the amount on those months only',
+  (monthPoint(relocatedResult, '2026-09')?.byCategory.find((c) => c.key === repairKey)?.forecast ?? 0) === 2400 &&
+    !monthPoint(relocatedResult, '2027-02')?.byCategory.some((c) => c.key === repairKey && c.forecast > 0),
+)
+check(
+  'clearing the override returns to automatic',
+  cat(forecast(transactions, budget, withCategoryTypeOverride(relocated, repairKey, 'auto'), ASOF), 'Engine Repair')
+    ?.type === 'irregular',
+)
 
 console.log('\n=== Coverage (9 of 10, vacation ignored) ===')
 check('vacation goal is matched by name', result.vacationGoal.status === 'matched')

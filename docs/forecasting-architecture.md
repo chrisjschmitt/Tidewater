@@ -87,7 +87,10 @@ New, from the forecasting spec:
    year — that remainder funds the overlay. Once the user knows it will
    be $2,000 in December, they **budget December** and the overlay
    shrinks by that amount. Predictable annuals are placed on the calendar
-   automatically; irregulars are placed by the user.
+   automatically; irregulars are placed by the user. **Exception (current
+   month only):** if an established irregular line has already posted this
+   month, finish toward “when it is present” (§7.4). That does not place
+   the line on future months.
 10. **±5% is a control window, not a claim that next month’s total can be
     predicted to that precision from history alone.** See §4.
 11. **Two series, never mixed.** Household and vacation are forecast
@@ -153,6 +156,12 @@ Forecasting is **not** a second optional module with its own key. Without
 transactions there is nothing to forecast from. A quiet empty state on the
 Forecast tab (“Import a Monarch export in Expenses first”) is enough.
 
+**Ask a question is not a second Forecast UI.** Overlay vs calendar vs
+plan (§7), household vs vacation (§5), and recommended set-aside stay
+defined and edited on this tab. When ETM is unlocked, those **Forecast
+numbers may be part of the compact chat snapshot** — totals and
+classifications, never the ledger. See `docs/etm-architecture.md` §5.1.
+
 ---
 
 ## 3. Relationship to ETM and the core budget
@@ -165,6 +174,7 @@ Forecast tab (“Import a Monarch export in Expenses first”) is enough.
 | Vacation | Configurable tag, default `Reimbursable: Vacation Account`. Never on the household allow-list. Forecast and budget it on its own card. Paid from the vacation savings goal / account, not from the monthly household plan. |
 | Internal movements | Excluded here as in ETM (`Transfer`, `Credit Card Payment`, … via `isInternalCategory`). |
 | Core `Budget` | Remains a **single typical-month plan** for household life. Forecasting does not rewrite it. Known costs are **placed on a month** (`knownFutures`). The unpredictable **overlay** is the leftover irregular mass that has not been placed yet. There is no v1 “apply to my typical month” action. |
+| Ask a question | Forecast figures (type, likely, typical months, overlay vs calendar vs plan, household vs vacation, recommended set-aside) may appear in the **compact chat snapshot** once ETM is unlocked (`docs/etm-architecture.md` §5.1). Chat reads that summary; it does not classify, place known futures, or rewrite this tab. |
 | Public build | No new compile-time flag. `__ETM_AVAILABLE__` already drops the parent bundle. |
 | Dashboard overlay | Optional later (Phase 5). First ship is the Forecast tab. Do not thread a new `DashboardForecast` type into `GroupBars` / `SummaryRing` until the engine is stable. |
 
@@ -360,6 +370,14 @@ User override: `ForecastConfig.categoryOverrides[key] = { type?, amount?,
 typicalMonths?, ignoreOutliers? }`. A type override sticks across
 reclassification. Clearing the override returns to automatic.
 
+The category drill-in on Forecast is where type and typical-month
+overrides are set. Auto classification still caps seasonal at six
+distinct calendar months; a line that shows up in eight months (gas,
+with travel holes) stays irregular until the user marks it seasonal.
+Typical months then default to the months it was actually present.
+Pins are the wrong fix for that shape: they add the cost on top of the
+monthly plan.
+
 ---
 
 ## 7. Forecast engine
@@ -461,17 +479,31 @@ As-of inside month `M`:
 - For annual/seasonal whose typical `MM` is this month and that have not
   posted yet: add the expected amount.
 - If they have already posted: remain 0 for that category (do not double
-  count).
-- Known futures in `M` still outstanding: add them.
-- Irregulars: do not invent a remainder. Unplaced irregulars sit in the
-  overlay; placed known futures in `M` still outstanding are added above.
+  count). Finishing a posted seasonal toward “when it is present” is a
+  later change, not this amendment.
+- Known futures in `M` still outstanding: add them (the larger leftover
+  wins if the same category already has a remainder).
+- Irregulars with **nothing posted yet** in `M`: do not invent a
+  remainder. They stay in the overlay until pinned.
+- Irregulars that **have already posted** in `M` and are not a low sample
+  (three or more lookback months): finish the month toward the card’s
+  “When it is present” figure (`mean_present`):
+  `remain = max(0, mean_present − actual_to_date_in_category)`.
+  One- or two-occurrence lines stay overlay-only even if something has
+  posted. This is current-month only; future calendar months still omit
+  unpinned irregulars (§7.2).
 
 `forecast_eom = actual_to_date + remain`.
 
+The current-month card lists each leftover that makes up `remain`, so
+the ±5% comparison to plan is readable: forecast to month-end is actual
+plus these lines, not a silent total.
+
 Compare `forecast_eom` to this month’s **plan** (typical month + known
 futures in `M`). If outside ±5%, list the categories that contribute most
-to the gap. The residual overlay is shown beside the plan, not added into
-December once December’s repairs have been placed.
+to the gap (plan vs what the calendar would place — a different list).
+The residual overlay is shown beside the plan, not added into December
+once December’s repairs have been placed.
 
 ### 7.5 Inflation (spec open question — recommended default)
 
@@ -608,6 +640,16 @@ own as-of (today) plus the window toggle.
 - Quiet note of the recommended set-aside and whether this month is lumpy
   relative to it
 
+### Future month card
+
+- Plan, Forecast, Residual overlay (not added into the column)
+- **What this forecast is:** every-month lines, then seasonal / annual
+  lines whose typical months include this one, then pins. The three
+  groups add to the Forecast figure.
+- **What is still unplaced** (collapsed): the irregular / emerging
+  shares that make the overlay. Same remainder on every month; not in
+  the column.
+
 ### Calendar / timeline
 
 A 24-column strip: previous 12 full months + next 12.
@@ -645,8 +687,9 @@ On the Forecast tab, not buried:
 
 ### Category drill-in
 
-Type, confidence, typical months, 12 vs 24 averages, override controls,
-“pin as known future.”
+Type, confidence, typical months, 12 vs 24 averages, type override
+(History / monthly / variable / annual / seasonal / irregular), typical-month
+toggles when the line is seasonal or annual, and “pin as known future.”
 
 ### Funded goal status
 
@@ -784,6 +827,8 @@ the repo. Never default this path to the iCloud export in committed code.
 - No claim that next month’s household total is knowable to ±5% from
   history, or that a goal is 100% certain.
 - No transaction-level import of its own.
+- No second Forecast surface in chat. Compact snapshot only; see
+  `docs/etm-architecture.md` §5.1.
 - No placing irregular repairs onto a future calendar month without the
   user pinning them — and no leaving the overlay unchanged after they do.
 - Do not finish ETM Phase 5 as a side quest; forecasting may *read*
@@ -1005,7 +1050,7 @@ that already exist.
   miss — vacation card already asserts the pause)
 - Stored snapshot vs reconstructed labelled correctly
 - `npm run typecheck` and `npm run check:forecast` pass
-- `APP_VERSION` matches `package.json` (`0.4.0`)
+- `APP_VERSION` matches `package.json`
   *(Met: snapshot AES-GCM round-trip and stored-vs-reconstructed labels in
   `check:forecast`; coverage 9-of-10 and vacation pause already asserted.)*
 
@@ -1036,6 +1081,8 @@ vacation and an allow-listed healthcare sub-tag — this document already
 says vacation wins).
 
 Settled: ETM-gated; no second key; irregulars off the calendar until
-placed; placements shrink the overlay; vacation is a separate series;
-coverage target 90%; inflation default 0%; ±5% is the control window;
-CAD/USD never mixed; snapshots for honest month-end variance.
+placed, except an in-progress current month may finish toward
+`mean_present` (§7.4); placements shrink the overlay; vacation is a
+separate series; coverage target 90%; inflation default 0%; ±5% is the
+control window; CAD/USD never mixed; snapshots for honest month-end
+variance.

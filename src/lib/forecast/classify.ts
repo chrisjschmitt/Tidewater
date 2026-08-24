@@ -237,6 +237,7 @@ export function classifyCategory(
     key: series.key,
     label: series.label,
     type,
+    suggestedType: autoType,
     confidence: confidenceFor(type, occurrences, cv, cycle),
     overridden: Boolean(override?.type || override?.amount != null || override?.typicalMonths),
     occurrences,

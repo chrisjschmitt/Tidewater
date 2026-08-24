@@ -122,6 +122,8 @@ export interface CategoryForecast {
   key: string
   label: string
   type: ExpenseType
+  /** Automatic classification before any type override. */
+  suggestedType: ExpenseType
   confidence: Confidence
   overridden: boolean
   occurrences: number
@@ -177,12 +179,38 @@ export interface MonthPoint {
   variances: VarianceRow[]
 }
 
+export interface OverlayLine {
+  key: string
+  label: string
+  /** This line’s smear: window total / N. */
+  share: number
+  lowSample: boolean
+}
+
 export interface OverlayBreakdown {
   irregularWindowTotal: number
   placedNextYear: number
   unplaced: number
   monthly: number
   excludedOutliers: Array<{ key: string; month: string; amount: number }>
+  /** Irregular / emerging lines that feed the overlay, before pins and outlier cuts. */
+  lines: OverlayLine[]
+}
+
+export interface ForecastMixLine {
+  key: string
+  label: string
+  amount: number
+  source: MonthCategoryAmount['source']
+  placementId?: string
+  recurrence?: KnownFuture['recurrence']
+}
+
+export interface ForecastMix {
+  monthly: ForecastMixLine[]
+  lumpy: ForecastMixLine[]
+  pinned: ForecastMixLine[]
+  total: number
 }
 
 export interface SetAside {
@@ -194,6 +222,18 @@ export interface SetAside {
   overlay: number
   buffer: number
   windowLabel: string
+}
+
+export type RemainReason = 'monthly' | 'in-progress-irregular' | 'expected-lump' | 'known-future'
+
+/** One leftover that makes up current-month `remain`. */
+export interface RemainLine {
+  key: string
+  label: string
+  typical: number
+  actual: number
+  remain: number
+  reason: RemainReason
 }
 
 export interface CurrentMonthView {
@@ -209,6 +249,7 @@ export interface CurrentMonthView {
   variances: VarianceRow[]
   /** Categories whose typical month is this one and that have already posted. */
   postedTypicalKeys: string[]
+  remainLines: RemainLine[]
 }
 
 export interface HouseholdForecast {
