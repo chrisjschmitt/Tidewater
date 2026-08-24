@@ -3,7 +3,6 @@ import ManualEntryForm from './ManualEntryForm'
 import { GROUPS, GROUP_BY_ID } from '../../lib/categories'
 import {
   filterTransactions,
-  isReimbursable,
   negate,
   noFilters,
   presentIn,
@@ -11,6 +10,7 @@ import {
   type Money,
   type TransactionFilters,
 } from '../../lib/etm/aggregate'
+import { reimbursableChip } from '../../lib/etm/tags'
 import { amountIn } from '../../lib/etm/format'
 import { createManualTransaction } from '../../lib/etm/manual'
 import { periodLabel, type Period } from '../../lib/etm/period'
@@ -200,7 +200,9 @@ export default function TransactionsPanel({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-sand-200">
-                  {rows.slice(0, shown).map((t) => (
+                  {rows.slice(0, shown).map((t) => {
+                    const heldOut = reimbursableChip(t, reimbursableTag)
+                    return (
                     <tr key={t.id} className="transition hover:bg-sand-100/50">
                       <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-xs text-ink-500">
                         {t.date}
@@ -210,7 +212,7 @@ export default function TransactionsPanel({
                           {t.merchant || t.originalStatement || t.category}
                           {t.source === 'manual' && <Tag>Cash</Tag>}
                           {t.internal && <Tag>Internal</Tag>}
-                          {isReimbursable(t, reimbursableTag) && <Tag>Reimbursable</Tag>}
+                          {heldOut && <Tag>{heldOut}</Tag>}
                         </span>
                         {(t.notes || t.tags.length > 0) && (
                           <span className="block truncate text-xs text-ink-400">
@@ -247,7 +249,8 @@ export default function TransactionsPanel({
                         )}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

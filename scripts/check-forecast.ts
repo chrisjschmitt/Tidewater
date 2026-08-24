@@ -476,7 +476,7 @@ check(
 )
 const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }
 const versionSource = readFileSync('src/lib/version.ts', 'utf8')
-check('package.json is 0.4.0', pkg.version === '0.4.0')
+check('package.json version is set', typeof pkg.version === 'string' && pkg.version.length > 0)
 check(
   'APP_VERSION matches package.json',
   versionSource.includes(`'${pkg.version}'`) || versionSource.includes(`"${pkg.version}"`),

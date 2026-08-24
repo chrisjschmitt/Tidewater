@@ -339,10 +339,12 @@ export default function ForecastPanel({
       <section className="card p-6">
         <h2 className="text-base font-semibold tracking-tight text-ink-900">What counts as household</h2>
         <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-          The Budget tab still holds every reimbursable-tagged row out of family-budget actuals.
-          Forecasting is different on purpose: allow-listed sub-tags (healthcare, capital, annual
-          fees) are household cash you still need on hand. Vacation is its own series, never mixed
-          in. Everything else reimbursable stays out of both.
+          The Budget tab holds every row in the reimbursable family out of
+          family-budget actuals — the generic prefix or any `Reimbursable: …`
+          sub-tag. Forecasting is different on purpose: allow-listed sub-tags
+          (healthcare, capital, annual fees) are household cash you still need on
+          hand. Vacation is its own series, never mixed in. Everything else
+          reimbursable stays out of both.
         </p>
 
         <TagChecklist

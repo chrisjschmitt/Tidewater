@@ -1,4 +1,5 @@
 import { addTo, bucketLabel, bucketOf, isReimbursable, zeroMoney } from './aggregate'
+import { isParentOnlyReimbursable } from './tags'
 import { bucketName, owedBy, type EtmConfig } from './config'
 import { includes, monthPeriod } from './period'
 import type {
@@ -328,14 +329,16 @@ export interface Untidy {
   uncategorized: Transaction[]
   /** Spending on a card claims usually come from, but never tagged as owed. */
   untaggedCandidates: Transaction[]
+  /** Still on the generic parent tag, with no `Parent: …` sub-tag. */
+  parentOnly: Transaction[]
   unreviewed: number
 }
 
 /**
  * What the month is still missing. The candidates are the useful half: a
  * purchase on an account tracked only for reimbursement that carries no
- * reimbursable tag is either a forgotten tag or a genuine personal expense,
- * and only the user knows which.
+ * reimbursable family tag (`Reimbursable` or `Reimbursable: …`) is either a
+ * forgotten tag or a genuine personal expense, and only the user knows which.
  *
  * Which accounts those are is inferred rather than configured, because being
  * kept out of the family budget does not on its own mean claims happen there
@@ -362,6 +365,7 @@ export function findUntidy(
   )
   const uncategorized: Transaction[] = []
   const untaggedCandidates: Transaction[] = []
+  const parentOnly: Transaction[] = []
   let unreviewed = 0
 
   for (const transaction of transactions) {
@@ -377,8 +381,11 @@ export function findUntidy(
     ) {
       untaggedCandidates.push(transaction)
     }
+    if (isParentOnlyReimbursable(transaction.tags, config.reimbursableTag)) {
+      parentOnly.push(transaction)
+    }
     if (!transaction.reviewed) unreviewed++
   }
 
-  return { uncategorized, untaggedCandidates, unreviewed }
+  return { uncategorized, untaggedCandidates, parentOnly, unreviewed }
 }

@@ -88,9 +88,9 @@ export default function ReimbursablePanel({
 
         <p className="mt-3 text-xs text-ink-400">
           {reimbursable.count.toLocaleString()} transaction
-          {reimbursable.count === 1 ? '' : 's'} tagged “{tag}” in this period.
-          Budget spending plus reimbursable spending is everything that left your
-          accounts.
+          {reimbursable.count === 1 ? '' : 's'} in the “{tag}” family this period
+          — the generic tag, or any “{tag}: …” sub-tag. Budget spending plus
+          reimbursable spending is everything that left your accounts.
         </p>
 
         <TagSetting config={config} onChange={onConfigChange} />
@@ -99,9 +99,10 @@ export default function ReimbursablePanel({
       <section className="card p-6">
         <h2 className="text-base font-semibold tracking-tight text-ink-900">By bucket</h2>
         <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-          A bucket is whatever else the transaction is tagged with. Something
-          carrying two tags is counted once, under both names together, so these
-          always add up to the total above.
+          A bucket is the name after the colon — Healthcare Account, Vacation
+          Account — plus any other tags on the row. Two names on one row are counted
+          once, under both together, so these always add up to the total above.
+          A leftover generic tag with no name after it lands in No bucket.
         </p>
 
         <div className="mt-4 space-y-1">
@@ -235,7 +236,7 @@ function TagSetting({
         }}
         className="mt-3 text-xs text-tide-700 underline underline-offset-2"
       >
-        Use a different tag
+        Use a different prefix
       </button>
     )
   }
@@ -249,7 +250,7 @@ function TagSetting({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <label className="text-xs text-ink-500" htmlFor="reimbursable-tag">
-        Tag that marks a reimbursable
+        Tag family prefix
       </label>
       <input
         id="reimbursable-tag"

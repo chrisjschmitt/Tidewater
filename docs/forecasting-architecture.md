@@ -168,13 +168,14 @@ Forecast tab (“Import a Monarch export in Expenses first”) is enough.
 | Public build | No new compile-time flag. `__ETM_AVAILABLE__` already drops the parent bundle. |
 | Dashboard overlay | Optional later (Phase 5). First ship is the Forecast tab. Do not thread a new `DashboardForecast` type into `GroupBars` / `SummaryRing` until the engine is stable. |
 
-Existing ETM `isReimbursable` matches the **parent** tag exactly (default
-`"Reimbursable"`). The 24-month export uses both that parent tag *and*
-`Reimbursable: …` sub-tags on the same rows. Forecasting must match the
-**family**: a tag equal to the parent, or a tag that starts with
-`parent + ":"` after whitespace-normalising. Do not change ETM’s parent-tag
-match as a side effect; add family matching in the forecast engine (and a
-shared helper only if ETM is updated in a later, explicit change).
+ETM and forecasting both match the reimbursable **family**: a tag equal
+to the configured prefix (default `"Reimbursable"`), or a tag that starts
+with `prefix + ":"` after whitespace-normalising. A row tagged only
+`Reimbursable: Healthcare Account` is held out of ETM budget actuals and
+classified by Forecast the same way as a row that also carried the parent
+tag. The parent tag alone (no sub-tag) is still held out of the budget and
+excluded from both forecast series; Month-end tidy and the Forecast gap
+copy surface those leftovers so they can be retagged.
 
 ---
 
@@ -1013,7 +1014,7 @@ that already exist.
 | Risk / open item | Handling |
 | --- | --- |
 | Next-month total ±5% is not a realistic model claim | §4; do not chase it |
-| Reimbursable sub-tag vs parent tag | Family match in FM only; three-way split in §5 |
+| Reimbursable sub-tag vs parent tag | Family match in ETM and FM; three-way split in §5 |
 | Vacation-tagged spend | Own series; never household; contribution paused in trip months |
 | Core budget is one typical month | Known futures on the month they hit; overlay = unplaced remainder |
 | 9-of-10 funding | P90 / 90% coverage on household goals; vacation judged separately |

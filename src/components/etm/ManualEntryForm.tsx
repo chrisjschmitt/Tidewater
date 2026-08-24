@@ -185,7 +185,7 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
             <span className="label mb-1.5">Tags</span>
             <input
               className="field"
-              placeholder="Reimbursable"
+              placeholder="Reimbursable: Healthcare Account"
               value={tagText}
               onChange={(e) => setTagText(e.target.value)}
             />

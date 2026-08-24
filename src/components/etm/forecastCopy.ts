@@ -70,7 +70,7 @@ export function taggingGapsCopy(uncategorized: number, parentOnly: number): stri
   }
   if (parentOnly > 0) {
     parts.push(
-      `${parentOnly} reimbursable ${parentOnly === 1 ? 'row has' : 'rows have'} only the parent tag, so ${parentOnly === 1 ? 'it stays' : 'they stay'} out of both household and vacation`,
+      `${parentOnly} reimbursable ${parentOnly === 1 ? 'row still has' : 'rows still have'} only the generic parent tag, so ${parentOnly === 1 ? 'it stays' : 'they stay'} out of both household and vacation until ${parentOnly === 1 ? 'it is' : 'they are'} retagged as Parent: …`,
     )
   }
   if (parts.length === 0) return ''

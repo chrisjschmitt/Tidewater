@@ -269,19 +269,21 @@ Five rules settle what the numbers mean, and every view obeys them:
   on the category it came from rather than reading as income. This is the
   treatment the budget importer already gives them.
 - **Reimbursable transactions are not family-budget spending** (decided
-  with the owner, Aug 2026). A transaction carrying the reimbursable tag
-  (configurable, default "Reimbursable") is an advance repaid at month end;
-  the repayment arrives as an internal transfer, so counting the purchase
+  with the owner, Aug 2026). A transaction in the reimbursable family
+  (configurable prefix, default "Reimbursable") is an advance repaid at
+  month end: either that tag itself or any `Reimbursable: …` sub-tag. The
+  generic parent is not required once a specific sub-tag is present. The
+  repayment arrives as an internal transfer, so counting the purchase
   would overstate spending with no offsetting inflow. Reimbursables are
   excluded from budget-vs-actual everywhere (bars, ring, drill-ins) and
   counted instead in a per-bucket "Reimbursable" section of the Expenses
-  area (bucket = the transaction's other tags), which is also the input to
-  the reimbursement pivot. They stay fully visible, with a marker,
-  in the Transactions view and exports, and the tie-out holds: total out =
-  budget spending + reimbursable spending. They are counted on **every**
-  account, including one flagged as kept out of the family budget: that
-  flag suppresses budget spending only, since such an account is usually a
-  personal card tracked precisely so its advances can be claimed back.
+  area (bucket = the name after the colon, plus any other tags), which is
+  also the input to the reimbursement pivot. They stay fully visible, with a
+  marker, in the Transactions view and exports, and the tie-out holds:
+  total out = budget spending + reimbursable spending. They are counted on
+  **every** account, including one flagged as kept out of the family budget:
+  that flag suppresses budget spending only, since such an account is usually
+  a personal card tracked precisely so its advances can be claimed back.
 
 Two details the reimbursable rule left open, settled with the owner in
 building it. A bucket is only obvious when there is exactly one other tag, so
@@ -355,15 +357,15 @@ arbitrary: the claims go out *before* the month ends so the repayments land
 inside it, while the balances can only be recorded once it has.
 
 1. **Tidy** — load the latest Monarch export, then surface uncategorized
-   transactions and untagged candidates for the reimbursable tag. This
-   comes first because the next step is only as good as the tags under it.
-   An account qualifies as a candidate source only once it has actually
-   carried the tag: being kept out of the family budget does not on its own
-   mean claims happen there (a separate business account is out of the
-   budget too), and asking about every one of its expenses would be noise
-   forever.
+   transactions, leftover generic parent tags (no `Reimbursable: …` sub-tag),
+   and untagged candidates for the reimbursable family. This comes first
+   because the next step is only as good as the tags under it. An account
+   qualifies as a candidate source only once it has actually carried a family
+   tag: being kept out of the family budget does not on its own mean claims
+   happen there (a separate business account is out of the budget too), and
+   asking about every one of its expenses would be noise forever.
 2. **Reimbursements** — the pivot the user currently builds by hand in a
-   spreadsheet: all transactions carrying the reimbursable tag, grouped by
+   spreadsheet: all transactions in the reimbursable family, grouped by
    derived bucket, subtotaled per currency, and expressed as an amount to
    ask a named person for. Done a business day or so before month end.
    Recorded transfers are noted on the reconciliation record.

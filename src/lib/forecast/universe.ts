@@ -1,27 +1,18 @@
 import { isInternalCategory, looksLikeIncome } from '../categories'
+import {
+  isParentOnlyReimbursable,
+  isReimbursableFamily,
+  normalizeTag,
+} from '../etm/tags'
 import type { Transaction } from '../etm/types'
 import type { Assignment, ForecastConfig } from './types'
+
+export { isParentOnlyReimbursable, isReimbursableFamily, normalizeTag }
 
 export const DEFAULT_REIMBURSABLE_PARENT = 'Reimbursable'
 
 /** Category pairing, same rule ETM uses for plan vs actual. */
 export const nameKey = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ')
-
-/**
- * Family matching: case, spacing, and extra spaces around `:` are ignored.
- * Forecasting matches the parent *or* `parent: …` sub-tags; ETM still matches
- * the parent tag only.
- */
-export const normalizeTag = (tag: string): string =>
-  tag.trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*:\s*/g, ':')
-
-export const isReimbursableFamily = (tags: string[], parent: string): boolean => {
-  const p = normalizeTag(parent)
-  return tags.some((tag) => {
-    const t = normalizeTag(tag)
-    return t === p || t.startsWith(`${p}:`)
-  })
-}
 
 export const hasMatchingTag = (tags: string[], wanted: string[]): boolean => {
   const needles = wanted.map(normalizeTag)
@@ -194,16 +185,6 @@ export function withVacationTag(
 export const isUncategorizedCategory = (category: string): boolean =>
   !category.trim() || /^uncategorized$/i.test(category.trim())
 
-/** Reimbursable family, but no `Parent: …` sub-tag — only the parent itself. */
-export function isParentOnlyReimbursable(
-  tags: string[],
-  parent: string = DEFAULT_REIMBURSABLE_PARENT,
-): boolean {
-  if (!isReimbursableFamily(tags, parent)) return false
-  const prefix = `${normalizeTag(parent)}:`
-  return !tags.some((tag) => normalizeTag(tag).startsWith(prefix))
-}
-
 export interface TaggingGaps {
   uncategorizedHousehold: number
   parentOnlyReimbursable: number
@@ -212,7 +193,7 @@ export interface TaggingGaps {
 /**
  * Companion counts for the Forecast tab — not a second tidy workflow.
  * Household Uncategorized (no reimbursable family tag) and reimbursable
- * rows that carry only the parent tag.
+ * rows that still carry only the generic parent tag.
  */
 export function taggingGaps(
   transactions: Transaction[],

@@ -24,6 +24,7 @@ import {
   sumOf,
   type BudgetComparison,
 } from '../src/lib/etm/aggregate.ts'
+import { bucketOf } from '../src/lib/etm/tags.ts'
 import {
   monthKeys,
   monthPeriod,
@@ -395,7 +396,42 @@ check(
 )
 
 check('the marker is matched however it is typed', isReimbursable({ tags: ['  reimbursABLE '] } as never, 'Reimbursable'))
+check(
+  'a sub-tag alone is enough',
+  isReimbursable({ tags: ['Reimbursable: Healthcare Account'] } as never, 'Reimbursable'),
+)
+check(
+  'spacing around the colon is ignored',
+  isReimbursable({ tags: ['reimbursable :  annual fees account'] } as never, 'Reimbursable'),
+)
+check('an unrelated tag is not', !isReimbursable({ tags: ['Travel'] } as never, 'Reimbursable'))
 check('a bucket never includes the marker itself', !BUCKETS.some((b) => b.tags.some((t) => t.toLowerCase() === 'reimbursable')))
+check(
+  'the bucket is the name after the colon',
+  bucketOf({ tags: ['Reimbursable: Eric Condo Costs'] } as never, 'Reimbursable').join() ===
+    'Eric Condo Costs',
+)
+check(
+  'the older parent-plus-name tagging still buckets the name',
+  bucketOf({ tags: ['Reimbursable', 'Alex'] } as never, 'Reimbursable').join() === 'Alex',
+)
+
+const subOnly = tx('sub-only', '2025-12-19', 'acct-everyday', -50, {
+  tags: ['Reimbursable: Healthcare Account'],
+  category: 'Pharmacy',
+  groupId: 'health',
+})
+const withSubTag = aggregate([...all, subOnly], december)
+check(
+  'a Reimbursable: … tag holds the row out without the parent',
+  withSubTag.reimbursable.count === dec.reimbursable.count + 1,
+  `${withSubTag.reimbursable.count}`,
+)
+check(
+  'and the bucket is named for the account',
+  withSubTag.reimbursable.buckets.some((b) => b.label === 'Healthcare Account' && b.count === 1),
+  withSubTag.reimbursable.buckets.map((b) => b.label).join(', '),
+)
 
 // The tag is the user's to choose, so nothing may assume the default.
 const renamed = aggregate(all, december, { reimbursableTag: 'Healthcare' })
@@ -759,6 +795,11 @@ console.log('\n=== Tidying up ===')
 const untidy = findUntidy(all, accounts, '2025-12', DEFAULT_CONFIG)
 check('nothing in the fixture is uncategorized', untidy.uncategorized.length === 0, `${untidy.uncategorized.length}`)
 check(
+  'generic parent-only tags are offered for a specific sub-tag',
+  untidy.parentOnly.length === 3,
+  `${untidy.parentOnly.length}`,
+)
+check(
   'an untagged purchase on a reimbursement-only card is offered',
   untidy.untaggedCandidates.length === 1 && untidy.untaggedCandidates[0]!.merchant === 'Cloudline Software',
   untidy.untaggedCandidates.map((t) => t.merchant).join(','),
@@ -785,7 +826,7 @@ check(
 )
 
 const claimed = findUntidy(
-  [...businessRows, tx('biz3', '2025-11-20', business.id, -60, { tags: ['Reimbursable'] })],
+  [...businessRows, tx('biz3', '2025-11-20', business.id, -60, { tags: ['Reimbursable: Photography'] })],
   [...accounts, business],
   '2025-12',
   DEFAULT_CONFIG,

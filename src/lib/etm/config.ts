@@ -29,7 +29,7 @@ export interface AnnualEvent {
 
 export interface EtmConfig {
   version: 1
-  /** The tag that marks an advance repaid at month end. */
+  /** Family prefix: this tag, or any tag that starts with it plus a colon. */
   reimbursableTag: string
   /** How far the balances and the rows may disagree and still close a month. */
   tolerance: number

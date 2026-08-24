@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 — 2026-08-24
+
+### Changed
+- Reimbursable matching is the whole family: `Reimbursable: Healthcare Account` (and similar) is enough. The generic parent tag is no longer required, and leftover parent-only rows show up in month-end tidy.
+
 ## 0.4.0 — 2026-08-24
 
 ### Added

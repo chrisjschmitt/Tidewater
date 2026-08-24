@@ -350,7 +350,9 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
 
 function Tidy({ untidy, tag }: { untidy: ReturnType<typeof findUntidy>; tag: string }) {
   const nothing =
-    untidy.uncategorized.length === 0 && untidy.untaggedCandidates.length === 0
+    untidy.uncategorized.length === 0 &&
+    untidy.untaggedCandidates.length === 0 &&
+    untidy.parentOnly.length === 0
 
   if (nothing) {
     return (
@@ -377,11 +379,27 @@ function Tidy({ untidy, tag }: { untidy: ReturnType<typeof findUntidy>; tag: str
         </div>
       )}
 
+      {untidy.parentOnly.length > 0 && (
+        <div>
+          <p className="text-sm font-medium text-ink-900">
+            {untidy.parentOnly.length}{' '}
+            {untidy.parentOnly.length === 1 ? 'row still uses' : 'rows still use'} only the
+            generic “{tag}” tag
+          </p>
+          <p className="mb-2 text-xs text-ink-400">
+            Retag these in Monarch as “{tag}: …” for the account or person who
+            reimburses them, then import again. The generic tag by itself is not
+            enough to put them on a bucket.
+          </p>
+          <TransactionTable rows={untidy.parentOnly.slice(0, 10)} empty="" />
+        </div>
+      )}
+
       {untidy.untaggedCandidates.length > 0 && (
         <div>
           <p className="text-sm font-medium text-ink-900">
             {untidy.untaggedCandidates.length} purchase
-            {untidy.untaggedCandidates.length === 1 ? '' : 's'} with no “{tag}” tag,
+            {untidy.untaggedCandidates.length === 1 ? '' : 's'} with no “{tag}: …” tag,
             on a card you usually claim from
           </p>
           <p className="mb-2 text-xs text-ink-400">
@@ -486,7 +504,7 @@ function Pivot({
   if (rows.length === 0) {
     return (
       <p className="text-sm text-ink-500">
-        Nothing this month carries the reimbursable tag, so there is nothing to
+        Nothing this month is tagged as reimbursable, so there is nothing to
         ask anyone for.
       </p>
     )

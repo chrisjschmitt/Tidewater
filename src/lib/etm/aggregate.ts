@@ -3,6 +3,9 @@ import type { Budget, Group, GroupId } from '../types'
 import { DEFAULT_CONFIG } from './config'
 import { includes, monthsInPeriod, type Period } from './period'
 import type { Currency, Money, Transaction } from './types'
+import { bucketLabel, bucketOf, isReimbursable, NO_BUCKET } from './tags'
+
+export { bucketLabel, bucketOf, isReimbursable, NO_BUCKET } from './tags'
 
 export type { Money }
 
@@ -48,7 +51,7 @@ export interface GroupActual {
 
 /** Reimbursable spending gathered under the tags that say who it is for. */
 export interface ReimbursableBucket {
-  /** The other tags, joined — or "No bucket" when there are none. */
+  /** The name after the colon, plus any other tags — or "No bucket". */
   label: string
   tags: string[]
   spend: Money
@@ -82,32 +85,9 @@ export interface PeriodActuals {
 export interface AggregateOptions {
   /** Accounts marked as kept out of the family budget. */
   excludeAccountIds?: Set<string>
-  /** Defaults to "Reimbursable"; the user may call it something else. */
+  /** Family prefix; matches this tag and any `prefix: …` sub-tag. */
   reimbursableTag?: string
 }
-
-export const NO_BUCKET = 'No bucket'
-
-/** Matched case- and space-insensitively, like every other name in here. */
-export const isReimbursable = (transaction: Transaction, tag: string): boolean => {
-  const wanted = normalize(tag)
-  return transaction.tags.some((t) => normalize(t) === wanted)
-}
-
-/**
- * A row's bucket is whatever else it is tagged with. Several tags are joined
- * into one bucket rather than counted under each, so the buckets always sum
- * to the reimbursable total and the tie-out holds.
- */
-export function bucketOf(transaction: Transaction, tag: string): string[] {
-  const wanted = normalize(tag)
-  return transaction.tags
-    .filter((t) => normalize(t) !== wanted && t.trim() !== '')
-    .sort((a, z) => a.localeCompare(z))
-}
-
-export const bucketLabel = (tags: string[]): string =>
-  tags.length === 0 ? NO_BUCKET : tags.join(' + ')
 
 /**
  * Categories are netted before being classified, so a refund lands back on the
