@@ -1,7 +1,7 @@
 # Forecasting Module (FM) — Systems Architecture & Implementation Plan
 
-Status: **in progress** — Phases 1–4 (§16) are built; Phase 5 is still
-proposed. `npm run typecheck` and `npm run check:forecast` both pass.
+Status: **in progress** — Phases 1–5 (§16) are built. `npm run typecheck`
+and `npm run check:forecast` both pass.
 
 Inputs: the private spec `Forecasting Module Spec.md` (iCloud
 `Tidewater/Specifications/`, gitignored if copied into `docs/`),
@@ -44,11 +44,8 @@ in code or committed docs. Tests use synthetic fixtures only.
   or `docs/Forecasting Module Spec.md`. If a backtest script accepts a file
   path, that path is local and the script prints aggregates only.
 - Implement the phases in §16 in order; verify each phase’s exit criteria
-  before starting the next. Phases 1–4 are met. **Start at Phase 5** using
-  the handoff in §16 (Phase 5). Do not reopen earlier phases unless a later
-  exit criterion proves them wrong. A fresh agent can implement Phase 5
-  from this document alone. Implementation is **Grok 4.6**; do not use
-  Fable for this phase.
+  before starting the next. Phases 1–5 are met. Do not reopen earlier
+  phases unless a later exit criterion proves them wrong.
 - Tone stays observational and abundance-minded. Forecasts inform; they
   never scold. Coming in under plan is spoken of as spare room, not as a
   failure to spend.
@@ -934,7 +931,7 @@ goal-coverage UI.
 
 Tone stays observational. Forecasts inform; they never scold.
 
-### Phase 5 — Funded goals, snapshots, month-end variance
+### Phase 5 — Funded goals, snapshots, month-end variance (implemented)
 
 **Handoff for a fresh agent (Grok 4.6).** Phases 1–4 are done.
 `npm run typecheck` and `npm run check:forecast` pass. Do not rewrite
@@ -1008,6 +1005,8 @@ that already exist.
 - Stored snapshot vs reconstructed labelled correctly
 - `npm run typecheck` and `npm run check:forecast` pass
 - `APP_VERSION` matches `package.json` (`0.4.0`)
+  *(Met: snapshot AES-GCM round-trip and stored-vs-reconstructed labels in
+  `check:forecast`; coverage 9-of-10 and vacation pause already asserted.)*
 
 ### Sequencing notes and risks
 

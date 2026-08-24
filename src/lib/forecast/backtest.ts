@@ -19,12 +19,20 @@ export interface TypeTotals {
   count: number
 }
 
+export interface WalkForwardCategory {
+  key: string
+  label: string
+  forecast: number
+  actual: number
+}
+
 export interface WalkForwardMonth {
   month: string
   actual: number
   forecast: number
   error: number
   byType: Record<ExpenseType, TypeTotals>
+  byCategory: WalkForwardCategory[]
 }
 
 export interface WalkForwardResult {
@@ -90,12 +98,34 @@ export function walkForward(
       if (!(point?.byCategory.some((row) => row.key === key))) byType[type].count++
     }
 
+    const byCategory: WalkForwardCategory[] = []
+    const seen = new Set<string>()
+    for (const row of point?.byCategory ?? []) {
+      seen.add(row.key)
+      byCategory.push({
+        key: row.key,
+        label: row.label,
+        forecast: row.forecast,
+        actual: actualByCat.get(row.key) ?? row.actual,
+      })
+    }
+    for (const [key, amount] of actualByCat) {
+      if (seen.has(key)) continue
+      byCategory.push({
+        key,
+        label: key,
+        forecast: 0,
+        actual: amount,
+      })
+    }
+
     months.push({
       month,
       actual,
       forecast: forecastTotal,
       error: actual - forecastTotal,
       byType,
+      byCategory,
     })
   }
 

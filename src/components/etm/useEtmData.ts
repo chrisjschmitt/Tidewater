@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DEFAULT_CONFIG, type EtmConfig } from '../../lib/etm/config'
-import { DEFAULT_FORECAST_CONFIG, type ForecastConfig } from '../../lib/forecast/types'
+import { today } from '../../lib/etm/period'
+import { lastFullMonth, refreshSnapshotActuals, snapshotsEqual } from '../../lib/forecast/snapshot'
+import { DEFAULT_FORECAST_CONFIG, type ForecastConfig, type ForecastSnapshot } from '../../lib/forecast/types'
 import type { ImportPlan } from '../../lib/etm/importer'
 import {
   addManualTransaction,
@@ -13,6 +15,7 @@ import {
   loadBatches,
   loadConfig,
   loadForecastConfig,
+  loadForecastSnapshot,
   loadReconciliations,
   loadTransactions,
   removeTransaction,
@@ -20,6 +23,7 @@ import {
   saveBalance,
   saveConfig,
   saveForecastConfig,
+  saveForecastSnapshot,
   saveReconciliation,
   undoBatch,
 } from '../../lib/etm/storage/repo'
@@ -41,8 +45,10 @@ export interface EtmData {
   reconciliations: ReconciliationRecord[]
   config: EtmConfig
   forecastConfig: ForecastConfig
+  lastMonthSnapshot: ForecastSnapshot | undefined
   saveSettings: (config: EtmConfig) => Promise<void>
   saveForecastSettings: (config: ForecastConfig) => Promise<void>
+  saveMonthSnapshot: (snapshot: ForecastSnapshot) => Promise<void>
   recordBalance: (snapshot: BalanceSnapshot) => Promise<void>
   removeBalance: (snapshot: BalanceSnapshot) => Promise<void>
   recordMonth: (record: ReconciliationRecord) => Promise<void>
@@ -51,6 +57,7 @@ export interface EtmData {
   months: string[]
   transactionCounts: Map<string, number>
   notice: string
+  flash: (message: string) => void
   persistAccount: (account: Account) => Promise<void>
   removeAccount: (account: Account) => Promise<void>
   applyImport: (plan: ImportPlan) => Promise<void>
@@ -71,20 +78,35 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const [reconciliations, setReconciliations] = useState<ReconciliationRecord[]>([])
   const [config, setConfig] = useState<EtmConfig>(DEFAULT_CONFIG)
   const [forecastConfig, setForecastConfig] = useState<ForecastConfig>(DEFAULT_FORECAST_CONFIG)
+  const [currentSnapshot, setCurrentSnapshot] = useState<ForecastSnapshot | undefined>()
+  const [lastMonthSnapshot, setLastMonthSnapshot] = useState<ForecastSnapshot | undefined>()
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
 
   const reload = useCallback(async () => {
-    const [nextAccounts, nextTransactions, nextBatches, nextConfig, nextForecast, nextBalances, nextRecords] =
-      await Promise.all([
-        loadAccounts(unlockedKey),
-        loadTransactions(unlockedKey),
-        loadBatches(unlockedKey),
-        loadConfig(unlockedKey),
-        loadForecastConfig(unlockedKey),
-        loadBalances(unlockedKey),
-        loadReconciliations(unlockedKey),
-      ])
+    const asOfMonth = today().slice(0, 7)
+    const priorMonth = lastFullMonth(today())
+    const [
+      nextAccounts,
+      nextTransactions,
+      nextBatches,
+      nextConfig,
+      nextForecast,
+      nextBalances,
+      nextRecords,
+      nextCurrentSnapshot,
+      nextLastSnapshot,
+    ] = await Promise.all([
+      loadAccounts(unlockedKey),
+      loadTransactions(unlockedKey),
+      loadBatches(unlockedKey),
+      loadConfig(unlockedKey),
+      loadForecastConfig(unlockedKey),
+      loadBalances(unlockedKey),
+      loadReconciliations(unlockedKey),
+      loadForecastSnapshot(unlockedKey, asOfMonth),
+      loadForecastSnapshot(unlockedKey, priorMonth),
+    ])
     setAccounts(nextAccounts)
     setTransactions(nextTransactions)
     setBatches(nextBatches)
@@ -92,6 +114,8 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     setForecastConfig(nextForecast)
     setBalances(nextBalances)
     setReconciliations(nextRecords)
+    setCurrentSnapshot(nextCurrentSnapshot)
+    setLastMonthSnapshot(nextLastSnapshot)
   }, [unlockedKey])
 
   useEffect(() => {
@@ -151,10 +175,29 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
 
   const saveForecastSettings = useCallback(
     async (next: ForecastConfig) => {
-      await saveForecastConfig(unlockedKey, next)
       setForecastConfig(next)
+      await saveForecastConfig(unlockedKey, next)
     },
     [unlockedKey],
+  )
+
+  const saveMonthSnapshot = useCallback(
+    async (snapshot: ForecastSnapshot) => {
+      const asOfMonth = today().slice(0, 7)
+      const priorMonth = lastFullMonth(today())
+      const existing =
+        snapshot.month === asOfMonth
+          ? currentSnapshot
+          : snapshot.month === priorMonth
+            ? lastMonthSnapshot
+            : undefined
+      const next = existing ? refreshSnapshotActuals(existing, snapshot) : snapshot
+      if (existing && snapshotsEqual(existing, next)) return
+      await saveForecastSnapshot(unlockedKey, next)
+      if (next.month === asOfMonth) setCurrentSnapshot(next)
+      if (next.month === priorMonth) setLastMonthSnapshot(next)
+    },
+    [currentSnapshot, lastMonthSnapshot, unlockedKey],
   )
 
   const recordBalance = useCallback(
@@ -250,8 +293,10 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     reconciliations,
     config,
     forecastConfig,
+    lastMonthSnapshot,
     saveSettings,
     saveForecastSettings,
+    saveMonthSnapshot,
     recordBalance,
     removeBalance,
     recordMonth,
@@ -259,6 +304,7 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     months,
     transactionCounts,
     notice,
+    flash,
     persistAccount,
     removeAccount,
     applyImport,

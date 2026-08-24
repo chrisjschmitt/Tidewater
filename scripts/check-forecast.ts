@@ -15,7 +15,15 @@ import {
   lookbackMonths,
 } from '../src/lib/forecast/forecast.ts'
 import { deriveKey, open, randomSalt, seal } from '../src/lib/etm/crypto.ts'
-import { withForecastDefaults, type ForecastConfig } from '../src/lib/forecast/types.ts'
+import {
+  lastFullMonth,
+  monthEndVariance,
+  refreshSnapshotActuals,
+  snapshotFromResult,
+  snapshotId,
+  withHouseholdContribution,
+} from '../src/lib/forecast/snapshot.ts'
+import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot } from '../src/lib/forecast/types.ts'
 import {
   appearedSubtags,
   assignSeries,
@@ -391,11 +399,87 @@ try {
 }
 check('a wrong key cannot read the forecast config', wrongKeyRejected)
 
+console.log('\n=== Snapshots and month-end variance ===')
+const currentMonth = ASOF.slice(0, 7)
+const prior = lastFullMonth(ASOF)
+check('snapshot ids are forecast-snap-YYYY-MM', snapshotId('2026-07') === 'forecast-snap-2026-07')
+check('last full month before mid-August is July', prior === '2026-07')
+const snap = snapshotFromResult(result, currentMonth)
+check('current-month snapshot uses the calendar column, not a remainder', snap.month === currentMonth && snap.calendar === (monthPoint(result, currentMonth)?.calendar ?? -1))
+check('snapshot byCategory is present', snap.byCategory.length > 0)
+const refreshed = refreshSnapshotActuals(snap, {
+  ...snap,
+  asOf: '2026-08-31',
+  calendar: snap.calendar + 999,
+  actual: 12,
+  byCategory: snap.byCategory.map((row) => ({ ...row, forecast: row.forecast + 50, actual: 1 })),
+})
+check('refreshing a snapshot keeps the stored forecast', refreshed.calendar === snap.calendar && refreshed.byCategory[0]?.forecast === snap.byCategory[0]?.forecast)
+check('refreshing a snapshot updates actuals', refreshed.actual === 12 && refreshed.asOf === '2026-08-31')
+const julyPoint = monthPoint(result, prior)
+const storedVariance = monthEndVariance({
+  month: prior,
+  actual: julyPoint?.actual ?? 0,
+  actualByCategory: julyPoint?.byCategory ?? [],
+  snapshot: {
+    ...snap,
+    month: prior,
+    calendar: (julyPoint?.actual ?? 0) * 1.2 || 100,
+    byCategory: (julyPoint?.byCategory ?? []).map((row) => ({ key: row.key, forecast: row.forecast })),
+  },
+})
+check('a stored snapshot is labelled stored', storedVariance?.source === 'stored')
+const reconstructedVariance = monthEndVariance({
+  month: prior,
+  actual: julyPoint?.actual ?? 0,
+  actualByCategory: julyPoint?.byCategory ?? [],
+  reconstructed: {
+    forecast: julyPoint?.calendar ?? 0,
+    byCategory: (julyPoint?.byCategory ?? []).map((row) => ({
+      key: row.key,
+      label: row.label,
+      forecast: row.forecast,
+    })),
+  },
+})
+check('a walk-forward without a snapshot is labelled reconstructed', reconstructedVariance?.source === 'reconstructed')
+const insideVariance = monthEndVariance({
+  month: prior,
+  actual: 100,
+  actualByCategory: [],
+  snapshot: { ...snap, month: prior, calendar: 100, byCategory: [] },
+})
+check('equal actual and calendar sit inside ±5%', insideVariance?.outsideControlWindow === false)
+const walkedJuly = walked.months.find((row) => row.month === prior)
+check('walk-forward still describes last month by category', (walkedJuly?.byCategory.length ?? 0) > 0)
+const applied = withHouseholdContribution(budget.goals, 250, 'vac')
+const vacation = applied.find((goal) => goal.id === 'vac')
+const emergency = applied.find((goal) => goal.id === 'emergency')
+check('applying a household contribution leaves the vacation goal untouched', vacation?.monthly === 2000)
+check('the household goal receives the new contribution', emergency?.monthly === 250)
+const sealedSnap = await seal(key, snap)
+const openedSnap = await open<ForecastSnapshot>(key, sealedSnap)
+check('the right key opens a forecast snapshot', openedSnap.month === snap.month && openedSnap.calendar === snap.calendar)
+let wrongSnapRejected = false
+try {
+  await open(wrongKey, sealedSnap)
+} catch {
+  wrongSnapRejected = true
+}
+check('a wrong key cannot read a forecast snapshot', wrongSnapRejected)
+
 console.log('\n=== Main bundle stays clear of forecasting ===')
 const appSource = readFileSync('src/App.tsx', 'utf8')
 check(
   'App.tsx does not import the forecast engine or panel',
   !appSource.includes('lib/forecast') && !appSource.includes('ForecastPanel'),
+)
+const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }
+const versionSource = readFileSync('src/lib/version.ts', 'utf8')
+check('package.json is 0.4.0', pkg.version === '0.4.0')
+check(
+  'APP_VERSION matches package.json',
+  versionSource.includes(`'${pkg.version}'`) || versionSource.includes(`"${pkg.version}"`),
 )
 
 if (failures > 0) {

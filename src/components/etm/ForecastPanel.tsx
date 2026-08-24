@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ForecastCategories from './ForecastCategories'
+import ForecastGoals from './ForecastGoals'
 import ForecastMonthCard from './ForecastMonthCard'
+import ForecastMonthEnd from './ForecastMonthEnd'
 import ForecastTimeline from './ForecastTimeline'
 import ForecastVacationCard from './ForecastVacationCard'
 import {
@@ -11,8 +13,10 @@ import {
 import { amountIn } from '../../lib/etm/format'
 import { monthName, today } from '../../lib/etm/period'
 import { uid } from '../../lib/format'
+import { walkForward } from '../../lib/forecast/backtest'
 import { CONTROL_WINDOW, forecast, lookbackMonths, monthOfKnownFuture, windowLabel } from '../../lib/forecast/forecast'
-import type { ForecastConfig, ForecastWindow, KnownFuture, SeriesId } from '../../lib/forecast/types'
+import { lastFullMonth, monthEndVariance, snapshotFromResult } from '../../lib/forecast/snapshot'
+import type { ForecastConfig, ForecastSnapshot, ForecastWindow, KnownFuture, SeriesId } from '../../lib/forecast/types'
 import {
   appearedSubtags,
   completeSubtag,
@@ -31,8 +35,12 @@ interface Props {
   budget: Budget
   config: ForecastConfig
   reimbursableParentTag: string
+  lastMonthSnapshot?: ForecastSnapshot
   onConfigChange: (config: ForecastConfig) => void
+  onSnapshot: (snapshot: ForecastSnapshot) => void
   onOpenTidy: () => void
+  onNotice?: (message: string) => void
+  onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
 }
 
 const WINDOWS: Array<[ForecastWindow, string]> = [
@@ -52,8 +60,12 @@ export default function ForecastPanel({
   budget,
   config,
   reimbursableParentTag,
+  lastMonthSnapshot,
   onConfigChange,
+  onSnapshot,
   onOpenTidy,
+  onNotice,
+  onApplyHouseholdContribution,
 }: Props) {
   const asOf = today()
   const [focusedMonth, setFocusedMonth] = useState(asOf.slice(0, 7))
@@ -79,6 +91,35 @@ export default function ForecastPanel({
     () => forecast(transactions, budget, config, asOf, reimbursableParentTag),
     [transactions, budget, config, asOf, reimbursableParentTag],
   )
+  useEffect(() => {
+    if (transactions.length === 0) return
+    onSnapshot(snapshotFromResult(result, asOf.slice(0, 7)))
+  }, [asOf, onSnapshot, result, transactions.length])
+  const priorMonth = lastFullMonth(asOf)
+  const lastPoint = result.cad.household.calendar.find((point) => point.month === priorMonth)
+  const reconstructedMonth = useMemo(() => {
+    if (transactions.length === 0 || lastMonthSnapshot) return null
+    return (
+      walkForward(transactions, budget, config, asOf, reimbursableParentTag).months.find(
+        (row) => row.month === priorMonth,
+      ) ?? null
+    )
+  }, [asOf, budget, config, lastMonthSnapshot, priorMonth, reimbursableParentTag, transactions])
+  const lastVariance = useMemo(() => {
+    if (transactions.length === 0) return null
+    return monthEndVariance({
+      month: priorMonth,
+      actual: lastPoint?.actual ?? 0,
+      actualByCategory: lastPoint?.byCategory ?? [],
+      snapshot: lastMonthSnapshot,
+      reconstructed: reconstructedMonth
+        ? {
+            forecast: reconstructedMonth.forecast,
+            byCategory: reconstructedMonth.byCategory,
+          }
+        : null,
+    })
+  }, [lastMonthSnapshot, lastPoint, priorMonth, reconstructedMonth, transactions.length])
   const compareWindow: ForecastWindow = config.window === 24 ? 12 : 24
   const compared = useMemo(
     () =>
@@ -140,6 +181,7 @@ export default function ForecastPanel({
         },
       ],
     })
+    onNotice?.(`Pinned ${draft.category} on ${monthName(focused.month)}.`)
   }
 
   const removeKnownFuture = (id: string) => {
@@ -259,14 +301,37 @@ export default function ForecastPanel({
             selected={focused.month}
             onSelect={setFocusedMonth}
           />
+          <ForecastGoals
+            coverage={result.coverage}
+            goals={budget.goals}
+            vacationGoal={result.vacationGoal}
+            onApplyContribution={
+              onApplyHouseholdContribution
+                ? (monthly, vacationGoalId) => {
+                    onApplyHouseholdContribution(monthly, vacationGoalId)
+                    onNotice?.(`Household contribution is now ${amountIn(monthly, 'CAD')} a month.`)
+                  }
+                : undefined
+            }
+          />
           <ForecastVacationCard vacation={result.cad.vacation} goal={result.vacationGoal} />
+          {lastVariance && (
+            <ForecastMonthEnd
+              variance={lastVariance}
+              placeMonth={focused.month}
+              onPlace={(row) => placeKnownFuture(row)}
+            />
+          )}
           <ForecastCategories
             categories={household.categories}
             selected={selectedCategory}
             focusedMonth={focused.month}
             doubleCounts={result.doubleCounts}
             onSelect={setOpenCategory}
-            onPin={(draft) => placeKnownFuture(draft)}
+            onPin={(draft) => {
+              placeKnownFuture(draft)
+              setOpenCategory(null)
+            }}
           />
         </>
       )}

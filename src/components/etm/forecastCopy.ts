@@ -91,3 +91,32 @@ export function excludedOutliersCopy(
 export function doubleCountCopy(category: string, month: string): string {
   return `${category} is already placed as a typical cost in ${month} — pinning it again would count twice. You can still place it if that is what you mean.`
 }
+
+export function fundedGoalCopy(monthsHit: number, monthsConsidered: number): string {
+  return `This contribution looks fundable in about 9 months out of 10. In this window that was ${monthsHit} of ${monthsConsidered} months.`
+}
+
+export function unfundedGoalCopy(
+  monthsHit: number,
+  monthsConsidered: number,
+  current: string,
+  clearing: string,
+): string {
+  return `Household goals asked for ${current} a month. That would have been affordable in ${monthsHit} of ${monthsConsidered} months. A contribution of ${clearing} a month would have cleared about 9 months in 10.`
+}
+
+export function monthEndStoredCopy(month: string): string {
+  return `${month} compared with the forecast this tab held at the time.`
+}
+
+export function monthEndReconstructedCopy(month: string): string {
+  return `No stored snapshot for ${month}, so this is reconstructed from today’s engine — not the number you would have seen at the time.`
+}
+
+export function monthEndInsideCopy(): string {
+  return 'Household actual sat inside ±5% of that forecast.'
+}
+
+export function monthEndOutsideCopy(): string {
+  return 'Household actual sat outside ±5% of that forecast. Lines above the forecast can be pinned as a known future if they will land again.'
+}

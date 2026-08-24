@@ -1,5 +1,5 @@
 import { withDefaults, type EtmConfig } from '../config'
-import { withForecastDefaults, type ForecastConfig } from '../../forecast/types'
+import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot } from '../../forecast/types'
 import type { ImportPlan } from '../importer'
 import {
   monthOf,
@@ -33,6 +33,7 @@ async function withDb<T>(work: (db: EtmDb) => Promise<T>): Promise<T> {
 
 const CONFIG_ID = 'etm'
 const FORECAST_CONFIG_ID = 'forecast'
+const forecastSnapshotId = (month: string) => `forecast-snap-${month}`
 
 export function loadConfig(key: CryptoKey): Promise<EtmConfig> {
   return withDb(async (db) =>
@@ -52,6 +53,14 @@ export function loadForecastConfig(key: CryptoKey): Promise<ForecastConfig> {
 
 export function saveForecastConfig(key: CryptoKey, config: ForecastConfig): Promise<void> {
   return withDb((db) => putSealed(db, 'config', key, FORECAST_CONFIG_ID, config))
+}
+
+export function loadForecastSnapshot(key: CryptoKey, month: string): Promise<ForecastSnapshot | undefined> {
+  return withDb((db) => getSealed<ForecastSnapshot>(db, 'config', key, forecastSnapshotId(month)))
+}
+
+export function saveForecastSnapshot(key: CryptoKey, snapshot: ForecastSnapshot): Promise<void> {
+  return withDb((db) => putSealed(db, 'config', key, forecastSnapshotId(snapshot.month), snapshot))
 }
 
 // --- accounts --------------------------------------------------------------

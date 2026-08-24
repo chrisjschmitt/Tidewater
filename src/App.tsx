@@ -402,6 +402,7 @@ export default function App() {
                   setEtmOpen(false)
                   flash('Expense tracking data was erased. Your budget is untouched.')
                 }}
+                onGoalsChange={setGoals}
               />
             </Suspense>
           </OptionalFeatureBoundary>

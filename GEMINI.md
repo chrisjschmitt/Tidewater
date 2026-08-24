@@ -30,6 +30,8 @@ acknowledgement.
 - Domain: `src/lib/` — `budget.ts`, `categories.ts`, `csv.ts`, `starter.ts`,
   `goals.ts`, `storage.ts`, `assistant.ts`, `models.ts`, `types.ts`,
   `format.ts`, `version.ts`.
+- Optional expense tracking (`src/components/etm/`): gated by
+  `__ETM_AVAILABLE__`. Unlocked ETM includes a Forecast tab.
 - Sample budget: `public/sample/ted-budget.csv`. Import fixtures under
   `Test-Data/`. Spec + category keyword docs: `docs/`.
 - Sanity scripts (esbuild → node): `scripts/check-import.ts`,

@@ -102,6 +102,10 @@ npm run build:public
 
 `npm run dev:public` runs the dev server the same way.
 
+## Expenses and Forecast
+
+Unlocking the optional expense tracking module (same device key as always) adds an Expenses area. Inside it, the **Forecast** tab reads those transactions and the current budget to sketch a typical household month, a vacation series of its own, and whether household goal contributions look fundable in about nine months out of ten. Nothing in Forecast rewrites the budget unless you choose to apply a contribution. Personal data stays in the encrypted store on this device. The public build (`npm run build:public`) does not include this tab.
+
 ## Three ways to start
 
 | Path | What happens |
@@ -250,6 +254,7 @@ npm run typecheck       # TypeScript
 npm run check:import    # Ted + Noel budgets and monarch-fixture.csv (plus local Test-Data if present)
 npm run check:starter   # generates starter budgets for three household shapes
 npm run check:assistant "Where does my money go?"   # shows the local answer for a question
+npm run check:forecast  # synthetic forecast fixture (classifications, coverage, snapshots)
 ```
 
 Run `check:import` whenever you change import or category-mapping code; details are under

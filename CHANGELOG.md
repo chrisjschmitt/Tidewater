@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 — 2026-08-24
+
+### Added
+- Forecast tab (inside unlocked expense tracking): household goal coverage at a 9-of-10 bar, sealed monthly snapshots, and last-month variance with a reconstructed label when no snapshot was stored
+
 ## 0.3.4 — 2026-07-30
 
 ### Fixed

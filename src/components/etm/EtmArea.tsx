@@ -19,6 +19,7 @@ interface Props {
   onClose: () => void
   onLock: () => void
   onWipe: () => void
+  onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
 }
 
 type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
@@ -44,6 +45,7 @@ export default function EtmArea({
   onClose,
   onLock,
   onWipe,
+  onApplyHouseholdContribution,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
   const [confirmingWipe, setConfirmingWipe] = useState(false)
@@ -90,7 +92,7 @@ export default function EtmArea({
           </div>
           <div className="flex items-center gap-2">
             {data.notice && (
-              <span className="hidden max-w-md truncate text-xs text-ink-500 sm:block animate-fade">
+              <span className="max-w-md truncate text-xs text-ink-500 animate-fade">
                 {data.notice}
               </span>
             )}
@@ -129,8 +131,12 @@ export default function EtmArea({
                 budget={budget}
                 config={data.forecastConfig}
                 reimbursableParentTag={data.config.reimbursableTag}
+                lastMonthSnapshot={data.lastMonthSnapshot}
                 onConfigChange={(config) => void data.saveForecastSettings(config)}
+                onSnapshot={(snapshot) => void data.saveMonthSnapshot(snapshot)}
+                onNotice={data.flash}
                 onOpenTidy={() => setTab('month')}
+                onApplyHouseholdContribution={onApplyHouseholdContribution}
               />
             )}
 

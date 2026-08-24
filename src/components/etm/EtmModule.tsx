@@ -13,7 +13,8 @@ import {
   rememberedKey,
   wipeVault,
 } from '../../lib/etm/storage/vault'
-import type { Budget } from '../../lib/types'
+import { withHouseholdContribution } from '../../lib/forecast/snapshot'
+import type { Budget, Goal } from '../../lib/types'
 
 const EtmArea = lazy(() => import('./EtmArea'))
 
@@ -32,6 +33,7 @@ interface Props {
   onWiped: () => void
   onOpen: () => void
   onClose: () => void
+  onGoalsChange?: (goals: Goal[]) => void
 }
 
 /**
@@ -84,6 +86,7 @@ function Unlocked({
   onWiped,
   onOpen,
   onClose,
+  onGoalsChange,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
   const [period, setPeriod] = useState<Period>(() => defaultPeriod([]))
@@ -169,6 +172,12 @@ function Unlocked({
             void wipeVault()
             onWiped()
           }}
+          onApplyHouseholdContribution={
+            onGoalsChange
+              ? (monthly, vacationGoalId) =>
+                  onGoalsChange(withHouseholdContribution(budget.goals, monthly, vacationGoalId))
+              : undefined
+          }
         />
       </Suspense>
       {drillDown}
