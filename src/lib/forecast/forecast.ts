@@ -36,6 +36,15 @@ import { DEFAULT_REIMBURSABLE_PARENT, nameKey, signedSpend, splitUniverse } from
 export const CONTROL_WINDOW = 0.05
 const TRAVEL_THRESHOLD = 0.005
 
+/** Expected monthly savings swept into the vacation pot. Never paused. */
+export function vacationSweep(args: {
+  income: number
+  likelySetAside: number
+  householdCommitted: number
+}): number {
+  return roundCents(Math.max(0, args.income - args.likelySetAside - args.householdCommitted))
+}
+
 export function addMonths(month: string, delta: number): string {
   const abs = Number(month.slice(0, 4)) * 12 + (Number(month.slice(5, 7)) - 1) + delta
   const year = Math.floor(abs / 12)
@@ -687,16 +696,17 @@ function vacationForecastFor(args: {
   config: ForecastConfig
   asOf: string
   goal: VacationGoalMatch
+  sweep: number
 }): VacationForecast {
-  const { categories, series, lookback, actuals, config, asOf, goal } = args
+  const { categories, series, lookback, actuals, config, asOf, goal, sweep } = args
   const { past, rest } = timelineMonths(asOf)
   const months: VacationMonth[] = []
   for (const month of past) {
-    months.push(vacationMonthPoint('past', month, categories, series, lookback, actuals, config, asOf, goal))
+    months.push(vacationMonthPoint('past', month, categories, series, lookback, actuals, config, asOf, sweep))
   }
   for (const month of rest) {
     const kind = month === asOf.slice(0, 7) ? 'current' : 'future'
-    months.push(vacationMonthPoint(kind, month, categories, series, lookback, actuals, config, asOf, goal))
+    months.push(vacationMonthPoint(kind, month, categories, series, lookback, actuals, config, asOf, sweep))
   }
 
   let bal = goal.current
@@ -706,23 +716,19 @@ function vacationForecastFor(args: {
       point.runway = 0
       continue
     }
-    if (point.isTravel) {
-      const draw = point.kind === 'current' && point.actual > TRAVEL_THRESHOLD ? point.actual : point.forecast
-      bal -= draw
-    } else {
-      bal += point.contribution
-    }
-    point.runway = roundCents(bal)
+    bal = roundCents(bal + point.contribution)
+    const draw = point.kind === 'current' ? Math.max(point.actual, point.forecast) : point.forecast
+    bal = roundCents(bal - draw)
+    point.runway = bal
     if (bal < 0 && !firstShortfallMonth) firstShortfallMonth = point.month
   }
 
-  const current = months.find((point) => point.kind === 'current')
   return {
     categories,
     months,
     pot: roundCents(goal.current),
-    monthlyContribution: roundCents(goal.monthly),
-    currentMonthPaused: Boolean(current?.isTravel),
+    monthlyContribution: roundCents(sweep),
+    currentMonthPaused: false,
     runwayGoesNegative: Boolean(firstShortfallMonth),
     firstShortfallMonth,
   }
@@ -737,7 +743,7 @@ function vacationMonthPoint(
   actuals: CategoryActuals[],
   config: ForecastConfig,
   asOf: string,
-  goal: VacationGoalMatch,
+  sweep: number,
 ): VacationMonth {
   const point = calendarPoint({
     month,
@@ -763,7 +769,7 @@ function vacationMonthPoint(
     actual: roundCents(actual),
     forecast: roundCents(forecast),
     isTravel,
-    contribution: isTravel ? 0 : goal.monthly,
+    contribution: roundCents(sweep),
     runway: 0,
   }
 }
@@ -933,6 +939,14 @@ function buildCurrency(args: {
     config,
     asOf,
     goal: vacationGoal,
+    sweep:
+      currency === 'CAD'
+        ? vacationSweep({
+            income: totalIncome(budget),
+            likelySetAside: setAside.likely,
+            householdCommitted: totalGoalContributions(budget) - (vacationGoal.status === 'matched' ? vacationGoal.monthly : 0),
+          })
+        : 0,
   })
 
   return { currency, household, vacation }

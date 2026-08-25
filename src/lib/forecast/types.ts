@@ -274,7 +274,9 @@ export interface VacationForecast {
   categories: CategoryForecast[]
   months: VacationMonth[]
   pot: number
+  /** Expected savings sweep into the pot each month, not goal.monthly. */
   monthlyContribution: number
+  /** Always false: the savings sweep is never paused for vacation spend. */
   currentMonthPaused: boolean
   runwayGoesNegative: boolean
   firstShortfallMonth?: string

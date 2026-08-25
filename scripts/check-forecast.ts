@@ -14,6 +14,7 @@ import {
   forecastMix,
   isOutsideControlWindow,
   lookbackMonths,
+  vacationSweep,
 } from '../src/lib/forecast/forecast.ts'
 import { deriveKey, open, randomSalt, seal } from '../src/lib/etm/crypto.ts'
 import {
@@ -438,10 +439,65 @@ check('household goals are funded at 9-of-10 on this fixture', result.coverage.f
 
 console.log('\n=== Vacation series ===')
 const july = result.cad.vacation.months.find((m) => m.month === '2026-07')
-check('July 2026 is a travel month', july?.isTravel === true)
-check('vacation contribution is paused in a trip month', july?.contribution === 0)
+check('July 2026 is a vacation-spend month', july?.isTravel === true)
 const sep = result.cad.vacation.months.find((m) => m.month === '2026-09')
-check('a non-travel month still contributes', (sep?.contribution ?? 0) === 2000)
+const sweep = vacationSweep({
+  income: 2500,
+  likelySetAside: result.cad.household.setAside.likely,
+  householdCommitted: 400,
+})
+check('the vacation sweep is leftover after household life and household goals', result.cad.vacation.monthlyContribution === sweep, `got ${result.cad.vacation.monthlyContribution}, expected ${sweep}`)
+check('July still takes the savings sweep', july?.contribution === sweep, `got ${july?.contribution}`)
+check('September takes the same sweep', (sep?.contribution ?? 0) === sweep)
+check('vacation spend does not pause the sweep', result.cad.vacation.currentMonthPaused === false)
+
+const prepaidRow: Transaction = {
+  id: 'fx-prepay',
+  date: '2026-08-10',
+  merchant: 'January Lodge',
+  originalStatement: 'JANUARY LODGE',
+  notes: '',
+  amount: -2200,
+  currency: 'CAD',
+  accountId: 'cad',
+  monarchAccount: 'Chequing (...1001)',
+  category: 'Trip Lodging',
+  groupId: groupForCategory('Trip Lodging'),
+  internal: false,
+  tags: ['Reimbursable: Vacation Account'],
+  owner: 'Sam',
+  reviewed: true,
+  source: 'monarch',
+  importBatchId: 'fixture',
+}
+const prepaid = forecast([...transactions, prepaidRow], budget, base, ASOF)
+const aug = prepaid.cad.vacation.months.find((m) => m.month === '2026-08')
+check(
+  'an August prepayment still takes the savings sweep',
+  (aug?.actual ?? 0) >= 2200 && aug?.contribution === prepaid.cad.vacation.monthlyContribution && prepaid.cad.vacation.currentMonthPaused === false,
+  `actual ${aug?.actual} contribution ${aug?.contribution}`,
+)
+const pinned = forecast([...transactions, prepaidRow], budget, {
+  ...base,
+  knownFutures: [
+    {
+      id: 'cruise',
+      category: 'Cruise deposit',
+      amount: 1800,
+      month: '2027-01',
+      recurrence: 'once',
+      series: 'vacation',
+      notes: '',
+    },
+  ],
+}, ASOF)
+const jan = pinned.cad.vacation.months.find((m) => m.month === '2027-01')
+check('a January pin still takes the sweep', jan?.contribution === pinned.cad.vacation.monthlyContribution)
+check(
+  'January is the pin, not the August prepayment added again',
+  (jan?.forecast ?? 0) === 1800,
+  `got ${jan?.forecast}`,
+)
 
 console.log('\n=== Walk-forward per-type errors ===')
 const walked = walkForward(transactions, budget, base, ASOF)
@@ -646,6 +702,7 @@ const fixtureMerchants = [
 check('chat snapshot names Budget-tab actuals', chatText.includes('Budget-tab actuals'))
 check('chat snapshot names Forecast household', chatText.includes('Forecast household'))
 check('chat snapshot names Forecast vacation', chatText.includes('Forecast vacation'))
+check('chat snapshot says the vacation sweep is never paused', chatText.includes('never paused'))
 check('chat snapshot names Reimbursable-tab actuals', chatText.includes('Reimbursable-tab actuals'))
 check(
   'chat snapshot includes Reimbursable buckets, not merchant rows',

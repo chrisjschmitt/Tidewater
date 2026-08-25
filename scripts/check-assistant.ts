@@ -269,7 +269,8 @@ check(
   forecastQ.includes('567') &&
     forecastQ.includes('overlay') &&
     forecastQ.includes('vacation') &&
-    forecastQ.includes('typical-month plan'),
+    forecastQ.includes('typical-month plan') &&
+    /never paused/i.test(forecastQ),
 )
 check(
   'plan vs actual keeps Budget-tab actuals distinct from Forecast household',

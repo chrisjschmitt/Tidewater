@@ -25,12 +25,16 @@ in code or committed docs. Tests use synthetic fixtures only.
   tracked natively with **no conversion**; lookback uses **trailing full
   months** only; the window that produced a number is **always visible**;
   personal exports stay gitignored.
-  Settled with the user, 19 Aug 2026:
+  Settled with the user, 19 Aug 2026, **amended 24 Aug 2026**:
   - **Vacation is its own series.** Vacation-tagged spend stays out of the
     household forecast and the core monthly budget. It is still forecast,
     separately, because travel is paid from the vacation savings pot.
-    In a month with vacation spend, that month’s vacation *contribution*
-    is expected to miss — the money is coming out of the pot, not going in.
+    That pot is filled by the household **savings sweep every month**
+    (leftover after household life and household goals). Vacation-tagged
+    spend — a prepayment or a small trip — is a **draw on the cash date**,
+    not a reason to skip the sweep. The miss is the pot going below zero,
+    not a paused contribution. (The 19 Aug “pause inflows when vacation
+    spend posts” rule is withdrawn.)
   - **Known costs are placed on the month they hit.** A $2,000 repair
     known to land in December is budgeted in December. That placement
     shrinks (and can zero) the unpredictable overlay. The overlay is only
@@ -94,8 +98,10 @@ New, from the forecasting spec:
 10. **±5% is a control window, not a claim that next month’s total can be
     predicted to that precision from history alone.** See §4.
 11. **Two series, never mixed.** Household and vacation are forecast
-    side by side. Vacation spend does not inflate household “out,” and
-    household surplus is not treated as vacation cash.
+    side by side. Vacation spend does not inflate household “out.”
+    Household leftover is not silently spent as vacation inside household
+    math; the vacation card *does* take that leftover as the expected
+    savings sweep into the pot (§5.1).
 
 ---
 
@@ -171,7 +177,7 @@ classifications, never the ledger. See `docs/etm-architecture.md` §5.1.
 | Unlock | The ETM key. No second passphrase. |
 | Transactions | The rows already in the vault. No parallel import. |
 | Reimbursables | Three-way split, not ETM’s all-or-nothing hold-out. **Allow-listed** sub-tags (Healthcare, Capital, Annual Fees) count as household spend that still needs cash on hand. **Vacation-tagged** spend is a separate series (§5.1). **Every other** reimbursable (personal, business, and similar) is excluded from both series. ETM budget-vs-actual is unchanged: it still holds *all* reimbursable-tagged spend out of family-budget actuals. Document the difference on the Forecast tab so the two screens do not look like they disagree. |
-| Vacation | Configurable tag, default `Reimbursable: Vacation Account`. Never on the household allow-list. Forecast and budget it on its own card. Paid from the vacation savings goal / account, not from the monthly household plan. |
+| Vacation | Configurable tag, default `Reimbursable: Vacation Account`. Never on the household allow-list. Forecast and budget it on its own card. Paid from the vacation savings pot, not from the monthly household plan. The pot is filled by the savings sweep every month; vacation spend is a draw on the cash date. |
 | Internal movements | Excluded here as in ETM (`Transfer`, `Credit Card Payment`, … via `isInternalCategory`). |
 | Core `Budget` | Remains a **single typical-month plan** for household life. Forecasting does not rewrite it. Known costs are **placed on a month** (`knownFutures`). The unpredictable **overlay** is the leftover irregular mass that has not been placed yet. There is no v1 “apply to my typical month” action. |
 | Ask a question | Forecast figures (type, likely, typical months, overlay vs calendar vs plan, household vs vacation, recommended set-aside) appear in the **compact chat snapshot** once ETM is unlocked (`docs/etm-architecture.md` §5.1). Chat reads that summary; it does not classify, place known futures, or rewrite this tab. |
@@ -282,31 +288,45 @@ vault, plus the ability to type one that has not appeared yet. Vacation
 tags are chosen on the same screen, clearly labelled as the separate
 series.
 
-### 5.1 Vacation series (settled 19 Aug 2026)
+### 5.1 Vacation series (settled 19 Aug 2026, amended 24 Aug 2026)
 
 Vacation travel is funded by what has already been saved, not by that
-month’s household cash. Forecast it, but never fold it into household
+month’s household *plan*. Forecast it, but never fold it into household
 “out,” the household ±5% window, or the overlay.
+
+The vacation **account** is a fund in the same family as Annual Fees
+(a reimbursable bucket repaid from a dedicated pile). Unlike Annual Fees,
+it is **not** household cash-on-hand: it stays its own series. Unlike a
+fixed `goal.monthly` you skip when away, this household sweeps **all of
+that month’s savings** into the pot every month — including months with
+prepayments or small trips.
 
 The vacation card shows:
 
-- **Past:** vacation-tagged actuals by month (the trip months).
-- **Forward:** a forecast of likely travel months and amounts, using the
-  same classifiers on the vacation bucket alone (often seasonal: summer,
-  holidays). Low-sample trips stay flagged, not auto-annual.
+- **Past:** vacation-tagged actuals by month (when cash left the pot:
+  a trip, or a prepayment for a later stay).
+- **Forward:** a forecast of likely vacation draws, using the same
+  classifiers on the vacation bucket alone. Low-sample trips stay
+  flagged, not auto-annual. Known large costs (cruises, deposits) are
+  **placed on the payment month** (`knownFutures` with `series:
+  'vacation'`). Stay months that are already paid are not a second draw.
 - **The pot:** the matching savings goal on the core budget (name-matched
   case-insensitively to “vacation,” or a setting `vacationGoalId`).
-  `Goal.current` is the opening balance. In a **non-travel** month the
-  household can contribute `goal.monthly`. In a **travel** month
-  (actual or forecast vacation spend > a small threshold) that
-  contribution is treated as **paused**: the month is not a miss on the
-  vacation goal, because the account is being drawn down.
-- **Runway:** opening balance + contributions in non-travel months −
-  forecast vacation spend. If runway goes negative before a planned trip,
-  say so on the vacation card, not as a household overspend.
+  `Goal.current` is the opening balance.
+- **The sweep (every month):** leftover after household life and
+  household goals:
+  `max(0, income − household likely set-aside − household committed)`.
+  Household committed excludes the vacation goal’s `monthly`. The
+  dashboard vacation `goal.monthly` is **not** this transfer. The sweep
+  is **never paused** because vacation spend posted.
+- **Runway:** opening balance + sweep each month − draws. A current
+  month uses `max(actual, forecast)` so a prepayment already posted is
+  the draw and is not added again on later stay months unless the user
+  pins those months. If runway goes below zero, say so on the vacation
+  card, not as a household overspend. That is the miss.
 
 Household funded-goal math (§11) uses household spend and **non-vacation**
-goals. The vacation goal is judged only on the vacation card.
+goals. The vacation pot is judged only on the vacation card.
 
 Currencies: never convert. CAD and USD forecasts are separate series. A
 mixed view shows both, the way ETM does.
@@ -668,10 +688,11 @@ Do not require a charting library. SVG, same family as `GoalChart`.
 ### Vacation card
 
 A distinct block, not a household bar of another colour. Past trip months,
-forward forecast, pot balance, runway, and a plain sentence when this
-month is a travel month: the vacation contribution is paused because
-spending is coming from the vacation account. Household goals are
-unaffected.
+forward forecast, pot balance, expected savings sweep (every month),
+runway, and a plain sentence when vacation-tagged spend has posted this
+month: it is a draw on the pot (prepayment or trip), and the sweep still
+goes in. Household goals are unaffected. The warning is a runway that
+would go below zero.
 
 ### Settings row (the spec’s missing §6)
 
@@ -723,10 +744,10 @@ coverage            = share of lookback months where
 - `high_set_aside` is the spend level implied by that bar, so the user can
   see the household plan against it.
 
-Vacation goal: never included in `coverage`. On the vacation card, a
-travel month is an expected pause on `goal.monthly`, not a miss. A miss
-is a non-travel month that did not contribute, or a trip that would
-overdraw the pot.
+Vacation goal: never included in `coverage`. On the vacation card the
+inflow is the savings sweep, every month. A miss is a runway that would
+take the pot below zero — not a month that both spent from the pot and
+still received the sweep.
 
 The Forecast tab does not secretly rewrite goals. An explicit “use this
 as my monthly contribution” button is allowed.
@@ -803,7 +824,7 @@ It must contain, at minimum:
 (household / vacation / excluded), calendar placement, overlay identity
 (`unplaced / N`), control-window behaviour after a placement, current-month
 remainder (no double count of an annual already posted), 90% coverage
-math, vacation contribution paused in a trip month, and walk-forward
+math, vacation sweep continuing in a month with vacation spend, and walk-forward
 *per-type* errors on that fixture.
 
 ### Local-only (Fable / the owner)
@@ -824,6 +845,8 @@ the repo. Never default this path to the iCloud export in committed code.
 - No automatic rewrite of the core budget or of goals.
 - No folding vacation-tagged spend into household totals.
 - No treating a travel month as a miss on the vacation savings goal.
+- No pausing the vacation savings sweep because vacation-tagged spend
+  posted (a prepayment or a trip is a draw; the sweep still goes in).
 - No claim that next month’s household total is knowable to ±5% from
   history, or that a goal is 100% certain.
 - No transaction-level import of its own.
@@ -989,7 +1012,7 @@ that already exist.
 | Piece | Where |
 | --- | --- |
 | `CoverageResult` / `coverageFor` (90% bar, vacation goal excluded) | `forecast.ts`, `result.coverage` |
-| Vacation pot, runway, contribution paused in travel months | `ForecastVacationCard.tsx` |
+| Vacation pot, runway, sweep every month (not paused for travel) | `ForecastVacationCard.tsx` |
 | `ForecastSnapshot` type | `src/lib/forecast/types.ts` |
 | Encrypted `config` store, id `forecast` | `loadForecastConfig` / `saveForecastConfig` |
 
@@ -1047,12 +1070,12 @@ that already exist.
 
 - Acceptance criteria 4–6 demonstrable on the fixture (control window
   already Phase 4; funded 9-of-10; travel month is not a vacation-goal
-  miss — vacation card already asserts the pause)
+  miss — vacation card asserts the sweep continues; the miss is overdraft)
 - Stored snapshot vs reconstructed labelled correctly
 - `npm run typecheck` and `npm run check:forecast` pass
 - `APP_VERSION` matches `package.json`
   *(Met: snapshot AES-GCM round-trip and stored-vs-reconstructed labels in
-  `check:forecast`; coverage 9-of-10 and vacation pause already asserted.)*
+  `check:forecast`; coverage 9-of-10 and vacation sweep already asserted.)*
 
 ### Sequencing notes and risks
 
@@ -1060,7 +1083,7 @@ that already exist.
 | --- | --- |
 | Next-month total ±5% is not a realistic model claim | §4; do not chase it |
 | Reimbursable sub-tag vs parent tag | Family match in ETM and FM; three-way split in §5 |
-| Vacation-tagged spend | Own series; never household; contribution paused in trip months |
+| Vacation-tagged spend | Own series; never household; sweep every month; draw on the cash date; miss is pot below zero |
 | Core budget is one typical month | Known futures on the month they hit; overlay = unplaced remainder |
 | 9-of-10 funding | P90 / 90% coverage on household goals; vacation judged separately |
 | Short or missing history | Label the shortfall; empty state until import |

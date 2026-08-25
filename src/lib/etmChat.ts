@@ -151,7 +151,7 @@ export interface EtmChatSnapshot {
 export const ETM_SERIES_NOTE = `When a spending/forecast snapshot is included:
 - Budget-tab actuals are the period on screen (reimbursable family held out). They are not the lookback.
 - Reimbursable-tab actuals are the Reimbursable section: the whole family for the period on screen, by bucket and category. Posted-by-month is the Forecast strip. This is not Budget-tab actuals.
-- Forecast household uses an allow-list (some reimbursable sub-tags count as household). Vacation is its own series. Historical household-category questions use Forecast household lookback totals and posted-by-month, not only Budget-tab actuals.
+- Forecast household uses an allow-list (some reimbursable sub-tags count as household). Vacation is its own series: savings sweep every month, spend is a draw on the cash date. Historical household-category questions use Forecast household lookback totals and posted-by-month, not only Budget-tab actuals.
 - Overlay is the irregular smear, not the Forecast column.
 Name which series you quote. Do not treat Budget-tab actuals, Reimbursable-tab actuals, and Forecast household as the same number.
 CAD and USD stay separate; never add them.`
@@ -276,8 +276,8 @@ function formatHousehold(block: ChatHouseholdBlock, typicalMonthPlanCad: number)
 function formatVacation(block: ChatVacationBlock): string {
   return [
     `Forecast vacation (${block.currency}) — series ${block.series}:`,
-    `  Pot ${amount(block.pot, block.currency)}; contribution ${amount(block.monthlyContribution, block.currency)} a month${block.currentMonthPaused ? ' (paused this month — travel)' : ''}.`,
-    `  Current month: actual ${amount(block.currentMonthActual, block.currency)}, forecast ${amount(block.currentMonthForecast, block.currency)}.`,
+    `  Pot ${amount(block.pot, block.currency)}; savings sweep ${amount(block.monthlyContribution, block.currency)} a month (never paused).`,
+    `  Current month: actual ${amount(block.currentMonthActual, block.currency)}, forecast ${amount(block.currentMonthForecast, block.currency)}${block.currentMonthActual > 0 ? ' — posted spend is a draw on the pot, not a skipped transfer' : ''}.`,
   ].join('\n')
 }
 
@@ -517,7 +517,7 @@ export function replyForecast(budget: Budget, snap?: EtmChatSnapshot | null): st
   const usdLine = usd
     ? `\n\nUSD household sits alongside and is never added in: set-aside ${usdMoney(usd.setAsideLikely)} USD, overlay ${usdMoney(usd.overlayMonthly)} USD a month.`
     : ''
-  return `Forecast household (${snap.windowLabel}, as of ${snap.asOf}) recommends setting aside ${money(household.setAsideLikely)} CAD a month. Your typical-month plan beside that is ${money(snap.typicalMonthPlanCad)} CAD. Those are two named series; neither is rewritten from this chat.\n\nThe overlay — the irregular smear, not the Forecast column — is ${money(household.overlayMonthly)} CAD a month${overlay ? ` (${overlay})` : ''}. Current month ${household.currentMonth.month}: ${money(household.currentMonth.actualToDate)} CAD posted, ${money(household.currentMonth.remain)} CAD remaining${remain ? ` (${remain})` : ''}, calendar forecast to month-end ${money(household.currentMonth.forecastEom)} CAD.\n\nForecast vacation is its own series: pot ${money(vacation.pot)} CAD, contribution ${money(vacation.monthlyContribution)} CAD a month${vacation.currentMonthPaused ? ', paused this month because it is a travel month' : ''}.${usdLine}`
+  return `Forecast household (${snap.windowLabel}, as of ${snap.asOf}) recommends setting aside ${money(household.setAsideLikely)} CAD a month. Your typical-month plan beside that is ${money(snap.typicalMonthPlanCad)} CAD. Those are two named series; neither is rewritten from this chat.\n\nThe overlay — the irregular smear, not the Forecast column — is ${money(household.overlayMonthly)} CAD a month${overlay ? ` (${overlay})` : ''}. Current month ${household.currentMonth.month}: ${money(household.currentMonth.actualToDate)} CAD posted, ${money(household.currentMonth.remain)} CAD remaining${remain ? ` (${remain})` : ''}, calendar forecast to month-end ${money(household.currentMonth.forecastEom)} CAD.\n\nForecast vacation is its own series: pot ${money(vacation.pot)} CAD, savings sweep ${money(vacation.monthlyContribution)} CAD a month (never paused). Vacation-tagged spend is a draw on the cash date.${usdLine}`
 }
 
 export function replyPlanVsActual(budget: Budget, snap?: EtmChatSnapshot | null): string {

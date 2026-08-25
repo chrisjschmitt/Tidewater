@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0 — 2026-08-24
+
+### Changed
+- The Vacation pot takes the household savings sweep every month. Vacation-tagged spend (a prepayment or a trip) comes out on the day it posts. The warning is a balance that would go below zero — the sweep is no longer paused in a “travel month.”
+
 ## 0.5.7 — 2026-08-24
 
 ### Added
