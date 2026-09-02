@@ -234,7 +234,7 @@ configured. `npm run check:assistant "your question"` shows which intent a quest
 
 - Stored in IndexedDB in this browser only.
 - **Your data → Export as a budget file** gives you a CSV for another device or a spreadsheet.
-- **Your data → Export a full backup** gives you JSON including goals and profile.
+- **Your data → Export a full backup** gives you JSON including goals and profile. If expense tracking is set up, the encrypted vault rides along (the key is not in the file). Without expense tracking, the file is still just the plan.
 - **Your data → Start over** erases it.
 
 ## Project layout

@@ -43,7 +43,7 @@ interface EtmSchema extends DBSchema {
 
 export type EtmDb = IDBPDatabase<EtmSchema>
 
-const RECORD_STORES = [
+export const RECORD_STORES = [
   'accounts',
   'transactions',
   'balances',

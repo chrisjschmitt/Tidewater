@@ -12,7 +12,11 @@ interface GuideTopic {
 const PLAN_TOPICS: GuideTopic[] = [
   {
     test: /import|monarch|csv|backup|restore|your data|export/i,
-    reply: `Use Import in the header for a budget spreadsheet or a Monarch transactions export. Tidewater averages the file into a typical-month plan and skips internal transfers.\n\nYour data holds a JSON backup of the plan, goals, and profile — download it, then restore it from the same place, or drop a .json on Import. Everything stays on this device.\n\nHelp in the header has the same walkthrough if you want it on the page.`,
+    reply: `Use Import in the header for a budget spreadsheet or a Monarch transactions export. Tidewater averages the file into a typical-month plan and skips internal transfers.\n\nYour data holds a JSON backup of the plan, goals, and profile${
+      __ETM_AVAILABLE__
+        ? ' — and the encrypted expenses vault if you have set that up. The key is not in the file; unlock on the other device with the same key. A backup written without expense tracking is still just the plan'
+        : ''
+    }. Download it, then restore it from the same place, or drop a .json on Import. Everything stays on this device.\n\nHelp in the header has the same walkthrough if you want it on the page.`,
   },
   {
     test: /goal|rrsp|debt payoff|down payment/i,
@@ -28,7 +32,11 @@ const PLAN_TOPICS: GuideTopic[] = [
   },
   {
     test: /privacy|on(-| )device|indexeddb|leave the device|vault/i,
-    reply: `Tidewater has no account and no Tidewater server for your money. The plan lives in this browser. Optional cloud chat sends a compact summary only after you tick the acknowledgement — never the vault, never a transaction list.\n\nYour data is how you copy the plan to another device. There is no analytics.`,
+    reply: `Tidewater has no account and no Tidewater server for your money. The plan lives in this browser. Optional cloud chat sends a compact summary only after you tick the acknowledgement — never the vault, never a transaction list.\n\nYour data is how you copy the plan to another device${
+      __ETM_AVAILABLE__
+        ? ', and the encrypted expenses vault if it is set up. The enablement key is not in that file'
+        : ''
+    }. There is no analytics.`,
   },
 ]
 
@@ -60,7 +68,7 @@ const ETM_TOPICS: GuideTopic[] = __ETM_AVAILABLE__
       },
       {
         test: /accounts tab|use (the )?accounts|add an account|funding account|main card|savings destination|kept out of the family budget|monarch name/i,
-        reply: `The Accounts tab is what each account means. Add one, or let Expenses Import offer to create names it finds. The nickname is yours; the Monarch name must match the export exactly so rows land here. Last four is display only. Currency is tracked as-is, never converted. Full account numbers are never asked for.\n\nFlags: funding (everything is paid from here, with an optional float left behind), main card (cleared each month), savings destination (where surplus goes), and kept out of the family budget (spending skipped on Budget-tab actuals, but reimbursable claims on that account still count). Funding, main card, and float feed Month end’s monthly savings figure.`,
+        reply: `The Accounts tab is what each account means. Add one, or let Expenses Import offer to create names it finds. The nickname is yours — when Import asks you to set up an unmatched account, it starts as the Monarch name, and you can keep it or change it. The Monarch name must match the export exactly so rows land here. Last four is display only. Currency is tracked as-is, never converted. Full account numbers are never asked for.\n\nFlags: funding (everything is paid from here, with an optional float left behind), main card (cleared each month), savings destination (where surplus goes), and kept out of the family budget (spending skipped on Budget-tab actuals, but reimbursable claims on that account still count). Funding, main card, and float feed Month end’s monthly savings figure.`,
       },
       {
         test: /unlock|enablement|expenses key|passphrase|lock expenses/i,
@@ -92,7 +100,11 @@ function fallbackGuide(): string {
 export function appGuideContext(): string {
   const core = `How to use Tidewater (product, not the user's ledger):
 - Dashboard: typical-month plan. Ring = income, planned spend, goals. Bars = groups, largest first; open a group to edit lines. Unallocated is leftover flexibility.
-- Import (header): budget CSV or Monarch transactions CSV (averages into the plan; skips internal transfers). Your data: JSON backup/restore of the plan. On this device only.
+- Import (header): budget CSV or Monarch transactions CSV (averages into the plan; skips internal transfers). Your data: JSON backup/restore of the plan${
+    __ETM_AVAILABLE__
+      ? ', and of the encrypted expenses vault if set up (same key to unlock; the key is not in the file). Plan-only backups still restore when expense tracking is unused'
+      : ''
+  }. On this device only.
 - Goals: dashboard panel; monthly contribution, target, optional return, or debt payoff.
 - Ask a question: on-device from the plan; optional user-owned OpenAI/Anthropic key in chat Settings. Compact summary may leave after acknowledgement. Vault and transactions never leave.
 - Help in the header is the same guide on the page. Chat does not rewrite the Budget or Forecast.`

@@ -1089,7 +1089,7 @@ that already exist.
 | Short or missing history | Label the shortfall; empty state until import |
 | Category names drift (`Internet` vs `Internet and Phone`) | Same pairing as ETM; user can override |
 | Inflating twice (last-amount and `r`) | Default `r = 0`; last-amount only when cv is tiny |
-| ETM Phase 5 (backup/export) unfinished | FM data is in the vault; when Phase 5 lands, ciphertext backup will include these config ids automatically if it already dumps the `config` store — verify then, do not block FM on it |
+| ETM Phase 5 filtered CSV unfinished | Vault JSON backup dumps the ciphertext `config` store, so forecast ids travel with the vault. CSV export can wait. |
 
 ---
 

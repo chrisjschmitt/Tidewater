@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 — 2026-09-02
+
+### Changed
+- Setting up an unmatched import account starts “What you call it” as the Monarch name. You can keep it, edit it, or copy the Monarch name back in with one click.
+
+## 0.7.0 — 2026-09-02
+
+### Added
+- A full JSON backup can carry the encrypted expenses vault. Restore it on another device and unlock with the same key. Backups without expense tracking stay plan-only, as before.
+
 ## 0.6.0 — 2026-08-24
 
 ### Changed

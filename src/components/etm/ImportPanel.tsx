@@ -168,7 +168,8 @@ export default function ImportPanel({
               </p>
               <p className="mt-0.5 text-xs text-ink-500">
                 Their rows are set aside until you say what they are. Currency matters most: it
-                decides whether their amounts join your CAD totals or stay separate.
+                decides whether their amounts join your CAD totals or stay separate. “What you
+                call it” starts as the Monarch name; you can keep it or change it.
               </p>
               <ul className="mt-3 space-y-2">
                 {plan.unmatched.map((account) => (

@@ -109,8 +109,15 @@ const TOPICS: Topic[] = [
           </li>
           <li>
             <strong>JSON Backup:</strong> Under <strong>Your data</strong>, download a full snapshot
-            (budget, goals, profile), then restore it with <strong>Restore a full backup</strong> —
-            or use the header <strong>Import</strong> button with a <code>.json</code> file.
+            (budget, goals, profile
+            {__ETM_AVAILABLE__
+              ? ', and the encrypted expenses vault if you have set that up — the key is not in the file'
+              : ''}
+            ), then restore it with <strong>Restore a full backup</strong> — or use the header{' '}
+            <strong>Import</strong> button with a <code>.json</code> file.
+            {__ETM_AVAILABLE__
+              ? ' On another device, unlock expense tracking with the same key.'
+              : ''}
           </li>
           <li>
             <strong>Ted’s Sample Budget:</strong> Explore pre-populated sample data anytime to test features safely.

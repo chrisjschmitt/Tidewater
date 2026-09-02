@@ -24,6 +24,7 @@ import {
   unallocated,
   type GroupSummary,
 } from './lib/budget'
+import { parseTidewaterBackup, serializeTidewaterBackup } from './lib/backup'
 import {
   DEFAULT_PROFILE,
   detectCsvKind,
@@ -55,6 +56,7 @@ import { APP_VERSION } from './lib/version'
  * compile-time `false`, so the chunk is never emitted at all.
  */
 const EtmModule = __ETM_AVAILABLE__ ? lazy(() => import('./components/etm/EtmModule')) : null
+const etmVaultBackup = __ETM_AVAILABLE__ ? () => import('./lib/etm/storage/backup') : null
 
 export default function App() {
   const [budget, setBudget] = useState<Budget | null>(null)
@@ -116,6 +118,33 @@ export default function App() {
     setEtm({ setUp: true, remembered })
   }, [])
 
+  const lockEtmSession = useCallback(() => {
+    setEtmKey(null)
+    setEtmOpen(false)
+    setEtmActuals(null)
+    setEtmChat(null)
+  }, [])
+
+  /** Apply a backup's optional vault blob. Plan-only files leave the local vault alone. */
+  const restoreVaultFromBackup = useCallback(
+    async (etm: unknown): Promise<string | null> => {
+      if (!etmVaultBackup || etm === undefined) return null
+      const { isEtmVaultBackup, restoreEtmVault } = await etmVaultBackup()
+      if (!isEtmVaultBackup(etm)) {
+        return 'Your backup is restored. The expenses vault in that file could not be read, so this device’s expenses were left as they were.'
+      }
+      lockEtmSession()
+      try {
+        await restoreEtmVault(etm)
+      } catch {
+        return 'Your backup is restored. The expenses vault in that file could not be applied, so this device’s expenses were left as they were.'
+      }
+      setEtm({ setUp: true, remembered: false })
+      return 'Your backup is restored. Unlock expense tracking with the same key to open the vault.'
+    },
+    [lockEtmSession],
+  )
+
   const flash = (message: string) => {
     setNotice(message)
     window.setTimeout(() => setNotice(''), 5000)
@@ -145,13 +174,11 @@ export default function App() {
         if (looksLikeBackup) {
           setPhase('Restoring your backup…', 70)
           await yieldToUi()
-          const restored = JSON.parse(text) as Budget
-          if (!restored || !Array.isArray(restored.expenses) || !Array.isArray(restored.income)) {
-            throw new Error('That JSON file does not look like a Tidewater backup.')
-          }
-          setPhase('Restoring your backup…', 95)
-          commit({ ...restored, updatedAt: new Date().toISOString() })
-          flash('Your backup is restored.')
+          const restored = parseTidewaterBackup(text)
+          setPhase('Restoring your backup…', 90)
+          commit({ ...restored.budget, updatedAt: new Date().toISOString() })
+          const vaultNote = await restoreVaultFromBackup(restored.etm)
+          flash(vaultNote ?? 'Your backup is restored.')
           return
         }
 
@@ -190,7 +217,7 @@ export default function App() {
         setImportProgress(null)
       }
     },
-    [budget, commit],
+    [budget, commit, restoreVaultFromBackup],
   )
 
   const loadSample = useCallback(async () => {
@@ -525,6 +552,21 @@ export default function App() {
           setDataOpen(false)
           void handleFile(file)
         }}
+        onExportBackup={async () => {
+          let vault: unknown
+          if (etmVaultBackup) {
+            try {
+              vault = await (await etmVaultBackup()).exportEtmVault()
+            } catch {
+              vault = undefined
+            }
+          }
+          downloadFile(
+            `tidewater-backup-${new Date().toISOString().slice(0, 10)}.json`,
+            serializeTidewaterBackup(budget, vault),
+            'application/json',
+          )
+        }}
         onReset={() => {
           void clearBudget()
           void clearChat()
@@ -666,6 +708,7 @@ function DataModal({
   etm,
   onClose,
   onImportBackup,
+  onExportBackup,
   onReset,
   onLoadSample,
   onOpenEtm,
@@ -675,6 +718,7 @@ function DataModal({
   etm?: EtmPresence
   onClose: () => void
   onImportBackup: (file: File) => void
+  onExportBackup: () => void
   onReset: () => void
   onLoadSample: () => void
   onOpenEtm: () => void
@@ -715,19 +759,21 @@ function DataModal({
         />
         <Row
           title="Export a full backup"
-          body="Everything, including goals and your profile, as a JSON file."
-          action="Download JSON"
-          onClick={() =>
-            downloadFile(
-              `tidewater-backup-${new Date().toISOString().slice(0, 10)}.json`,
-              JSON.stringify(budget, null, 2),
-              'application/json',
-            )
+          body={
+            etm?.setUp
+              ? 'The plan, goals, and profile, plus the encrypted expenses vault. Unlock on another device with the same key.'
+              : 'Everything, including goals and your profile, as a JSON file.'
           }
+          action="Download JSON"
+          onClick={() => void onExportBackup()}
         />
         <Row
           title="Restore a full backup"
-          body="Replace what is on screen with a Tidewater JSON backup from this or another device."
+          body={
+            etm?.setUp
+              ? 'Replace the plan on screen. If the file includes an expenses vault, it replaces this device’s vault — same key to unlock.'
+              : 'Replace what is on screen with a Tidewater JSON backup from this or another device.'
+          }
           action="Choose JSON"
           onClick={() => backupRef.current?.click()}
         />

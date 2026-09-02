@@ -204,6 +204,7 @@ const howReimbTab = localAnswer('How do I use the Reimbursable tab?', budget, sy
 const howTx = localAnswer('How do I use the Transactions tab?', budget, synthetic)
 const howImportTab = localAnswer('How do I use the Import tab?', budget, synthetic)
 const howAccounts = localAnswer('How do I use the Accounts tab?', budget, synthetic)
+const howBackup = localAnswer('How do I restore a backup?', budget)
 const merchants = ['Pier Housekeeping', 'Cedar Market', 'Cove Pharmacy', 'Nimbus Software', 'Chequing (...1001)']
 
 console.log('\n=== Plan-only (locked / no snapshot) ===')
@@ -335,6 +336,10 @@ check(
 check(
   'how to use Accounts names funding and the Monarch name',
   /funding/i.test(howAccounts) && /Monarch/i.test(howAccounts),
+)
+check(
+  'how to restore a backup mentions the encrypted vault and the same key',
+  /encrypted/i.test(howBackup) && /key/i.test(howBackup) && /plan/i.test(howBackup),
 )
 
 if (failures > 0) {

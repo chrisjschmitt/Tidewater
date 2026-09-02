@@ -41,6 +41,11 @@ import {
   sealSentinel,
   sentinelMatches,
 } from '../src/lib/etm/crypto.ts'
+import {
+  decodeVaultBackup,
+  encodeVaultBackup,
+  isEtmVaultBackup,
+} from '../src/lib/etm/storage/backup.ts'
 import { DEFAULT_CONFIG, withBucketSetting } from '../src/lib/etm/config.ts'
 import {
   closedPlanTrend,
@@ -65,6 +70,7 @@ import {
 import { createManualTransaction } from '../src/lib/etm/manual.ts'
 import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
 import type { Account, BalanceSnapshot, ReconciliationRecord, Transaction } from '../src/lib/etm/types.ts'
+import { parseTidewaterBackup, serializeTidewaterBackup } from '../src/lib/backup.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
@@ -894,6 +900,86 @@ const withUncategorized = findUntidy(
   DEFAULT_CONFIG,
 )
 check('an uncategorized row is surfaced', withUncategorized.uncategorized.length === 1)
+
+console.log('\n=== JSON backup envelope ===')
+
+const sampleBudget: Budget = {
+  version: 1,
+  profile: {
+    name: 'Pat',
+    housing: 'rent',
+    household: 'single',
+    dependents: 0,
+    hasDebt: false,
+    region: 'Calgary, Alberta',
+  },
+  income: [{ id: 'i1', name: 'Pay', amount: 4000 }],
+  expenses: [{ id: 'e1', name: 'Rent', groupId: 'home', amount: 1500, essential: true }],
+  goals: [],
+  updatedAt: '2026-09-02T12:00:00.000Z',
+  source: 'onboarding',
+}
+
+const planOnly = serializeTidewaterBackup(sampleBudget)
+check(
+  'a plan-only backup matches the old JSON file',
+  planOnly === JSON.stringify(sampleBudget, null, 2) && !planOnly.includes('"etm"'),
+)
+const parsedPlan = parseTidewaterBackup(planOnly)
+check('a plan-only backup restores the budget', parsedPlan.budget.income[0]?.name === 'Pay')
+check('a plan-only backup has no vault section', parsedPlan.etm === undefined)
+
+const merchant = 'Invented Grocery Co'
+const sealedTxn = await seal(key, { merchant, amount: -12.5 })
+const vaultDump = encodeVaultBackup(
+  {
+    version: 1,
+    salt,
+    iterations: PBKDF2_ITERATIONS,
+    sentinel: await sealSentinel(key),
+    createdAt: '2026-09-02T12:00:00.000Z',
+  },
+  {
+    accounts: [],
+    transactions: [{ id: '2026-08', sealed: sealedTxn }],
+    balances: [],
+    batches: [],
+    reconciliations: [],
+    config: [],
+  },
+)
+check('the encoded vault is accepted', isEtmVaultBackup(vaultDump))
+check('the remembered unlock is not in the dump', !JSON.stringify(vaultDump).includes('unlock'))
+check(
+  'ciphertext does not spell the merchant',
+  !JSON.stringify(vaultDump).includes(merchant),
+)
+
+const roundTrip = decodeVaultBackup(vaultDump)
+check('the dump decodes', Boolean(roundTrip))
+check(
+  'the same key still opens the sentinel',
+  roundTrip ? await sentinelMatches(key, roundTrip.meta.sentinel) : false,
+)
+check(
+  'the same key still opens a sealed month',
+  roundTrip
+    ? (await open<{ merchant: string }>(key, roundTrip.stores.transactions[0]!.sealed)).merchant ===
+      merchant
+    : false,
+)
+check(
+  'a wrong key still fails the sentinel',
+  roundTrip ? !(await sentinelMatches(wrong, roundTrip.meta.sentinel)) : false,
+)
+
+const withVault = serializeTidewaterBackup(sampleBudget, vaultDump)
+const parsedVault = parseTidewaterBackup(withVault)
+check('a backup with a vault still restores the plan', parsedVault.budget.expenses[0]?.name === 'Rent')
+check('the vault blob is not copied onto the budget', !('etm' in parsedVault.budget))
+check('the vault blob is still readable', isEtmVaultBackup(parsedVault.etm))
+check('a mangled vault blob is rejected', !isEtmVaultBackup({ version: 1, salt: 'nope' }))
+check('decode of a mangled blob is null, not a wipe', decodeVaultBackup({ version: 1 }) === null)
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)

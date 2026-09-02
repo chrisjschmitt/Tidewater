@@ -105,12 +105,13 @@ const Pill = ({ children }: { children: React.ReactNode }) => (
 )
 
 export function blankAccount(monarchName = ''): Account {
+  const name = monarchName.trim()
   return {
     id: uid('acct'),
-    nickname: '',
+    nickname: name,
     kind: 'chequing',
     currency: 'CAD',
-    monarchName,
+    monarchName: name,
     funding: false,
     mainCard: false,
     savingsDestination: false,
@@ -183,7 +184,21 @@ export function AccountForm({
       }
     >
       <div className="space-y-4">
-        <Field label="What you call it">
+        <Field
+          label="What you call it"
+          action={
+            draft.monarchName.trim() &&
+            draft.nickname.trim() !== draft.monarchName.trim() ? (
+              <button
+                type="button"
+                className="text-xs text-tide-700 hover:underline"
+                onClick={() => set('nickname', draft.monarchName.trim())}
+              >
+                Use the Monarch name
+              </button>
+            ) : undefined
+          }
+        >
           <input
             autoFocus
             className="field"
@@ -290,18 +305,25 @@ export function AccountForm({
 function Field({
   label,
   hint,
+  action,
   children,
 }: {
   label: string
   hint?: string
+  action?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
-    <label className="block">
-      <span className="label mb-1.5">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-xs text-ink-400">{hint}</span>}
-    </label>
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <span className="label">{label}</span>
+        {action}
+      </div>
+      <label className="block">
+        {children}
+        {hint && <span className="mt-1 block text-xs text-ink-400">{hint}</span>}
+      </label>
+    </div>
   )
 }
 

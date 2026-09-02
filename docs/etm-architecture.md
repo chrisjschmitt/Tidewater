@@ -1,8 +1,8 @@
 # Expense Tracking Module (ETM) — Systems Architecture & Implementation Plan
 
-Status: **in progress** — Phases 1–4 and 6 (§10) are built; Phase 5 (vault JSON
-backup) is still proposed. They are independent: do not fold Phase 6 into
-Phase 5.
+Status: **in progress** — Phases 1–4 and 6 (§10) are built; Phase 5 vault JSON
+backup is built (filtered CSV export is still proposed). They are independent:
+do not fold Phase 6 into Phase 5.
 
 Inputs: `docs/ExpenseTrackingModuleSpecs.md`, `docs/Workflow.md` (both private,
 gitignored), `docs/product-spec.md`, `docs/category-mapping.md`, and the sample
@@ -466,7 +466,7 @@ The acknowledgement copy must say so.
 | Local intents that distinguish typical-month plan vs actual / forecast | Chat rewriting the Budget or Forecast (no apply-to-plan, no placing known futures from chat) |
 | The same snapshot appended to optional cloud system context | A second Forecast UI inside the chat panel |
 | Settings acknowledgement: spending/forecast summary leaves the device, not the vault; keys stay on device | A second passphrase, a second vault, or any server of Tidewater’s |
-| Help copy that stops overclaiming “analyze spending patterns,” and that names ETM/Forecast only behind `__ETM_AVAILABLE__` | Implementing Phase 5 (filtered CSV export, encrypted ETM section in the JSON backup) |
+| Help copy that stops overclaiming “analyze spending patterns,” and that names ETM/Forecast only behind `__ETM_AVAILABLE__` | Implementing remaining Phase 5 (filtered CSV export of transactions) |
 
 #### Implementation notes
 
@@ -684,11 +684,18 @@ fixture.
 
 ### Phase 5 — Reporting, backup, polish
 
-- Filtered CSV export by month / YTD / range with all database fields.
-- Encrypted ETM section in the full JSON backup and restore path.
+- **Vault JSON backup (implemented).** The existing JSON backup gains an
+  optional `etm` section of *ciphertext* plus salt. Restoring requires the
+  same key. Files with no vault (expense tracking unused, or a backup from
+  before this phase) restore the plan only and leave any local vault alone.
+  The remembered unlock is never exported. Forecast config and snapshots
+  travel with the `config` store automatically.
+- Filtered CSV export by month / YTD / range with all database fields
+  (still proposed).
 - README and changelog updates, version bump, final UX pass for tone.
-- **Exit criteria:** the two "reporting" criteria pass; a backup restored
-  onto a fresh browser profile with the key reproduces the ETM state.
+- **Exit criteria (backup):** a backup restored onto a fresh browser
+  profile with the key reproduces the ETM state; a plan-only backup still
+  restores when the module is unused. *(CSV reporting criteria remain.)*
 
 ### Phase 6 — Ask a question and ETM snapshot (implemented)
 
