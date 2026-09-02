@@ -190,6 +190,7 @@ export default function ForecastPanel({
             <ForecastTimeline
               calendar={household.calendar}
               selected={focused.month}
+              allowList={config.reimbursableAllowList}
               onSelect={setFocusedMonth}
             />
           </div>

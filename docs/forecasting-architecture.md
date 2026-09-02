@@ -723,14 +723,14 @@ own as-of (today) plus the window toggle.
 Shown first on the Forecast tab. A 24-column strip: previous 12 full months +
 next 12. A click selects that month and the summary card below follows it.
 
-Each past column: actual bar, forecast bar (recomputed from data *before*
-that month when a snapshot exists; otherwise from current engine — snapshots
-are the honest ones).
-
-Each future column: plan vs forecast. Tint when outside ±5%. Click opens
-that month as a summary card below the strip. After the user **places** a known cost,
-returning to the strip must show the month inside the window if they
-brought it in, and the overlay line must have dropped.
+Each past and current column is two stacked bars: **actual** (left) beside
+**forecast** (right). Future columns are plan (left) beside forecast
+(right). Household (non-reimbursable) is the bottom segment of each spend
+bar; each allow-listed reimbursable bucket is a segment above it. Tint
+when outside ±5%. Click opens that month as a summary card below the
+strip. After the user **places** a known cost, returning to the strip
+must show the month inside the window if they brought it in, and the
+overlay line must have dropped. Vacation is never in these bars.
 
 Do not require a charting library. SVG, same family as `GoalChart`.
 

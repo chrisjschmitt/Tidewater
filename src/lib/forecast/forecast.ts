@@ -26,13 +26,22 @@ import type {
   RemainLine,
   SeriesId,
   SetAside,
+  TimelineStack,
   VarianceRow,
   VacationForecast,
   VacationGoalMatch,
   VacationMonth,
 } from './types'
 import { withForecastDefaults } from './types'
-import { DEFAULT_REIMBURSABLE_PARENT, nameKey, signedSpend, splitUniverse } from './universe'
+import {
+  DEFAULT_REIMBURSABLE_PARENT,
+  HOUSEHOLD_STACK_KEY,
+  householdBucketFor,
+  nameKey,
+  normalizeTag,
+  signedSpend,
+  splitUniverse,
+} from './universe'
 
 export const CONTROL_WINDOW = 0.05
 const TRAVEL_THRESHOLD = 0.005
@@ -191,6 +200,135 @@ function spendInMonth(rows: CategoryActuals[], key: string, month: string): numb
 
 function totalInMonth(rows: CategoryActuals[], month: string): number {
   return rows.reduce((sum, row) => sum + (row.byMonth.get(month) ?? 0), 0)
+}
+
+interface BucketPart {
+  label: string
+  amount: number
+}
+
+interface BucketShare {
+  key: string
+  label: string
+  share: number
+}
+
+function addBucketPart(parts: Map<string, BucketPart>, key: string, label: string, amount: number) {
+  if (Math.abs(amount) < 0.0005) return
+  const prev = parts.get(key)
+  parts.set(key, { label: prev?.label ?? label, amount: (prev?.amount ?? 0) + amount })
+}
+
+function orderedStack(parts: Map<string, BucketPart>, allowList: string[]): TimelineStack[] {
+  const extras = [...parts.keys()].filter(
+    (key) => key !== HOUSEHOLD_STACK_KEY && !allowList.some((tag) => normalizeTag(tag) === key),
+  )
+  const keys = [HOUSEHOLD_STACK_KEY, ...allowList.map((tag) => normalizeTag(tag)), ...extras]
+  const seen = new Set<string>()
+  const stack: TimelineStack[] = []
+  for (const key of keys) {
+    if (seen.has(key)) continue
+    seen.add(key)
+    const part = parts.get(key)
+    if (!part || Math.abs(part.amount) < 0.005) continue
+    stack.push({ key, label: part.label, amount: roundCents(part.amount) })
+  }
+  return stack
+}
+
+function actualBucketParts(
+  transactions: Transaction[],
+  currency: Currency,
+  month: string,
+  allowList: string[],
+  parent: string,
+): Map<string, BucketPart> {
+  const parts = new Map<string, BucketPart>()
+  for (const transaction of transactions) {
+    if (transaction.currency !== currency) continue
+    if (transaction.date.slice(0, 7) !== month) continue
+    const bucket = householdBucketFor(transaction.tags, allowList, parent)
+    addBucketPart(parts, bucket.key, bucket.label, signedSpend(transaction.amount))
+  }
+  return parts
+}
+
+function categoryBucketMix(
+  transactions: Transaction[],
+  currency: Currency,
+  lookback: string[],
+  allowList: string[],
+  parent: string,
+): Map<string, BucketShare[]> {
+  const inWindow = new Set(lookback)
+  const totals = new Map<string, Map<string, BucketPart>>()
+  for (const transaction of transactions) {
+    if (transaction.currency !== currency) continue
+    const month = transaction.date.slice(0, 7)
+    if (!inWindow.has(month)) continue
+    const category = nameKey(transaction.category)
+    const bucket = householdBucketFor(transaction.tags, allowList, parent)
+    let row = totals.get(category)
+    if (!row) {
+      row = new Map()
+      totals.set(category, row)
+    }
+    addBucketPart(row, bucket.key, bucket.label, signedSpend(transaction.amount))
+  }
+  const mix = new Map<string, BucketShare[]>()
+  for (const [category, parts] of totals) {
+    const sum = [...parts.values()].reduce((total, part) => total + part.amount, 0)
+    if (sum <= 0) continue
+    mix.set(
+      category,
+      [...parts.entries()].map(([key, part]) => ({
+        key,
+        label: part.label,
+        share: part.amount / sum,
+      })),
+    )
+  }
+  return mix
+}
+
+function applyCategoryMix(
+  parts: Map<string, BucketPart>,
+  mix: Map<string, BucketShare[]>,
+  categoryKey: string,
+  amount: number,
+) {
+  const shares = mix.get(categoryKey)
+  if (!shares || shares.length === 0) {
+    addBucketPart(parts, HOUSEHOLD_STACK_KEY, 'Household', amount)
+    return
+  }
+  for (const share of shares) {
+    addBucketPart(parts, share.key, share.label, amount * share.share)
+  }
+}
+
+function forecastStackFromCategories(
+  byCategory: MonthCategoryAmount[],
+  mix: Map<string, BucketShare[]>,
+  allowList: string[],
+): TimelineStack[] {
+  const parts = new Map<string, BucketPart>()
+  for (const row of byCategory) applyCategoryMix(parts, mix, row.key, row.forecast)
+  return orderedStack(parts, allowList)
+}
+
+function currentReadingStack(
+  transactions: Transaction[],
+  currency: Currency,
+  month: string,
+  remainLines: RemainLine[],
+  mix: Map<string, BucketShare[]>,
+  allowList: string[],
+  parent: string,
+): TimelineStack[] {
+  const parts = actualBucketParts(transactions, currency, month, allowList, parent)
+  for (const line of remainLines) applyCategoryMix(parts, mix, line.key, line.remain)
+  return orderedStack(parts, allowList)
 }
 
 function planForCategory(budget: Budget, key: string): number {
@@ -549,9 +687,28 @@ function calendarPoint(args: {
   asOf: string
   overlay: number
   seriesId: SeriesId
+  householdTx: Transaction[]
+  currency: Currency
+  parentTag: string
+  bucketMix: Map<string, BucketShare[]>
 }): MonthPoint {
-  const { month, kind, categories, series, lookback, actuals, budget, config, asOf, overlay, seriesId } =
-    args
+  const {
+    month,
+    kind,
+    categories,
+    series,
+    lookback,
+    actuals,
+    budget,
+    config,
+    asOf,
+    overlay,
+    seriesId,
+    householdTx,
+    currency,
+    parentTag,
+    bucketMix,
+  } = args
   const byKey = new Map(series.map((item) => [item.key, item]))
   const monthsAhead = monthDiff(asOf.slice(0, 7), month)
   const byCategory: MonthCategoryAmount[] = []
@@ -606,6 +763,17 @@ function calendarPoint(args: {
     byCategory.map((item) => [item.key, { label: item.label, amount: item.forecast }]),
   )
   const planVsForecast = planVsForecastRows(budget, month, seriesId, categories, forecastByKey, config)
+  let actualStack: TimelineStack[] = []
+  let forecastStack: TimelineStack[] = []
+  if (seriesId === 'household') {
+    forecastStack = forecastStackFromCategories(byCategory, bucketMix, config.reimbursableAllowList)
+    if (kind !== 'future') {
+      actualStack = orderedStack(
+        actualBucketParts(householdTx, currency, month, config.reimbursableAllowList, parentTag),
+        config.reimbursableAllowList,
+      )
+    }
+  }
   return {
     month,
     kind,
@@ -619,6 +787,9 @@ function calendarPoint(args: {
     byCategory,
     variances: seriesId === 'household' ? gapRows(planVsForecast, forecast, plan) : [],
     planVsForecast,
+    actualStack,
+    forecastStack,
+    stack: kind === 'future' ? forecastStack : actualStack,
   }
 }
 
@@ -910,6 +1081,10 @@ function vacationMonthPoint(
     asOf,
     overlay: 0,
     seriesId: 'vacation',
+    householdTx: [],
+    currency: 'CAD',
+    parentTag: DEFAULT_REIMBURSABLE_PARENT,
+    bucketMix: new Map(),
   })
   const actual = kind === 'future' ? 0 : point.actual
   const forecast = point.calendar
@@ -974,8 +1149,17 @@ function buildCurrency(args: {
   asOf: string
   label: string
   vacationGoal: VacationGoalMatch
+  parentTag: string
 }): CurrencyForecast {
-  const { currency, householdTx, vacationTx, lookback, budget, config, asOf, label, vacationGoal } = args
+  const { currency, householdTx, vacationTx, lookback, budget, config, asOf, label, vacationGoal, parentTag } =
+    args
+  const bucketMix = categoryBucketMix(
+    householdTx,
+    currency,
+    lookback,
+    config.reimbursableAllowList,
+    parentTag,
+  )
   const extras = [
     ...budget.expenses.map((line) => ({ key: nameKey(line.name), label: line.name })),
     ...config.knownFutures
@@ -1034,6 +1218,10 @@ function buildCurrency(args: {
         asOf,
         overlay: overlay.monthly,
         seriesId: 'household',
+        householdTx,
+        currency,
+        parentTag,
+        bucketMix,
       }),
     )
   }
@@ -1051,6 +1239,10 @@ function buildCurrency(args: {
       asOf,
       overlay: overlay.monthly,
       seriesId: 'household',
+      householdTx,
+      currency,
+      parentTag,
+      bucketMix,
     })
     if (kind === 'current') {
       const current = currentMonthView({
@@ -1070,6 +1262,20 @@ function buildCurrency(args: {
       point.gapRatio = current.gapRatio
       point.variances = current.variances
       point.planVsForecast = current.planVsForecast
+      point.actualStack = orderedStack(
+        actualBucketParts(householdTx, currency, month, config.reimbursableAllowList, parentTag),
+        config.reimbursableAllowList,
+      )
+      point.forecastStack = currentReadingStack(
+        householdTx,
+        currency,
+        month,
+        current.remainLines,
+        bucketMix,
+        config.reimbursableAllowList,
+        parentTag,
+      )
+      point.stack = point.forecastStack
     }
     calendar.push(point)
   }
@@ -1140,6 +1346,7 @@ export function forecast(
     asOf,
     label,
     vacationGoal,
+    parentTag: reimbursableParentTag,
   })
   const usd = buildCurrency({
     currency: 'USD',
@@ -1151,6 +1358,7 @@ export function forecast(
     asOf,
     label,
     vacationGoal,
+    parentTag: reimbursableParentTag,
   })
 
   return {

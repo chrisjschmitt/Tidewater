@@ -82,6 +82,34 @@ export function splitUniverse(
 /** Canonical spelling for checklists: one space after the colon. */
 export const displayTag = (tag: string): string => tag.trim().replace(/\s+/g, ' ').replace(/\s*:\s*/, ': ')
 
+export const HOUSEHOLD_STACK_KEY = 'household'
+
+/** The words after `Reimbursable:` — “Eric Condo Costs”. */
+export function reimbursableBucketLabel(tag: string): string {
+  const shown = displayTag(tag)
+  const colon = shown.indexOf(':')
+  return colon >= 0 ? shown.slice(colon + 1).trim() : shown
+}
+
+/**
+ * First allow-listed reimbursable sub-tag on the row, or core household.
+ * Household-series rows are already vacation-free.
+ */
+export function householdBucketFor(
+  tags: string[],
+  allowList: string[],
+  parent: string,
+): { key: string; label: string } {
+  const p = normalizeTag(parent)
+  for (const tag of tags) {
+    const t = normalizeTag(tag)
+    if (!t.startsWith(`${p}:`)) continue
+    const match = allowList.find((item) => normalizeTag(item) === t)
+    if (match) return { key: t, label: reimbursableBucketLabel(match) }
+  }
+  return { key: HOUSEHOLD_STACK_KEY, label: 'Household' }
+}
+
 function uniqueTags(tags: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []

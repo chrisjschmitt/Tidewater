@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1 — 2026-09-02
+
+### Changed
+- The household timeline keeps actual beside forecast (plan beside forecast ahead). Each spend bar is stacked: household at the bottom, then each reimbursable bucket you count as household.
+
 ## 0.8.0 — 2026-09-02
 
 ### Changed

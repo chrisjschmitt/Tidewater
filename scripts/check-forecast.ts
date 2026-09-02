@@ -38,7 +38,9 @@ import {
   householdTagOptions,
   isParentOnlyReimbursable,
   isUncategorizedCategory,
+  HOUSEHOLD_STACK_KEY,
   nameKey,
+  normalizeTag,
   splitUniverse,
   tagSelected,
   taggingGaps,
@@ -259,6 +261,73 @@ check(
     !monthPoint(result, '2025-08')?.byCategory.some((c) => c.key === nameKey('Trip Lodging')),
 )
 check('vacation actuals are absent from the household strip', result.cad.household.calendar.every((p) => !p.byCategory.some((c) => c.key === nameKey('Trip Lodging'))))
+
+const healthcareKey = normalizeTag('Reimbursable: Healthcare Account')
+const capitalKey = normalizeTag('Reimbursable: Capital Account')
+const feesKey = normalizeTag('Reimbursable: Annual Fees Account')
+const aprilStack = monthPoint(result, '2026-04')?.stack ?? []
+const septPastStack = monthPoint(result, '2025-09')?.stack ?? []
+const augustStack = monthPoint(result, '2026-08')?.stack ?? []
+const septFutureStack = monthPoint(result, '2026-09')?.stack ?? []
+const stackAmt = (stack: typeof aprilStack, key: string) =>
+  stack.find((segment) => segment.key === key)?.amount ?? 0
+check(
+  'April stacks household under healthcare and annual fees',
+  aprilStack[0]?.key === HOUSEHOLD_STACK_KEY &&
+    stackAmt(aprilStack, healthcareKey) === 80 &&
+    stackAmt(aprilStack, feesKey) === 90,
+  aprilStack.map((segment) => `${segment.label} ${segment.amount}`).join(', '),
+)
+check(
+  'September 2025 stacks capital tools separately from household',
+  stackAmt(septPastStack, capitalKey) === 300 && stackAmt(septPastStack, healthcareKey) === 80,
+  septPastStack.map((segment) => `${segment.label} ${segment.amount}`).join(', '),
+)
+check(
+  'a past stack adds up to that month’s actual',
+  near(
+    aprilStack.reduce((sum, segment) => sum + segment.amount, 0),
+    monthPoint(result, '2026-04')?.actual ?? 0,
+  ),
+)
+check(
+  'August forecast-to-month-end keeps healthcare as its own segment',
+  stackAmt(augustStack, healthcareKey) === 80 &&
+    near(
+      augustStack.reduce((sum, segment) => sum + segment.amount, 0),
+      monthPoint(result, '2026-08')?.calendar ?? 0,
+    ),
+  `healthcare ${stackAmt(augustStack, healthcareKey)} total ${augustStack.reduce((sum, segment) => sum + segment.amount, 0)}`,
+)
+check(
+  'September forecast still places healthcare as a segment',
+  stackAmt(septFutureStack, healthcareKey) === 80,
+  septFutureStack.map((segment) => `${segment.label} ${segment.amount}`).join(', '),
+)
+check(
+  'Trail Clinic vacation healthcare does not appear on the household stack',
+  !result.cad.household.calendar.some((point) =>
+    point.stack.some((segment) => segment.key === healthcareKey && point.month === '2026-07' && segment.amount >= 170),
+  ),
+)
+const augustPoint = monthPoint(result, '2026-08')
+check(
+  'August still has an actual bar beside forecast',
+  near(augustPoint?.actualStack.reduce((sum, segment) => sum + segment.amount, 0) ?? 0, augustPoint?.actual ?? 0) &&
+    near(
+      augustPoint?.forecastStack.reduce((sum, segment) => sum + segment.amount, 0) ?? 0,
+      augustPoint?.calendar ?? 0,
+    ) &&
+    (augustPoint?.actual ?? 0) !== (augustPoint?.calendar ?? 0),
+  `actual ${augustPoint?.actual} forecast ${augustPoint?.calendar}`,
+)
+check(
+  'a closed month’s forecast stack adds up to the calendar',
+  near(
+    (monthPoint(result, '2026-04')?.forecastStack.reduce((sum, segment) => sum + segment.amount, 0) ?? 0),
+    monthPoint(result, '2026-04')?.calendar ?? 0,
+  ),
+)
 
 console.log('\n=== Overlay identity ===')
 check('irregular window total is 2874', result.cad.household.overlay.irregularWindowTotal === IRREGULAR_TOTAL, `got ${result.cad.household.overlay.irregularWindowTotal}`)

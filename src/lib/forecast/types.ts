@@ -197,6 +197,13 @@ export interface VarianceRow {
   delta: number
 }
 
+/** One segment of the household timeline stack. Household is first. */
+export interface TimelineStack {
+  key: string
+  label: string
+  amount: number
+}
+
 export interface MonthPoint {
   month: string
   kind: 'past' | 'current' | 'future'
@@ -211,6 +218,22 @@ export interface MonthPoint {
   variances: VarianceRow[]
   /** Plan vs forecast by category, largest |difference| first. */
   planVsForecast: VarianceRow[]
+  /**
+   * Posted composition (past and current). Empty on future months.
+   * Household sits at the bottom; each allow-listed reimbursable bucket
+   * is a segment.
+   */
+  actualStack: TimelineStack[]
+  /**
+   * Forecast composition (calendar, or forecast to month-end on current).
+   * Same stack order as `actualStack`.
+   */
+  forecastStack: TimelineStack[]
+  /**
+   * The bar the timeline treats as the reading: posted spend on past
+   * months, forecast to month-end on current, calendar on future.
+   */
+  stack: TimelineStack[]
 }
 
 export interface OverlayLine {

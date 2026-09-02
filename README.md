@@ -104,7 +104,7 @@ npm run build:public
 
 ## Expenses and Forecast
 
-Unlocking the optional expense tracking module (same device key as always) adds an Expenses area. Inside it, the **Forecast** tab is a reading of those transactions and the current budget: household timeline, the month card, last month’s snapshot, categories, and a vacation series of its own. Lookback window, which tags count as household or vacation, and erasing the vault live on the **Settings** tab. Nothing in Forecast rewrites the budget unless you choose to apply a contribution. Personal data stays in the encrypted store on this device. The public build (`npm run build:public`) does not include this tab.
+Unlocking the optional expense tracking module (same device key as always) adds an Expenses area. Inside it, the **Forecast** tab is a reading of those transactions and the current budget: household timeline (actual beside forecast; household at the bottom of each bar, reimbursable buckets stacked above), the month card, last month’s snapshot, categories, and a vacation series of its own. Lookback window, which tags count as household or vacation, and erasing the vault live on the **Settings** tab. Nothing in Forecast rewrites the budget unless you choose to apply a contribution. Personal data stays in the encrypted store on this device. The public build (`npm run build:public`) does not include this tab.
 
 ## Three ways to start
 
