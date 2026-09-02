@@ -16,6 +16,7 @@ import type {
   DoubleCountWarning,
   ForecastConfig,
   ForecastMix,
+  ForecastMixLine,
   ForecastResult,
   HouseholdForecast,
   KnownFuture,
@@ -95,6 +96,27 @@ export function isOutsideControlWindow(forecast: number, plan: number): boolean 
   return Math.abs(gap) > CONTROL_WINDOW
 }
 
+/** Take ignored Plan vs forecast gaps out of Forecast. Plan is unchanged. */
+export function withCompareIgnores(
+  plan: number,
+  forecast: number,
+  compare: Array<{ key: string; plan: number; forecast: number }>,
+  ignoredKeys: string[],
+): { plan: number; forecast: number } {
+  const ignored = new Set(ignoredKeys)
+  let deltaOff = 0
+  for (const row of compare) {
+    if (!ignored.has(row.key)) continue
+    deltaOff += row.forecast - row.plan
+  }
+  return { plan, forecast: roundCents(forecast - deltaOff) }
+}
+
+/** Dated costs land on Forecast; Plan vs forecast pins raise Plan only. */
+export function pinAddsToForecast(future: Pick<KnownFuture, 'addsTo'>): boolean {
+  return future.addsTo !== 'plan'
+}
+
 export function inflate(amount: number, monthsAhead: number, annualPercent: number): number {
   if (annualPercent === 0 || monthsAhead <= 0 || amount === 0) return amount
   return amount * (1 + annualPercent / 100) ** (monthsAhead / 12)
@@ -153,14 +175,14 @@ function accumulate(transactions: Transaction[], currency: Currency): CategoryAc
   }))
 }
 
-function toSeries(rows: CategoryActuals[], months: string[]): CategorySeries[] {
+function toSeries(rows: CategoryActuals[], months: string[], keepKeys: Set<string> = new Set()): CategorySeries[] {
   return rows
     .map((row) => ({
       key: row.key,
       label: row.label,
       values: months.map((month) => row.byMonth.get(month) ?? 0),
     }))
-    .filter((series) => series.values.some((value) => value !== 0))
+    .filter((series) => series.values.some((value) => value !== 0) || keepKeys.has(series.key))
 }
 
 function spendInMonth(rows: CategoryActuals[], key: string, month: string): number {
@@ -175,6 +197,83 @@ function planForCategory(budget: Budget, key: string): number {
   return budget.expenses
     .filter((line) => nameKey(line.name) === key)
     .reduce((sum, line) => sum + (line.amount || 0), 0)
+}
+
+const isMonthlyType = (type: CategoryForecast['type']): boolean =>
+  type === 'predictable-monthly' || type === 'variable-monthly'
+
+/**
+ * A typical-month Budget line means the cost continues. Until history
+ * classifies as monthly, the plan stands in for the calendar amount.
+ * A type override (annual / seasonal / irregular) still wins.
+ */
+export function usesPlanPrior(category: CategoryForecast, plan: number): boolean {
+  if (!(plan > 0)) return false
+  if (isMonthlyType(category.type)) return false
+  if (category.overridden) return false
+  return true
+}
+
+function applyPlanPriors(categories: CategoryForecast[], budget: Budget): void {
+  for (const category of categories) {
+    const plan = planForCategory(budget, category.key)
+    if (!usesPlanPrior(category, plan)) continue
+    category.usedPlanPrior = true
+    category.likely = roundCents(plan)
+    category.setAsideShare = roundCents(plan)
+    if (category.high < plan) category.high = roundCents(plan)
+    if (category.low === 0 || category.low > plan) category.low = roundCents(plan)
+  }
+}
+
+/**
+ * Plan vs forecast by category. Difference is forecast − plan. Sorted from
+ * the largest absolute gap to the smallest.
+ */
+function planVsForecastRows(
+  budget: Budget,
+  month: string,
+  seriesId: SeriesId,
+  categories: CategoryForecast[],
+  forecastByKey: Map<string, { label: string; amount: number }>,
+  config: ForecastConfig,
+): VarianceRow[] {
+  if (seriesId !== 'household') return []
+
+  const pinByKey = new Map<string, number>()
+  const pinLabel = new Map<string, string>()
+  for (const future of futuresFor(config, month, 'household')) {
+    const key = nameKey(future.category)
+    pinByKey.set(key, (pinByKey.get(key) ?? 0) + future.amount)
+    pinLabel.set(key, future.category)
+  }
+
+  const keys = new Set<string>()
+  for (const line of budget.expenses) keys.add(nameKey(line.name))
+  for (const category of categories) keys.add(category.key)
+  for (const key of forecastByKey.keys()) keys.add(key)
+  for (const key of pinByKey.keys()) keys.add(key)
+
+  const rows: VarianceRow[] = []
+  for (const key of keys) {
+    const label =
+      forecastByKey.get(key)?.label ??
+      categories.find((category) => category.key === key)?.label ??
+      budget.expenses.find((line) => nameKey(line.name) === key)?.name ??
+      pinLabel.get(key) ??
+      key
+    const plan = roundCents(planForCategory(budget, key) + (pinByKey.get(key) ?? 0))
+    const forecastAmt = roundCents(forecastByKey.get(key)?.amount ?? 0)
+    if (plan === 0 && forecastAmt === 0) continue
+    rows.push({
+      key,
+      label,
+      plan,
+      forecast: forecastAmt,
+      delta: roundCents(forecastAmt - plan),
+    })
+  }
+  return rows.sort((a, z) => Math.abs(z.delta) - Math.abs(a.delta) || a.label.localeCompare(z.label))
 }
 
 function matchVacationGoal(budget: Budget, config: ForecastConfig): VacationGoalMatch {
@@ -238,9 +337,13 @@ function placedAmount(
   series: CategorySeries | undefined,
   months: string[],
   month: string,
+  plan = 0,
 ): { amount: number; source: MonthCategoryAmount['source'] } {
   const mm = Number(month.slice(5, 7))
-  if (category.type === 'predictable-monthly' || category.type === 'variable-monthly') {
+  if (usesPlanPrior(category, plan)) {
+    return { amount: plan, source: 'monthly' }
+  }
+  if (isMonthlyType(category.type)) {
     return { amount: category.likely, source: 'monthly' }
   }
   if (category.type === 'predictable-annual' && category.typicalMonths.includes(mm)) {
@@ -252,16 +355,25 @@ function placedAmount(
   return { amount: 0, source: 'none' }
 }
 
+/** A seasonal month in progress is at least a when-present month — not the first fill-up. */
+function seasonalCurrentTarget(expected: number, meanPresent: number, lowSample: boolean): number {
+  if (lowSample) return expected
+  return Math.max(expected, meanPresent)
+}
+
 const pinTotalFor = (placements: KnownFuture[], key: string): number =>
-  placements.reduce((sum, future) => (nameKey(future.category) === key ? sum + future.amount : sum), 0)
+  placements
+    .filter(pinAddsToForecast)
+    .reduce((sum, future) => (nameKey(future.category) === key ? sum + future.amount : sum), 0)
 
 const byAmount = (a: { amount: number; label: string }, z: { amount: number; label: string }) =>
   Math.abs(z.amount) - Math.abs(a.amount) || a.label.localeCompare(z.label)
 
 /**
  * Split a month’s Forecast column into every-month lines, lumpy lines that
- * land this month, and pins. Pins that sit on a category already in the
- * calendar are taken off that line so the three groups still add to the column.
+ * land this month, and pins that add to Forecast. Plan-only pins are listed
+ * separately and are not in `total`. Pins that sit on a category already in
+ * the calendar are taken off that line so the Forecast groups still add.
  */
 export function forecastMix(point: MonthPoint, placements: KnownFuture[] = []): ForecastMix {
   const monthly: ForecastMix['monthly'] = []
@@ -276,22 +388,29 @@ export function forecastMix(point: MonthPoint, placements: KnownFuture[] = []): 
   }
   monthly.sort(byAmount)
   lumpy.sort(byAmount)
-  const pinned = placements
-    .filter((future) => future.amount !== 0)
-    .map((future) => ({
-      key: nameKey(future.category),
-      label: future.category,
-      amount: future.amount,
-      source: 'known-future' as const,
-      placementId: future.id,
-      recurrence: future.recurrence,
-    }))
+  const toLine = (future: KnownFuture): ForecastMixLine => ({
+    key: nameKey(future.category),
+    label: future.category,
+    amount: future.amount,
+    source: 'known-future',
+    placementId: future.id,
+    recurrence: future.recurrence,
+    notes: future.notes,
+  })
+  const onForecast = placements.filter((future) => future.amount !== 0 && pinAddsToForecast(future))
+  const onPlan = placements.filter((future) => future.amount !== 0 && !pinAddsToForecast(future))
+  const pinned = onForecast.map(toLine)
+  const planPins = onPlan.map(toLine)
   const total = roundCents(
     monthly.reduce((sum, line) => sum + line.amount, 0) +
       lumpy.reduce((sum, line) => sum + line.amount, 0) +
       pinned.reduce((sum, line) => sum + line.amount, 0),
   )
-  return { monthly, lumpy, pinned, total }
+  return { monthly, lumpy, pinned, onPlan: planPins, total }
+}
+
+function overlayIrregulars(categories: CategoryForecast[]): CategoryForecast[] {
+  return categories.filter((category) => category.type === 'irregular' && !category.usedPlanPrior)
 }
 
 function topIrregularMonths(
@@ -303,8 +422,7 @@ function topIrregularMonths(
   if (count <= 0) return []
   const cells: Array<{ key: string; month: string; amount: number }> = []
   const byKey = new Map(series.map((item) => [item.key, item]))
-  for (const category of categories) {
-    if (category.type !== 'irregular') continue
+  for (const category of overlayIrregulars(categories)) {
     const row = byKey.get(category.key)
     if (!row) continue
     row.values.forEach((amount, i) => {
@@ -323,32 +441,31 @@ function overlayFor(
   outlierCount: number,
 ): OverlayBreakdown {
   const n = months.length
-  const irregularTotal = categories
-    .filter((category) => category.type === 'irregular')
-    .reduce((sum, category) => sum + category.windowTotal, 0)
+  const smear = overlayIrregulars(categories)
+  const irregularTotal = smear.reduce((sum, category) => sum + category.windowTotal, 0)
   const excludedOutliers = topIrregularMonths(categories, series, months, outlierCount)
   const afterOutliers = Math.max(
     0,
     irregularTotal - excludedOutliers.reduce((sum, item) => sum + item.amount, 0),
   )
-  const irregularKeys = new Set(
-    categories.filter((category) => category.type === 'irregular').map((category) => category.key),
-  )
+  const irregularKeys = new Set(smear.map((category) => category.key))
   const current = asOf.slice(0, 7)
   let placedNextYear = 0
   for (let i = 0; i < 12; i++) {
     const month = addMonths(current, i)
     for (const future of futuresFor(config, month, 'household')) {
+      if (!pinAddsToForecast(future)) continue
       if (irregularKeys.has(nameKey(future.category))) placedNextYear += future.amount
     }
   }
   const unplaced = Math.max(0, afterOutliers - placedNextYear)
-  const lines = categories
-    .filter((category) => category.type === 'irregular')
+  const lines = smear
     .map((category) => ({
       key: category.key,
       label: category.label,
       share: n > 0 ? roundCents(category.windowTotal / n) : 0,
+      windowTotal: roundCents(category.windowTotal),
+      lastAmount: roundCents(category.lastAmount),
       lowSample: category.lowSample,
     }))
     .filter((line) => line.share !== 0)
@@ -371,15 +488,18 @@ function setAsideFor(
   config: ForecastConfig,
   label: string,
 ): SetAside {
-  const monthlyLikely = categories
-    .filter((c) => c.type === 'predictable-monthly' || c.type === 'variable-monthly')
+  const fromHistory = categories
+    .filter((c) => isMonthlyType(c.type))
     .reduce((sum, c) => sum + c.setAsideShare, 0)
+  const fromPlan = categories
+    .filter((c) => c.usedPlanPrior)
+    .reduce((sum, c) => sum + c.setAsideShare, 0)
+  const monthlyLikely = fromHistory + fromPlan
   const lumpyShare = categories
-    .filter((c) => c.type === 'predictable-annual' || c.type === 'seasonal')
+    .filter((c) => (c.type === 'predictable-annual' || c.type === 'seasonal') && !c.usedPlanPrior)
     .reduce((sum, c) => sum + c.setAsideShare, 0)
-  const monthlyLow = categories
-    .filter((c) => c.type === 'predictable-monthly' || c.type === 'variable-monthly')
-    .reduce((sum, c) => sum + c.low, 0)
+  const monthlyLow =
+    categories.filter((c) => isMonthlyType(c.type)).reduce((sum, c) => sum + c.low, 0) + fromPlan
   const p = config.lumpyMethod === 'percent-buffer' ? config.bufferPercent / 100 : 0
   const lumpyAndOverlay = lumpyShare + overlay.monthly
   const buffer = lumpyAndOverlay * p
@@ -397,27 +517,12 @@ function setAsideFor(
   }
 }
 
-function variancesFor(
-  byCategory: MonthCategoryAmount[],
-  budget: Budget,
-  forecastTotal: number,
-  planTotal: number,
-): VarianceRow[] {
+function gapRows(rows: VarianceRow[], forecastTotal: number, planTotal: number): VarianceRow[] {
   const gap = forecastTotal - planTotal
   if (gap === 0) return []
-  const rows: VarianceRow[] = byCategory.map((item) => {
-    const plan = planForCategory(budget, item.key)
-    return {
-      key: item.key,
-      label: item.label,
-      forecast: item.forecast,
-      plan,
-      delta: roundCents(item.forecast - plan),
-    }
-  })
   return rows
     .filter((row) => (gap > 0 ? row.delta > 0 : row.delta < 0))
-    .sort((a, z) => Math.abs(z.delta) - Math.abs(a.delta))
+    .sort((a, z) => Math.abs(z.delta) - Math.abs(a.delta) || a.label.localeCompare(z.label))
 }
 
 function ensureNamedSeries(
@@ -453,7 +558,8 @@ function calendarPoint(args: {
   let calendar = 0
 
   for (const category of categories) {
-    const placed = placedAmount(category, byKey.get(category.key), lookback, month)
+    const planAmt = seriesId === 'household' ? planForCategory(budget, category.key) : 0
+    const placed = placedAmount(category, byKey.get(category.key), lookback, month, planAmt)
     const amount = inflate(placed.amount, monthsAhead, config.inflationPercent)
     if (amount !== 0 || spendInMonth(actuals, category.key, month) !== 0) {
       byCategory.push({
@@ -469,10 +575,13 @@ function calendarPoint(args: {
   }
 
   const known = futuresFor(config, month, seriesId)
-  let knownFutures = 0
+  let onForecast = 0
+  let onPlan = 0
   for (const future of known) {
+    onPlan += future.amount
+    if (!pinAddsToForecast(future)) continue
     const key = nameKey(future.category)
-    knownFutures += future.amount
+    onForecast += future.amount
     const existing = byCategory.find((item) => item.key === key)
     if (existing) {
       existing.forecast = roundCents(existing.forecast + future.amount)
@@ -488,11 +597,15 @@ function calendarPoint(args: {
       })
     }
   }
-  calendar += knownFutures
+  calendar += onForecast
 
   const actual = kind === 'future' ? 0 : totalInMonth(actuals, month)
-  const plan = seriesId === 'household' ? totalExpenses(budget) + knownFutures : knownFutures
+  const plan = seriesId === 'household' ? totalExpenses(budget) + onPlan : onPlan
   const forecast = roundCents(calendar)
+  const forecastByKey = new Map(
+    byCategory.map((item) => [item.key, { label: item.label, amount: item.forecast }]),
+  )
+  const planVsForecast = planVsForecastRows(budget, month, seriesId, categories, forecastByKey, config)
   return {
     month,
     kind,
@@ -500,11 +613,12 @@ function calendarPoint(args: {
     calendar: forecast,
     overlay,
     plan: roundCents(plan),
-    knownFutures: roundCents(knownFutures),
+    knownFutures: roundCents(onForecast),
     outsideControlWindow: seriesId === 'household' && isOutsideControlWindow(forecast, plan),
     gapRatio: seriesId === 'household' ? controlGap(forecast, plan) : 0,
     byCategory,
-    variances: seriesId === 'household' ? variancesFor(byCategory, budget, forecast, plan) : [],
+    variances: seriesId === 'household' ? gapRows(planVsForecast, forecast, plan) : [],
+    planVsForecast,
   }
 }
 
@@ -550,7 +664,20 @@ function currentMonthView(args: {
 
   for (const category of categories) {
     const actual = spendInMonth(actuals, category.key, month)
-    if (category.type === 'predictable-monthly' || category.type === 'variable-monthly') {
+    const planAmt = planForCategory(budget, category.key)
+    if (usesPlanPrior(category, planAmt)) {
+      consider({
+        key: category.key,
+        label: category.label,
+        typical: planAmt,
+        actual,
+        remain: Math.max(0, planAmt - actual),
+        reason: 'monthly',
+      })
+      remainHigh += Math.max(0, planAmt - actual)
+      continue
+    }
+    if (isMonthlyType(category.type)) {
       consider({
         key: category.key,
         label: category.label,
@@ -566,20 +693,44 @@ function currentMonthView(args: {
       (category.type === 'predictable-annual' || category.type === 'seasonal') &&
       category.typicalMonths.includes(mm)
     ) {
+      const expected = placedAmount(
+        category,
+        byKey.get(category.key),
+        lookback,
+        month,
+        planForCategory(budget, category.key),
+      ).amount
+      const typical =
+        category.type === 'seasonal'
+          ? seasonalCurrentTarget(expected, category.meanPresent, category.lowSample)
+          : expected
       if (actual > 0) {
+        if (category.type === 'seasonal' && !category.lowSample) {
+          const leftover = Math.max(0, typical - actual)
+          consider({
+            key: category.key,
+            label: category.label,
+            typical,
+            actual,
+            remain: leftover,
+            reason: 'in-progress-irregular',
+          })
+          remainHigh += leftover
+          if (leftover <= 0) postedTypicalKeys.push(category.key)
+          continue
+        }
         postedTypicalKeys.push(category.key)
         continue
       }
-      const expected = placedAmount(category, byKey.get(category.key), lookback, month).amount
       consider({
         key: category.key,
         label: category.label,
-        typical: expected,
+        typical,
         actual,
-        remain: expected,
+        remain: typical,
         reason: 'expected-lump',
       })
-      remainHigh += Math.max(expected, category.high)
+      remainHigh += Math.max(typical, category.high)
       continue
     }
     if (category.type === 'irregular' && actual > 0 && !category.lowSample) {
@@ -598,6 +749,7 @@ function currentMonthView(args: {
 
   const posted = new Set(postedTypicalKeys)
   for (const future of futuresFor(config, month, 'household')) {
+    if (!pinAddsToForecast(future)) continue
     const key = nameKey(future.category)
     if (posted.has(key)) continue
     const actual = spendInMonth(actuals, key, month)
@@ -621,14 +773,23 @@ function currentMonthView(args: {
 
   const forecastEom = actualToDate + remain
   const plan = totalExpenses(budget) + futureTotal(config, month, 'household')
-  const byCategory = categories.map((category) => ({
-    key: category.key,
-    label: category.label,
-    type: category.type,
-    forecast: 0,
-    actual: roundCents(spendInMonth(actuals, category.key, month)),
-    source: 'none' as const,
-  }))
+  const forecastByKey = new Map<string, { label: string; amount: number }>()
+  for (const category of categories) {
+    const actual = spendInMonth(actuals, category.key, month)
+    const leftover = remainByKey.get(category.key)?.remain ?? 0
+    forecastByKey.set(category.key, { label: category.label, amount: roundCents(actual + leftover) })
+  }
+  for (const line of remainLines) {
+    if (!forecastByKey.has(line.key)) {
+      forecastByKey.set(line.key, { label: line.label, amount: roundCents(line.actual + line.remain) })
+    }
+  }
+  for (const row of actuals) {
+    const actual = row.byMonth.get(month) ?? 0
+    if (actual === 0 || forecastByKey.has(row.key)) continue
+    forecastByKey.set(row.key, { label: row.label, amount: roundCents(actual) })
+  }
+  const planVsForecast = planVsForecastRows(budget, month, 'household', categories, forecastByKey, config)
 
   return {
     month,
@@ -640,18 +801,10 @@ function currentMonthView(args: {
     overlay,
     outsideControlWindow: isOutsideControlWindow(forecastEom, plan),
     gapRatio: controlGap(forecastEom, plan),
-    variances: variancesFor(
-      byCategory.map((item) => {
-        const cat = categories.find((c) => c.key === item.key)!
-        const placed = placedAmount(cat, byKey.get(cat.key), lookback, month)
-        return { ...item, forecast: roundCents(placed.amount), source: placed.source }
-      }),
-      budget,
-      forecastEom,
-      plan,
-    ),
+    variances: gapRows(planVsForecast, forecastEom, plan),
     postedTypicalKeys,
     remainLines,
+    planVsForecast,
   }
 }
 
@@ -797,6 +950,7 @@ function doubleCountsFor(
     const month = addMonths(current, i)
     const mm = Number(month.slice(5, 7))
     for (const future of futuresFor(config, month, 'household')) {
+      if (!pinAddsToForecast(future)) continue
       const category = categories.find((item) => item.key === nameKey(future.category))
       if (!category) continue
       if (
@@ -835,9 +989,14 @@ function buildCurrency(args: {
       .filter((future) => future.series === 'vacation')
       .map((future) => ({ key: nameKey(future.category), label: future.category })),
   )
-  const householdSeries = toSeries(householdActuals, lookback)
+  const householdSeries = toSeries(
+    householdActuals,
+    lookback,
+    currency === 'CAD' ? new Set(budget.expenses.map((line) => nameKey(line.name))) : new Set(),
+  )
   const vacationSeries = toSeries(vacationActuals, lookback)
   const householdCategories = classifyCategories(householdSeries, lookback, config.categoryOverrides)
+  if (currency === 'CAD') applyPlanPriors(householdCategories, budget)
   const vacationCategories = classifyCategories(vacationSeries, lookback, config.categoryOverrides)
 
   const overlay = overlayFor(
@@ -910,6 +1069,7 @@ function buildCurrency(args: {
       point.outsideControlWindow = current.outsideControlWindow
       point.gapRatio = current.gapRatio
       point.variances = current.variances
+      point.planVsForecast = current.planVsForecast
     }
     calendar.push(point)
   }

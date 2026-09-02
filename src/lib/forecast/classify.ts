@@ -127,6 +127,13 @@ function presentMonthsOf(values: number[], months: string[]): string[] {
   return months.filter((_, i) => values[i]! > 0)
 }
 
+/** Months from the first posting through the end of the window. */
+function sinceFirstSeen(values: number[], months: string[]): { values: number[]; months: string[] } {
+  const first = values.findIndex((value) => value > 0)
+  if (first <= 0) return { values, months }
+  return { values: values.slice(first), months: months.slice(first) }
+}
+
 function lastPresentAmount(values: number[]): number {
   for (let i = values.length - 1; i >= 0; i--) {
     if (values[i]! > 0) return values[i]!
@@ -171,11 +178,20 @@ export function classifyCategory(
   const presentAmounts = series.values.filter((n) => n > 0)
   const occurrences = present.length
   const n = months.length
-  const presence = n === 0 ? 0 : occurrences / n
   const cv = cvOf(presentAmounts)
   const calendarMonths = uniqueMonths(present)
   const cycle = repeatedCycle(present)
-  const autoType = pickType({ occurrences, presence, cv, calendarMonths, cycle })
+  const aged = sinceFirstSeen(series.values, months)
+  const agedPresent = presentMonthsOf(aged.values, aged.months)
+  const agedAmounts = aged.values.filter((value) => value > 0)
+  const agedN = aged.months.length
+  const autoType = pickType({
+    occurrences: agedPresent.length,
+    presence: agedN === 0 ? 0 : agedPresent.length / agedN,
+    cv: cvOf(agedAmounts),
+    calendarMonths: uniqueMonths(agedPresent),
+    cycle: repeatedCycle(agedPresent),
+  })
   const type = override?.type ?? autoType
   const typicalMonths = (override?.typicalMonths?.filter((m) => m >= 1 && m <= 12) ?? calendarMonths)
     .slice()
@@ -202,9 +218,9 @@ export function classifyCategory(
     low = percentile(series.values, 0.25)
     setAsideShare = likely
   } else if (type === 'variable-monthly') {
-    likely = median(series.values)
-    high = percentile(series.values, 0.75)
-    low = percentile(series.values, 0.25)
+    likely = median(aged.values)
+    high = percentile(aged.values, 0.75)
+    low = percentile(aged.values, 0.25)
     setAsideShare = likely
   } else if (type === 'predictable-annual') {
     likely = override?.amount ?? meanPresent
@@ -254,6 +270,7 @@ export function classifyCategory(
     lastAmount: roundCents(lastAmount),
     usedLastAmount,
     lowSample: occurrences < 3,
+    usedPlanPrior: false,
     repeatedCycle: cycle,
     average12: n === 0 ? 0 : roundCents(mean(series.values.slice(-Math.min(12, n)))),
     average24: n >= 24 ? roundCents(mean(series.values.slice(-24))) : undefined,

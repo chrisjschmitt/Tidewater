@@ -211,7 +211,7 @@ const PLAN_INTENTS: Intent[] = [
 
 const GUIDE_INTENTS: Intent[] = [
   {
-    test: /how do i|how to (use|import|unlock|add|set|open|enable|backup|restore|change)|where (is|do i find|can i find)|help me (use|with) (the |this )?app|using (the |this )?app|how does (this |the )?app work|what (does|do) (the )?(forecast|expenses?|reimbursable|budget|month[- ]?end|transactions?|accounts?|import) tab|(month[- ]?end|forecast|reimbursable|budget|transactions|accounts|import) tab/i,
+    test: /how do i|how to (use|import|unlock|add|set|open|enable|backup|restore|change|erase)|where (is|do i find|can i find)|help me (use|with) (the |this )?app|using (the |this )?app|how does (this |the )?app work|what (does|do) (the )?(forecast|expenses?|reimbursable|budget|month[- ]?end|transactions?|accounts?|import|settings) tab|(month[- ]?end|forecast|reimbursable|budget|transactions|accounts|import|settings) tab/i,
     reply: (_b, q) =>
       replyAppGuide(q) ??
       'I can help with using Tidewater. Try how to import, how to add a goal, or how to use Expenses.',

@@ -31,8 +31,9 @@ acknowledgement.
   `goals.ts`, `storage.ts`, `assistant.ts`, `models.ts`, `types.ts`,
   `format.ts`, `version.ts`.
 - Optional expense tracking (`src/components/etm/`): gated by
-  `__ETM_AVAILABLE__`. Unlocked ETM includes a Forecast tab. JSON backups
-  may include the encrypted vault; restore needs the same key.
+  `__ETM_AVAILABLE__`. Unlocked ETM includes a Forecast tab and a Settings tab
+  (lookback, household/vacation tags, wipe). JSON backups may include the
+  encrypted vault; restore needs the same key.
 - Sample budget: `public/sample/ted-budget.csv`. Import fixtures under
   `Test-Data/`. Spec + category keyword docs: `docs/`.
 - Sanity scripts (esbuild → node): `scripts/check-import.ts`,

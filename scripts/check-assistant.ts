@@ -205,6 +205,7 @@ const howTx = localAnswer('How do I use the Transactions tab?', budget, syntheti
 const howImportTab = localAnswer('How do I use the Import tab?', budget, synthetic)
 const howAccounts = localAnswer('How do I use the Accounts tab?', budget, synthetic)
 const howBackup = localAnswer('How do I restore a backup?', budget)
+const howSettings = localAnswer('How do I use the Settings tab?', budget, synthetic)
 const merchants = ['Pier Housekeeping', 'Cedar Market', 'Cove Pharmacy', 'Nimbus Software', 'Chequing (...1001)']
 
 console.log('\n=== Plan-only (locked / no snapshot) ===')
@@ -340,6 +341,10 @@ check(
 check(
   'how to restore a backup mentions the encrypted vault and the same key',
   /encrypted/i.test(howBackup) && /key/i.test(howBackup) && /plan/i.test(howBackup),
+)
+check(
+  'how to use Settings names lookback, household tags, and erase',
+  /lookback/i.test(howSettings) && /household/i.test(howSettings) && /erase/i.test(howSettings),
 )
 
 if (failures > 0) {

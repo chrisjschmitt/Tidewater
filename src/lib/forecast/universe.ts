@@ -182,6 +182,24 @@ export function withVacationTag(
   return { ...config, reimbursableAllowList, vacationTags }
 }
 
+export function withIgnoredCompare(
+  config: ForecastConfig,
+  month: string,
+  key: string,
+  ignored: boolean,
+): ForecastConfig {
+  const current = config.ignoredCompare?.[month] ?? []
+  const next = ignored
+    ? current.includes(key)
+      ? current
+      : [...current, key]
+    : current.filter((item) => item !== key)
+  const ignoredCompare = { ...config.ignoredCompare }
+  if (next.length === 0) delete ignoredCompare[month]
+  else ignoredCompare[month] = next
+  return { ...config, ignoredCompare }
+}
+
 const isLumpyType = (type: ExpenseType | undefined): boolean =>
   type === 'seasonal' || type === 'predictable-annual'
 

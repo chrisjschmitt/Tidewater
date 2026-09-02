@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0 — 2026-09-02
+
+### Changed
+- Forecast is a reading page: household timeline first, then this month, last month’s snapshot, and categories. Jump links: Timeline, This month (spend so far vs forecast), Plan vs forecast, Risk, Last month, Categories. Lookback, household/vacation tags, and erase expense data moved to a Settings tab in Expenses.
+
+### Added
+- The month card lists each category’s plan beside forecast, largest absolute difference first, with a running total of those differences and plan / forecast / difference totals above any ignored lines. Ignoring a line treats it as hitting Plan: Forecast moves by that gap, Plan does not change. Pin from that table adds the amount to Plan only. Skipping a category for a month is a plan change, not an ignore.
+- A typical-month Budget category is forecast as ongoing even with little history. Pins remain the way to place a one-off on a month.
+- A pin on a month can include a comment for why it belongs there. The comment shows on that month and can be edited later.
+
+### Fixed
+- A seasonal line that has already started this month (Gas after a fill-up) keeps finishing toward “when it is present.” The first posting is not treated as the whole month.
+
 ## 0.7.1 — 2026-09-02
 
 ### Changed

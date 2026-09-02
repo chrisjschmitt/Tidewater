@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import type { CategoryMiss, MonthEndVariance } from '../../lib/forecast/snapshot'
+import type { PinRequest } from '../../lib/forecast/types'
+import { PinComment } from './PinComment'
 import {
   controlWindowBadge,
   monthEndInsideCopy,
@@ -13,7 +15,7 @@ import {
 interface Props {
   variance: MonthEndVariance
   placeMonth: string
-  onPlace: (row: { category: string; amount: number }) => void
+  onPlace: (row: PinRequest) => void
 }
 
 export default function ForecastMonthEnd({ variance, placeMonth, onPlace }: Props) {
@@ -89,7 +91,7 @@ function MissList({
   title: string
   rows: CategoryMiss[]
   placeLabel: string
-  onPlace: (row: { category: string; amount: number }) => void
+  onPlace: (row: PinRequest) => void
 }) {
   return (
     <div className="mt-5">
@@ -110,37 +112,42 @@ function MissItem({
 }: {
   row: CategoryMiss
   placeLabel: string
-  onPlace: (item: { category: string; amount: number }) => void
+  onPlace: (item: PinRequest) => void
 }) {
   const [amount, setAmount] = useState(Math.abs(row.delta))
+  const [notes, setNotes] = useState('')
   useEffect(() => {
     setAmount(Math.abs(row.delta))
+    setNotes('')
   }, [row.key, row.delta])
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-ink-900">{row.label}</span>
-        <span className="text-xs tabular-nums text-ink-400">
-          {amountIn(row.actual, 'CAD')} against {amountIn(row.forecast, 'CAD')}
+    <li className="flex flex-col gap-2 py-2.5">
+      <span className="flex flex-wrap items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink-900">{row.label}</span>
+          <span className="text-xs tabular-nums text-ink-400">
+            {amountIn(row.actual, 'CAD')} against {amountIn(row.forecast, 'CAD')}
+          </span>
+        </span>
+        <span className="flex flex-wrap items-center gap-2">
+          <input
+            className="field w-24 py-1.5 text-sm tabular-nums"
+            inputMode="decimal"
+            aria-label={`Amount to place for ${row.label}`}
+            value={amount || ''}
+            onChange={(event) => setAmount(Number(event.target.value.replace(/[^0-9.]/g, '')) || 0)}
+          />
+          <button
+            onClick={() => onPlace({ category: row.label, amount, notes })}
+            className="btn-ghost text-xs"
+            disabled={!(amount > 0)}
+          >
+            {placeLabel}
+          </button>
         </span>
       </span>
-      <span className="flex flex-wrap items-center gap-2">
-        <input
-          className="field w-24 py-1.5 text-sm tabular-nums"
-          inputMode="decimal"
-          aria-label={`Amount to place for ${row.label}`}
-          value={amount || ''}
-          onChange={(event) => setAmount(Number(event.target.value.replace(/[^0-9.]/g, '')) || 0)}
-        />
-        <button
-          onClick={() => onPlace({ category: row.label, amount })}
-          className="btn-ghost text-xs"
-          disabled={!(amount > 0)}
-        >
-          {placeLabel}
-        </button>
-      </span>
+      <PinComment value={notes} onChange={setNotes} />
     </li>
   )
 }

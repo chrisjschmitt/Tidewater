@@ -14,8 +14,11 @@ import {
   forecastMix,
   isOutsideControlWindow,
   lookbackMonths,
+  usesPlanPrior,
   vacationSweep,
+  withCompareIgnores,
 } from '../src/lib/forecast/forecast.ts'
+import { classifyCategory } from '../src/lib/forecast/classify.ts'
 import { deriveKey, open, randomSalt, seal } from '../src/lib/etm/crypto.ts'
 import {
   lastFullMonth,
@@ -42,6 +45,7 @@ import {
   withAllowListedTag,
   withCategoryTypicalMonths,
   withCategoryTypeOverride,
+  withIgnoredCompare,
   withVacationTag,
 } from '../src/lib/forecast/universe.ts'
 import { parseMonarchCsv, type MonarchRow } from '../src/lib/etm/monarch.ts'
@@ -303,7 +307,49 @@ check(
   'December mix lists the pinned repair',
   decMix.pinned.some((line) => line.key === nameKey('Engine Repair') && line.amount === PLACE),
 )
+check(
+  'December mix keeps the pin comment',
+  decMix.pinned.some((line) => line.key === nameKey('Engine Repair') && line.notes === 'booked'),
+)
 check('December mix totals the forecast column', decMix.total === decAfter?.calendar, `mix ${decMix.total} calendar ${decAfter?.calendar}`)
+
+const planOnly = withForecastDefaults({
+  window: 24,
+  knownFutures: [
+    {
+      id: 'basket-plan',
+      category: 'Market Basket',
+      amount: 250,
+      month: '2026-12',
+      recurrence: 'once',
+      series: 'household',
+      notes: 'will hit plan',
+      addsTo: 'plan',
+    },
+  ],
+})
+const planOnlyResult = forecast(transactions, budget, planOnly, ASOF)
+const decPlanOnly = monthPoint(planOnlyResult, '2026-12')
+const decPlanOnlyMix = forecastMix(decPlanOnly!, planOnly.knownFutures)
+check(
+  'a Plan vs forecast pin raises December Plan only',
+  decPlanOnly?.plan === TYPICAL + 250 && decPlanOnly?.calendar === decBefore?.calendar,
+  `plan ${decPlanOnly?.plan} calendar ${decPlanOnly?.calendar} was ${decBefore?.calendar}`,
+)
+check(
+  'a Plan vs forecast pin does not shrink the overlay',
+  near(planOnlyResult.cad.household.overlay.monthly, OVERLAY),
+)
+check(
+  'a Plan vs forecast pin is listed on Plan, not in the Forecast mix',
+  decPlanOnlyMix.onPlan.some((line) => line.key === nameKey('Market Basket') && line.amount === 250) &&
+    decPlanOnlyMix.pinned.every((line) => line.key !== nameKey('Market Basket')),
+)
+check(
+  'Plan-only pins are not in the Forecast mix total',
+  decPlanOnlyMix.total === decPlanOnly?.calendar,
+  `mix ${decPlanOnlyMix.total} calendar ${decPlanOnly?.calendar}`,
+)
 
 console.log('\n=== Current-month remainder ===')
 const current = result.cad.household.currentMonth
@@ -316,6 +362,36 @@ check(
   round(current.remainLines.reduce((sum, line) => sum + line.remain, 0)) === current.remain,
 )
 check('Market Basket is named in the leftover list', current.remainLines.some((line) => line.key === nameKey('Market Basket') && line.remain === 200))
+
+console.log('\n=== Plan vs forecast by category ===')
+const compare = current.planVsForecast
+const duesRow = compare.find((row) => row.key === nameKey('Harbor Dues'))
+const insuranceRow = compare.find((row) => row.key === nameKey('Harbor Insurance'))
+const absDeltas = compare.map((row) => Math.abs(row.delta))
+check('August lists every line with a plan or a forecast', compare.length >= 4, `${compare.length} rows`)
+check(
+  'sorted by largest absolute difference first',
+  compare[0]?.key === nameKey('Harbor Insurance') && compare[0]?.delta === 600,
+  `first ${compare[0]?.label} ${compare[0]?.delta}`,
+)
+check(
+  'absolute differences are non-increasing',
+  absDeltas.every((value, i) => i === 0 || absDeltas[i - 1]! >= value),
+)
+check('Harbor Dues plan is the typical-month line', duesRow?.plan === 400, `plan ${duesRow?.plan}`)
+check(
+  'Harbor Dues forecast to month-end is actual plus leftover',
+  duesRow?.forecast === 400 && duesRow?.delta === 0,
+  `forecast ${duesRow?.forecast}`,
+)
+check(
+  'Harbor Insurance has no plan line, so the posted 600 is the whole difference',
+  insuranceRow?.plan === 0 && insuranceRow?.forecast === 600 && insuranceRow?.delta === 600,
+)
+check(
+  'the current-month calendar point uses the same month-end comparison',
+  (monthPoint(result, '2026-08')?.planVsForecast[0]?.delta ?? 0) === 600,
+)
 
 function fxTx(id: string, date: string, category: string, amount: number): Transaction {
   return {
@@ -383,6 +459,43 @@ check(
   `got ${withLantern.cad.household.currentMonth.remain}`,
 )
 
+const fuelHist = ['2025-01', '2025-06', '2025-07', '2025-08', '2026-01', '2026-06', '2026-07'].map(
+  (month, i) => fxTx(`fuel-${i}`, `${month}-10`, 'Dock Fuel', -300),
+)
+const withFuel = forecast(
+  [...transactions, ...fuelHist, fxTx('fuel-aug', '2026-08-12', 'Dock Fuel', -80)],
+  budget,
+  base,
+  ASOF,
+)
+const fuel = cat(withFuel, 'Dock Fuel')
+const fuelMonth = withFuel.cad.household.currentMonth
+check(
+  'Dock Fuel classifies as seasonal in driving months including August',
+  fuel?.type === 'seasonal' && fuel.typicalMonths.includes(8) && fuel.meanPresent === 300,
+  `${fuel?.type} months ${fuel?.typicalMonths} present ${fuel?.meanPresent}`,
+)
+check(
+  'a posted seasonal finishes toward when-present, not the first fill-up',
+  fuelMonth.remainLines.some(
+    (line) =>
+      line.key === nameKey('Dock Fuel') &&
+      line.remain === 220 &&
+      line.typical === 300 &&
+      line.reason === 'in-progress-irregular',
+  ),
+)
+check(
+  'forecast to month-end for that seasonal is when-present',
+  fuelMonth.planVsForecast.some(
+    (row) => row.key === nameKey('Dock Fuel') && row.forecast === 300 && row.plan === 0,
+  ),
+)
+check(
+  'a posted seasonal still in progress is not listed as already complete',
+  !fuelMonth.postedTypicalKeys.includes(nameKey('Dock Fuel')),
+)
+
 console.log('\n=== Type override ===')
 const repairKey = nameKey('Engine Repair')
 const seasonalRepair = withCategoryTypeOverride(base, repairKey, 'seasonal')
@@ -429,6 +542,94 @@ check(
   'clearing the override returns to automatic',
   cat(forecast(transactions, budget, withCategoryTypeOverride(relocated, repairKey, 'auto'), ASOF), 'Engine Repair')
     ?.type === 'irregular',
+)
+
+console.log('\n=== Plan prior and age-aware classification ===')
+const lookback24 = lookbackMonths(ASOF, 24, '2024-08')
+const twoHits = lookback24.map((month) => (month === '2026-06' || month === '2026-07' ? 90 : 0))
+const threeHits = lookback24.map((month) =>
+  month === '2026-05' || month === '2026-06' || month === '2026-07' ? 40 : 0,
+)
+const twoClass = classifyCategory({ key: 'pierpermit', label: 'Pier Permit', values: twoHits }, lookback24)
+const threeClass = classifyCategory({ key: 'docksoap', label: 'Dock Soap', values: threeHits }, lookback24)
+check('two months since debut stay emerging', twoClass.type === 'irregular' && twoClass.lowSample)
+check(
+  'three consecutive months since debut classify as monthly, not against the full 24',
+  threeClass.type === 'predictable-monthly' && threeClass.lowSample === false,
+  `${threeClass.type} low=${threeClass.lowSample}`,
+)
+
+const withLine = (name: string, amount: number): Budget => ({
+  ...budget,
+  expenses: [
+    ...budget.expenses,
+    { id: nameKey(name), name, groupId: 'home', amount, essential: false },
+  ],
+})
+
+const permitHist = ['2026-06-10', '2026-07-10'].map((date, i) => fxTx(`permit-${i}`, date, 'Pier Permit', -90))
+const permitBudget = withLine('Pier Permit', 90)
+const withPermit = forecast([...transactions, ...permitHist], permitBudget, base, ASOF)
+const permitCat = cat(withPermit, 'Pier Permit')
+const permitSep = monthPoint(withPermit, '2026-09')?.byCategory.find((row) => row.key === nameKey('Pier Permit'))
+check('a Budget line with two months of history uses the plan as prior', permitCat?.usedPlanPrior === true)
+check('September places the Pier Permit plan', permitSep?.forecast === 90 && permitSep?.source === 'monthly')
+check(
+  'plan-backed emerging is not smeared into the overlay',
+  !withPermit.cad.household.overlay.lines.some((line) => line.key === nameKey('Pier Permit')),
+)
+check(
+  'current-month leftover for a plan-backed line is plan minus spent',
+  withPermit.cad.household.currentMonth.remainLines.some(
+    (line) => line.key === nameKey('Pier Permit') && line.remain === 90 && line.reason === 'monthly',
+  ),
+)
+check(
+  'usesPlanPrior matches the category flag',
+  permitCat != null && usesPlanPrior(permitCat, 90) === true,
+)
+
+const soapHist = ['2026-05-10', '2026-06-10', '2026-07-10'].map((date, i) =>
+  fxTx(`soap-${i}`, date, 'Dock Soap', -40),
+)
+const soapBudget = withLine('Dock Soap', 55)
+const withSoap = forecast([...transactions, ...soapHist], soapBudget, base, ASOF)
+const soapCat = cat(withSoap, 'Dock Soap')
+const soapSep = monthPoint(withSoap, '2026-09')?.byCategory.find((row) => row.key === nameKey('Dock Soap'))
+check('three consecutive months on a Budget line use history, not the plan', soapCat?.usedPlanPrior === false)
+check(
+  'September places the history likely for Dock Soap',
+  soapSep?.forecast === 40 && soapCat?.type === 'predictable-monthly',
+  `forecast ${soapSep?.forecast} type ${soapCat?.type}`,
+)
+
+const lightBudget = withLine('Wharf Light', 25)
+const withLight = forecast(transactions, lightBudget, base, ASOF)
+const lightCat = cat(withLight, 'Wharf Light')
+const lightSep = monthPoint(withLight, '2026-09')?.byCategory.find((row) => row.key === nameKey('Wharf Light'))
+check('a Budget line with no postings still appears', lightCat?.usedPlanPrior === true)
+check('September places the Wharf Light plan', lightSep?.forecast === 25 && lightSep?.source === 'monthly')
+check(
+  'current month holds the unused Wharf Light plan as leftover',
+  withLight.cad.household.currentMonth.remainLines.some(
+    (line) => line.key === nameKey('Wharf Light') && line.remain === 25,
+  ),
+)
+
+const permitForced = forecast(
+  [...transactions, ...permitHist],
+  permitBudget,
+  withCategoryTypeOverride(base, nameKey('Pier Permit'), 'irregular'),
+  ASOF,
+)
+check(
+  'an irregular override on a Budget line does not force the plan onto the calendar',
+  cat(permitForced, 'Pier Permit')?.usedPlanPrior === false &&
+    !monthPoint(permitForced, '2026-09')?.byCategory.some((row) => row.key === nameKey('Pier Permit') && row.forecast > 0),
+)
+check(
+  'Lantern App without a Budget line stays overlay-only',
+  lantern?.type === 'irregular' && lantern.lowSample && lantern.usedPlanPrior === false,
 )
 
 console.log('\n=== Coverage (9 of 10, vacation ignored) ===')
@@ -521,6 +722,45 @@ check(
 check(
   'an omitted vacation list still defaults',
   withForecastDefaults({}).vacationTags.join() === 'Reimbursable: Vacation Account',
+)
+check('an omitted compare-ignore list is empty', Object.keys(withForecastDefaults({}).ignoredCompare).length === 0)
+const ignoredGas = withIgnoredCompare(base, '2026-09', nameKey('Gas'), true)
+check(
+  'ignoring a compare line is stored on that month',
+  ignoredGas.ignoredCompare['2026-09']?.join() === nameKey('Gas'),
+)
+check(
+  'clearing an ignore removes the month key',
+  withIgnoredCompare(ignoredGas, '2026-09', nameKey('Gas'), false).ignoredCompare['2026-09'] == null,
+)
+const afterIgnore = withCompareIgnores(
+  1000,
+  1200,
+  [
+    { key: nameKey('Gas'), plan: 350, forecast: 304 },
+    { key: nameKey('Rent'), plan: 650, forecast: 896 },
+  ],
+  [nameKey('Gas')],
+)
+check('ignoring a line leaves Plan unchanged', afterIgnore.plan === 1000)
+check(
+  'ignoring a line treats it as hitting Plan, so Forecast moves by the gap',
+  afterIgnore.forecast === 1246,
+  `got ${afterIgnore.forecast}`,
+)
+const afterTrend = withCompareIgnores(
+  1000,
+  1200,
+  [{ key: nameKey('Restaurants'), plan: 200, forecast: 450 }],
+  [nameKey('Restaurants')],
+)
+check(
+  'ignoring a line above Plan drops Forecast by the overage',
+  afterTrend.plan === 1000 && afterTrend.forecast === 950,
+)
+check(
+  'an empty ignore list leaves plan and forecast',
+  withCompareIgnores(1000, 1200, [{ key: nameKey('Gas'), plan: 350, forecast: 304 }], []).forecast === 1200,
 )
 
 console.log('\n=== Tagging gaps (untagged / parent-only) ===')

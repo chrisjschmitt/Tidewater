@@ -19,6 +19,10 @@ export function confidenceLabel(confidence: 'high' | 'medium' | 'low'): string {
   return 'Early days'
 }
 
+export function planPriorCopy(): string {
+  return 'Using the typical-month plan until this line has a pattern of its own.'
+}
+
 export function shortMonth(month: string): string {
   const [year, m] = month.split('-')
   return new Date(Date.UTC(Number(year), Number(m) - 1, 1)).toLocaleDateString(undefined, {

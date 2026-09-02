@@ -154,8 +154,7 @@ export default function ForecastTimeline({ calendar, selected, onSelect }: Props
           </span>
           {overlay > 0 && (
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-px w-4 border-t border-dashed border-ink-400" /> still
-              unplaced
+              <span className="inline-block h-px w-4 border-t border-dashed border-ink-400" /> Risk
             </span>
           )}
         </span>

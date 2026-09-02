@@ -2,8 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import Modal from '../Modal'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
-import type { CategoryForecast, DoubleCountWarning, ExpenseType } from '../../lib/forecast/types'
-import { confidenceLabel, doubleCountCopy, seenCopy, typeLabel } from './forecastCopy'
+import type { CategoryForecast, DoubleCountWarning, ExpenseType, PinRequest } from '../../lib/forecast/types'
+import { confidenceLabel, doubleCountCopy, planPriorCopy, seenCopy, typeLabel } from './forecastCopy'
+import { PinComment } from './PinComment'
 
 interface Props {
   categories: CategoryForecast[]
@@ -11,7 +12,7 @@ interface Props {
   focusedMonth: string
   doubleCounts: DoubleCountWarning[]
   onSelect: (key: string | null) => void
-  onPin: (draft: { category: string; amount: number; recurrence: 'once' | 'annual' }) => void
+  onPin: (draft: PinRequest) => void
   onOverrideType: (key: string, type: ExpenseType | 'auto') => void
   onOverrideMonths: (key: string, typicalMonths: number[]) => void
   /** Explicit type override for the open card; omitted means History. */
@@ -71,6 +72,7 @@ export default function ForecastCategories({
                   <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
                     <Badge>{typeLabel(category.type, category.lowSample)}</Badge>
                     {category.overridden && <Badge quiet>set by you</Badge>}
+                    {category.usedPlanPrior && <Badge quiet>from the plan</Badge>}
                     {category.lowSample && <Badge quiet>low sample</Badge>}
                     {category.typicalMonthNames.length > 0 &&
                       category.type !== 'predictable-monthly' &&
@@ -126,7 +128,7 @@ function CategoryDetail({
   category: CategoryForecast
   focusedMonth: string
   doubleCounts: DoubleCountWarning[]
-  onPin: (draft: { category: string; amount: number; recurrence: 'once' | 'annual' }) => void
+  onPin: (draft: PinRequest) => void
   overrideType?: ExpenseType
   onOverrideType: (type: ExpenseType | 'auto') => void
   onOverrideMonths: (typicalMonths: number[]) => void
@@ -134,6 +136,7 @@ function CategoryDetail({
   const defaultAmount = pinDefault(category)
   const [amount, setAmount] = useState(defaultAmount)
   const [recurrence, setRecurrence] = useState<'once' | 'annual'>('once')
+  const [notes, setNotes] = useState('')
   const mm = Number(focusedMonth.slice(5, 7))
   const typicalHit =
     (category.type === 'predictable-annual' || category.type === 'seasonal') &&
@@ -150,6 +153,7 @@ function CategoryDetail({
   useEffect(() => {
     setAmount(defaultAmount)
     setRecurrence('once')
+    setNotes('')
   }, [category.key, defaultAmount])
 
   const toggleMonth = (month: number) => {
@@ -164,6 +168,7 @@ function CategoryDetail({
       <p>
         {confidenceLabel(category.confidence)}. {seenCopy(category.occurrences, category.typicalMonthNames)}
       </p>
+      {category.usedPlanPrior && <p>{planPriorCopy()}</p>}
 
       {category.typicalMonthNames.length > 0 && !lumpy && (
         <p>
@@ -192,7 +197,7 @@ function CategoryDetail({
         <p className="mt-1">
           {historyDiffers
             ? `History called this ${typeLabel(category.suggestedType, category.lowSample).toLowerCase()}. Seasonal and annual land only on the months you check — they do not add on top of the monthly plan.`
-            : 'Seasonal and annual land only on the months you check. That does not add on top of the monthly plan, and it leaves the overlay if the line was irregular.'}
+            : 'Seasonal and annual land only on the months you check. That does not add on top of the monthly plan, and it leaves Risk if the line was irregular.'}
         </p>
 
         <div className="mt-3 flex flex-wrap gap-1">
@@ -248,8 +253,8 @@ function CategoryDetail({
       <div className="rounded-2xl bg-white/70 px-4 py-4">
         <p className="text-[11px] uppercase tracking-wider text-ink-400">Pin as known future</p>
         <p className="mt-1">
-          Give this cost a month — {monthName(focusedMonth)} — so it leaves the overlay if it is
-          irregular, and sits on the calendar if it is not.
+          Give this cost a month — {monthName(focusedMonth)} — so it leaves Risk if it is
+          irregular, and sits on the calendar if it is not. A comment is optional.
         </p>
 
         {warned && <p className="mt-2">{doubleCountCopy(category.label, monthName(focusedMonth))}</p>}
@@ -283,12 +288,15 @@ function CategoryDetail({
             ))}
           </div>
           <button
-            onClick={() => onPin({ category: category.label, amount, recurrence })}
+            onClick={() => onPin({ category: category.label, amount, recurrence, notes })}
             className="btn-ghost text-xs"
             disabled={!(amount > 0)}
           >
             Pin in {monthName(focusedMonth)}
           </button>
+        </div>
+        <div className="mt-2">
+          <PinComment value={notes} onChange={setNotes} />
         </div>
       </div>
     </div>

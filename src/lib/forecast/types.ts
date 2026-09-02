@@ -26,6 +26,8 @@ export interface CategoryOverride {
   ignoreOutliers?: boolean
 }
 
+export type PinAddsTo = 'plan' | 'both'
+
 export interface KnownFuture {
   id: string
   category: string
@@ -34,7 +36,23 @@ export interface KnownFuture {
   month: string
   recurrence: 'once' | 'annual'
   series: SeriesId
+  /** Why this pin sits on this month. Empty is fine. */
   notes: string
+  /**
+   * `plan` raises this month’s Plan only (the trend is already in Forecast).
+   * Omitted or `both` is a dated cost on Plan and Forecast, and can leave Risk.
+   */
+  addsTo?: PinAddsTo
+}
+
+/** Draft used when pinning a cost onto a month. */
+export interface PinRequest {
+  category: string
+  amount: number
+  notes?: string
+  recurrence?: KnownFuture['recurrence']
+  series?: SeriesId
+  addsTo?: PinAddsTo
 }
 
 export interface ForecastConfig {
@@ -50,6 +68,8 @@ export interface ForecastConfig {
   coverageTarget: number
   categoryOverrides: Record<string, CategoryOverride>
   knownFutures: KnownFuture[]
+  /** Category keys dropped below the Plan vs forecast line, by YYYY-MM. */
+  ignoredCompare: Record<string, string[]>
 }
 
 export interface ForecastSnapshot {
@@ -87,6 +107,7 @@ export const DEFAULT_FORECAST_CONFIG: ForecastConfig = {
   coverageTarget: 0.9,
   categoryOverrides: {},
   knownFutures: [],
+  ignoredCompare: {},
 }
 
 /** Tolerates a partial record so a missing field is never fatal. */
@@ -115,6 +136,12 @@ export function withForecastDefaults(stored?: Partial<ForecastConfig>): Forecast
         : 0.9,
     categoryOverrides: stored?.categoryOverrides ?? {},
     knownFutures: stored?.knownFutures ?? [],
+    ignoredCompare:
+      stored?.ignoredCompare &&
+      typeof stored.ignoredCompare === 'object' &&
+      !Array.isArray(stored.ignoredCompare)
+        ? stored.ignoredCompare
+        : {},
   }
 }
 
@@ -140,6 +167,11 @@ export interface CategoryForecast {
   lastAmount: number
   usedLastAmount: boolean
   lowSample: boolean
+  /**
+   * True when a matching typical-month Budget line is standing in for the
+   * calendar amount because history is not yet monthly.
+   */
+  usedPlanPrior: boolean
   repeatedCycle: boolean
   /** Mean monthly spend over the last 12 lookback months (or all, if fewer). */
   average12: number
@@ -177,6 +209,8 @@ export interface MonthPoint {
   gapRatio: number
   byCategory: MonthCategoryAmount[]
   variances: VarianceRow[]
+  /** Plan vs forecast by category, largest |difference| first. */
+  planVsForecast: VarianceRow[]
 }
 
 export interface OverlayLine {
@@ -184,6 +218,9 @@ export interface OverlayLine {
   label: string
   /** This line’s smear: window total / N. */
   share: number
+  /** Full lookback total; a sensible default when pinning the line onto a month. */
+  windowTotal: number
+  lastAmount: number
   lowSample: boolean
 }
 
@@ -204,12 +241,15 @@ export interface ForecastMixLine {
   source: MonthCategoryAmount['source']
   placementId?: string
   recurrence?: KnownFuture['recurrence']
+  notes?: string
 }
 
 export interface ForecastMix {
   monthly: ForecastMixLine[]
   lumpy: ForecastMixLine[]
   pinned: ForecastMixLine[]
+  /** Pins that raise Plan only; not in `total`. */
+  onPlan: ForecastMixLine[]
   total: number
 }
 
@@ -250,6 +290,8 @@ export interface CurrentMonthView {
   /** Categories whose typical month is this one and that have already posted. */
   postedTypicalKeys: string[]
   remainLines: RemainLine[]
+  /** Plan vs forecast-to-month-end by category, largest |difference| first. */
+  planVsForecast: VarianceRow[]
 }
 
 export interface HouseholdForecast {

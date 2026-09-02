@@ -5,6 +5,7 @@ import ForecastPanel from './ForecastPanel'
 import ImportPanel from './ImportPanel'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
+import SettingsPanel from './SettingsPanel'
 import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
 import type { EtmData } from './useEtmData'
@@ -23,7 +24,7 @@ interface Props {
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
 }
 
-type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'import' | 'accounts'
+type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'import' | 'accounts' | 'settings'
 
 const TABS: Array<[Tab, string]> = [
   ['month', 'Month end'],
@@ -33,6 +34,7 @@ const TABS: Array<[Tab, string]> = [
   ['transactions', 'Transactions'],
   ['import', 'Import'],
   ['accounts', 'Accounts'],
+  ['settings', 'Settings'],
 ]
 
 /** The period selector is hidden on tabs it does not govern. */
@@ -50,7 +52,6 @@ export default function EtmArea({
   onApplyHouseholdContribution,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
-  const [confirmingWipe, setConfirmingWipe] = useState(false)
 
   // The month-end screen settles one month at a time, so it keeps a month of
   // its own rather than following a period that may span a year.
@@ -195,31 +196,19 @@ export default function EtmArea({
                 onDelete={(account) => void data.removeAccount(account)}
               />
             )}
+
+            {tab === 'settings' && (
+              <SettingsPanel
+                transactions={data.transactions}
+                budget={budget}
+                config={data.forecastConfig}
+                reimbursableParentTag={data.config.reimbursableTag}
+                onConfigChange={(config) => void data.saveForecastSettings(config)}
+                onWipe={onWipe}
+              />
+            )}
           </>
         )}
-
-        <section className="mt-8 max-w-xl rounded-2xl border border-shell-300/50 bg-shell-300/10 px-4 py-3.5">
-          <p className="text-sm font-medium text-ink-900">Erase expense data</p>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Removes this device’s encrypted expense store and the key setup along with it. Your
-            budget, goals, and profile are untouched, and everything here can be imported again
-            from Monarch.
-          </p>
-          {confirmingWipe ? (
-            <div className="mt-3 flex gap-2">
-              <button onClick={onWipe} className="btn bg-shell-500 text-white hover:opacity-90">
-                Yes, erase it
-              </button>
-              <button onClick={() => setConfirmingWipe(false)} className="btn-ghost">
-                Keep it
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmingWipe(true)} className="btn-ghost mt-3">
-              Erase expense data
-            </button>
-          )}
-        </section>
       </main>
     </div>
   )

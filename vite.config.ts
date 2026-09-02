@@ -13,6 +13,14 @@ export default defineConfig(({ mode }) => ({
   define: {
     __ETM_AVAILABLE__: JSON.stringify(mode !== 'public'),
   },
+  server: {
+    watch: {
+      // Cursor/agent writes often miss native FSEvents, so the Forecast tab
+      // would keep serving a stale transform until the process was killed.
+      usePolling: true,
+      interval: 300,
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

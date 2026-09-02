@@ -201,11 +201,18 @@ The spec uses ±5% in two different ways. They must not be collapsed.
 
 ### 4.1 Control window (product behaviour — this is what to build)
 
-On a month card, if `|forecast − plan| / plan > 0.05`, the month is
-**outside the control window**. Tidewater lists the categories that make up
-the gap and lets the user:
+The month card always lists every category with a plan or a forecast,
+sorted by `|forecast − plan|` descending. Difference is forecast minus
+plan. For the current month, that forecast is actual-to-date plus remain
+(the same as Forecast to month-end), not calendar placement.
 
-- add a known future expense **on that month** (the preferred fix once a cost has a date),
+On a month card, if `|forecast − plan| / plan > 0.05`, the month is
+**outside the control window**. Tidewater still lists the categories that
+make up the gap (for placing a cost) and lets the user:
+
+- add a known future expense **on that month** (Risk / a dated cost: it
+  lands on Plan and Forecast), or pin a Plan vs forecast gap **onto
+  Plan only** (the trend is already in Forecast),
 - raise or lower the residual overlay (only for costs that still have no month),
 - override a category forecast.
 
@@ -356,18 +363,22 @@ For window length `N`, category `c`:
 - `repeated_cycle` = the same `MM` appears in more than one year of the
   window (only meaningful when `N ≥ 24` or all-time)
 
-**Low sample (overrides type):** if `occurrences < 3`, confidence is
-`low`. Type is **One-Time / Irregular** (or `Emerging` in the UI copy).
-**Never** auto-classify a single occurrence as Predictable Annual. Surface
-it as “seen once, in {month}” and let the user pin it as annual if they
-know it will return.
+**Low sample:** if `occurrences < 3`, confidence is `low`. Type is
+**One-Time / Irregular** (or `Emerging` in the UI copy) unless the
+same calendar month already appears in two years (`predictable-annual`).
+**Never** auto-classify a single occurrence as Predictable Annual.
 
-Otherwise:
+**Age-aware presence:** monthly vs irregular uses months *since the
+category first appeared*, not the full lookback `N`. Three similar
+amounts in a row after debut can read as monthly even in a 24-month
+window. Occurrences, averages, and drift still describe the full window.
+
+Otherwise (on that post-debut slice of length `N_age`):
 
 | Condition | Type |
 | --- | --- |
-| `months_present / N ≥ 0.75` and `cv ≤ 0.20` | Predictable Monthly |
-| `months_present / N ≥ 0.75` and `cv > 0.20` | Variable Monthly |
+| `months_present / N_age ≥ 0.75` and `cv ≤ 0.20` | Predictable Monthly |
+| `months_present / N_age ≥ 0.75` and `cv > 0.20` | Variable Monthly |
 | `occurrences ≥ 2` and `calendar_months.size ≤ 2` and (`repeated_cycle` or `occurrences ≥ 2` with a tight month cluster) | Predictable Annual |
 | `occurrences ≥ 2` and presence ≤ 0.60 and `calendar_months.size ≤ 6` | Semi-Annual / Seasonal |
 | else | One-Time / Irregular |
@@ -426,11 +437,13 @@ typical month, use the average of that calendar month in the window when
 it exists, otherwise `mean_present`. Other months 0. Set-aside share =
 window total / `N`.
 
-**One-Time / Irregular.** **Not placed on the calendar** by default. They
-feed the **overlay** only: `unplaced_irregular / N` (§7.3). An outlier
-toggle recomputes the window total without the largest 1 (or 2) months —
-see §8. Placing a known future in a specific month removes that amount
-from the overlay.
+**One-Time / Irregular.** **Not placed on the calendar** by default,
+unless a matching typical-month Budget line exists (then the plan is
+placed every month until history classifies as monthly — §13). Unpaired
+irregulars feed the **overlay** only: `unplaced_irregular / N` (§7.3).
+An outlier toggle recomputes the window total without the largest 1 (or 2)
+months — see §8. Placing a known future in a specific month removes that
+amount from the overlay.
 
 ### 7.2 Month forecast (calendar)
 
@@ -439,22 +452,28 @@ months:
 
 ```
 calendar[M] = Σ monthly-type likely
+            + Σ plan-backed lines not yet monthly (typical-month Budget amount)
             + Σ annual/seasonal placed in MM(M)
             + Σ known futures dated in M
 ```
 
-Irregulars are **excluded** from `calendar[M]` unless the user has placed
-them as a known future in `M`. The timeline’s “forecast” bar is this
-calendar figure. A second, quieter series (or a note) shows the
-**overlay** — the unplaced irregular remainder, spread evenly — so a flat
-month is not mistaken for a cheap month.
+Irregulars with **no** matching Budget line are **excluded** from
+`calendar[M]` unless the user has placed them as a known future in `M`.
+A Budget line means the cost continues; a pin is the dated one-off.
+The timeline’s “forecast” bar is this calendar figure. A second, quieter
+series (or a note) shows the **overlay** — the unplaced irregular
+remainder, spread evenly — so a flat month is not mistaken for a cheap
+month. Plan-backed lines are not in that smear.
 
 Past months also show **actual** household spend (same universe rule).
 Vacation actuals never appear on this household strip; they live on the
 vacation card.
 ### 7.3 Recommended monthly set-aside and the shrinking overlay
 
-The typical-month need is the recurring shape. The **overlay** is only
+The typical-month need is the recurring shape (history monthly lines plus
+Budget lines standing in until history is monthly). The **overlay** is only
+the unpaired irregular remainder that has not been placed yet. Plan-backed
+lines are not in that smear.
 what is still unpredictable.
 
 ```
@@ -496,11 +515,19 @@ As-of inside month `M`:
 - For each Predictable/Variable Monthly category:
   `remain = max(0, likely − actual_to_date_in_category)`
   High remain uses `high` instead of `likely`.
+- For a matching Budget line whose history is not yet monthly: the same
+  leftover using the **plan** amount (including a line with no postings).
+  A type override to annual / seasonal / irregular still wins.
 - For annual/seasonal whose typical `MM` is this month and that have not
-  posted yet: add the expected amount.
-- If they have already posted: remain 0 for that category (do not double
-  count). Finishing a posted seasonal toward “when it is present” is a
-  later change, not this amendment.
+  posted yet: add the expected amount. Seasonal uses the larger of that
+  month’s own average and “when it is present,” so a light September is
+  still at least a normal Gas month.
+- Annuals that have already posted: remain 0 (the bill landed; do not
+  count it twice).
+- Seasonals that have already posted and are not a low sample: finish
+  toward the same target (`remain = max(0, target − actual)`). The first
+  fill-up is not the whole month. One- or two-occurrence seasonals stay
+  at remain 0 after a posting, like a posted annual.
 - Known futures in `M` still outstanding: add them (the larger leftover
   wins if the same category already has a remainder).
 - Irregulars with **nothing posted yet** in `M`: do not invent a
@@ -519,11 +546,17 @@ The current-month card lists each leftover that makes up `remain`, so
 the ±5% comparison to plan is readable: forecast to month-end is actual
 plus these lines, not a silent total.
 
+It also lists **plan vs forecast** for every category with either figure,
+sorted from the largest absolute difference to the smallest. Forecast on
+that list is `actual + remain` for the category (same as the headline
+Forecast to month-end), not calendar `placedAmount`. Plan is the matching
+budget line plus any household pin on `M`.
+
 Compare `forecast_eom` to this month’s **plan** (typical month + known
-futures in `M`). If outside ±5%, list the categories that contribute most
-to the gap (plan vs what the calendar would place — a different list).
-The residual overlay is shown beside the plan, not added into December
-once December’s repairs have been placed.
+futures in `M`). If outside ±5%, the existing “what makes up the gap”
+list is the subset of those rows that point the same way as the total
+gap, for placing a cost. The residual overlay is shown beside the plan,
+not added into December once December’s repairs have been placed.
 
 ### 7.5 Inflation (spec open question — recommended default)
 
@@ -593,7 +626,8 @@ interface ForecastConfig {
   excludeTopOutliers: number // 0, 1, or 2
   coverageTarget: number // default 0.9 — 9 months in 10
   categoryOverrides: Record<string, CategoryOverride>
-  knownFutures: KnownFuture[] // the way a month gets a dated cost
+  knownFutures: KnownFuture[] // dated cost on Plan+Forecast, or Plan-only from Plan vs forecast
+  ignoredCompare: Record<string, string[]> // treat-as-plan gaps, by YYYY-MM
 }
 
 interface CategoryOverride {
@@ -609,7 +643,7 @@ interface KnownFuture {
   month: string // YYYY-MM
   recurrence: 'once' | 'annual'
   series: 'household' | 'vacation' // default household
-  notes: string
+  notes: string // why this pin sits on this month; empty is fine
 }
 
 interface ForecastSnapshot {
@@ -639,7 +673,7 @@ in-memory key the same as today.
 Pairing to the core budget uses the same rule ETM already uses for plan
 vs actual: category / expense-line names, ignoring case and spacing.
 Unpaired forecast categories still appear. Unpaired budget lines appear as
-plan with a zero history forecast (acceptance criterion 2 — new category).
+plan, and the calendar uses that plan until history is monthly (§13).
 
 ---
 
@@ -652,38 +686,61 @@ own as-of (today) plus the window toggle.
 ### Current month summary card
 
 - Plan (typical month + this month’s known futures)
-- Residual overlay for costs not yet placed (household only)
 - Actual to today (household rule)
 - Forecast to month-end (§7.4)
+- Difference (forecast minus plan)
 - Control-window badge: inside / outside ±5%
+- **What this forecast is:** month-to-date spend beside forecast to
+  month-end, largest forecast first
+- Plan beside forecast by category, largest `|difference|` first
+  (forecast = actual + remain). Ignore a line if you expect to hit Plan
+  there anyway: that gap leaves Forecast; Plan does not change. Pin from
+  this table adds the amount to Plan only (the trend is already in
+  Forecast). Skipping a category for a month (property tax in November)
+  is a plan change — typical months or a $0 plan — not an ignore.
+- **Risk** (the unplaced irregular smear, not in Forecast). Same remainder
+  on every month. Pin a line to take it out; an optional comment records
+  why it sits on that month.
 - Variance list when outside, each row offering “place this in {month}”
 - Quiet note of the recommended set-aside and whether this month is lumpy
   relative to it
 
 ### Future month card
 
-- Plan, Forecast, Residual overlay (not added into the column)
-- **What this forecast is:** every-month lines, then seasonal / annual
-  lines whose typical months include this one, then pins. The three
+- Plan, Forecast, Difference
+- Plan beside forecast by category, largest `|difference|` first.
+  Ignore treats the line as hitting Plan. Pin from that table adds to
+  Plan only. Risk pin is still a dated cost on Plan and Forecast.
+- **How this forecast is built:** every-month lines, then seasonal / annual
+  lines whose typical months include this one, then pins (each pin can
+  carry a comment for why it sits here). The three
   groups add to the Forecast figure.
-- **What is still unplaced** (collapsed): the irregular / emerging
-  shares that make the overlay. Same remainder on every month; not in
-  the column.
+- **Risk:** the irregular / emerging shares that make the overlay. Same
+  remainder on every month; not in the column.
 
 ### Calendar / timeline
 
-A 24-column strip: previous 12 full months + next 12.
+Shown first on the Forecast tab. A 24-column strip: previous 12 full months +
+next 12. A click selects that month and the summary card below follows it.
 
 Each past column: actual bar, forecast bar (recomputed from data *before*
 that month when a snapshot exists; otherwise from current engine — snapshots
 are the honest ones).
 
 Each future column: plan vs forecast. Tint when outside ±5%. Click opens
-that month as a summary card. After the user **places** a known cost,
+that month as a summary card below the strip. After the user **places** a known cost,
 returning to the strip must show the month inside the window if they
 brought it in, and the overlay line must have dropped.
 
 Do not require a charting library. SVG, same family as `GoalChart`.
+
+Forecast is a **reading** page. Order: household timeline, the selected
+month’s card (defaults to the current month), last month’s stored snapshot
+(reconstructed if none is stored), household categories, vacation pot,
+household 9-of-10 goals. Jump links (Timeline / This month / Plan vs forecast / Risk / Last month /
+Categories) skip the stack; they are not extra tabs. This month is spend
+so far vs forecast to month-end. Window, allow-list,
+vacation tags, and wipe live on the Expenses **Settings** tab.
 
 ### Vacation card
 
@@ -696,7 +753,7 @@ would go below zero.
 
 ### Settings row (the spec’s missing §6)
 
-On the Forecast tab, not buried:
+On the Expenses **Settings** tab, not on the Forecast reading page:
 
 - Window: 12 / 24 / all-time, with the short-window warning when it applies
 - Reimbursable allow-list (household)
@@ -705,12 +762,16 @@ On the Forecast tab, not buried:
 - Inflation
 - Outlier toggle
 - Coverage target (default 90%)
+- Erase expense data (wipe the vault on this device)
+
+Do not repeat wipe at the foot of every Expenses tab.
 
 ### Category drill-in
 
 Type, confidence, typical months, 12 vs 24 averages, type override
 (History / monthly / variable / annual / seasonal / irregular), typical-month
-toggles when the line is seasonal or annual, and “pin as known future.”
+toggles when the line is seasonal or annual, and “pin as known future”
+with an optional comment for why it sits on that month.
 
 ### Funded goal status
 
@@ -775,12 +836,22 @@ Forecast visit each month, or when the tab loads), later months are honest.
 
 ## 13. New categories and known futures (acceptance criteria 2 and 3)
 
-A category with no history: forecast 0, plan whatever the budget line or
-known future says. The month is outside the control window until the user
-funds it. That is the feature.
+A typical-month **Budget** line means the cost continues. Forecast places
+that plan every month until age-aware history classifies the line as
+monthly (then history `likely` is used, so plan vs forecast can diverge).
+A Budget line with no postings still places the plan. Creating the
+category is the decision to continue; do not wait for a 24-month trail
+and do not leave forecast at 0 against that plan.
 
-Known futures are how a month gets a dated cost. They are **not** an extra
-tax on top of the overlay — they **consume** the overlay:
+Spend with **no** matching Budget line stays cautious: one or two hits
+are emerging, overlay-only, no invented leftover. The user can add a
+Budget line, mark the type monthly, or pin a month.
+
+A type override to irregular / annual / seasonal on a paired line still
+wins (the plan does not force every-month placement).
+
+Known futures are how a month gets a **dated** cost. They are **not** an
+extra tax on top of the overlay — they **consume** the overlay:
 
 - once, or annual (repeats in that `MM` each year ahead)
 - amount, category (free text; may create an unpaired line)
@@ -923,8 +994,8 @@ types and functions that already exist.
 | --- | --- |
 | `KnownFuture` on `ForecastConfig` | `src/lib/forecast/types.ts` |
 | Overlay shrinks by `placed / N` when a known future’s category is irregular | `overlayFor` in `forecast.ts` |
-| `MonthPoint.outsideControlWindow`, `gapRatio`, `variances` | types + `variancesFor` / `isOutsideControlWindow` |
-| `CurrentMonthView` has the same three fields | `forecast.ts` current-month path |
+| `MonthPoint.outsideControlWindow`, `gapRatio`, `variances`, `planVsForecast` | types + `planVsForecastRows` / `gapRows` / `isOutsideControlWindow` |
+| `CurrentMonthView` has the same fields; current-month `planVsForecast` is actual + remain | `forecast.ts` current-month path |
 | Timeline already tints future/current columns that are outside ±5% | `ForecastTimeline.tsx` |
 | `excludeTopOutliers` 0 / 1 / 2 | config + `overlayFor` |
 | `doubleCounts` when a known future collides with an annual already placed | `ForecastResult.doubleCounts` |
