@@ -7,7 +7,7 @@ import type { Sealed } from '../crypto'
  * by a plaintext id; the ids are meaningless without the key.
  */
 const DB_NAME = 'tidewater-etm'
-const DB_VERSION = 1
+const DB_VERSION = 3
 
 /** What was recorded at setup so a later unlock can reproduce the same key. */
 export interface VaultMeta {
@@ -39,6 +39,8 @@ interface EtmSchema extends DBSchema {
   batches: { key: string; value: SealedRecord }
   reconciliations: { key: string; value: SealedRecord }
   config: { key: string; value: SealedRecord }
+  /** Unused leftover from 0.8.2; left so an existing v3 database still opens. */
+  watch: { key: 'folder'; value: { name: string } }
 }
 
 export type EtmDb = IDBPDatabase<EtmSchema>
@@ -60,6 +62,7 @@ export function openEtmDb(): Promise<EtmDb> {
     upgrade(db) {
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
       if (!db.objectStoreNames.contains('unlock')) db.createObjectStore('unlock')
+      if (!db.objectStoreNames.contains('watch')) db.createObjectStore('watch')
       for (const name of RECORD_STORES) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' })
       }

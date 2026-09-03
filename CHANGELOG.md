@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 — 2026-09-02
+
+### Added
+- Settings can watch a local folder you drop Monarch CSVs into. After you choose it, you see the folder name and how many CSVs are in it. A newer file is offered for the existing Import review. Nothing is written until you bring it in. After the next unlock, choose the same folder again to check.
+
+### Fixed
+- Choosing a folder now shows that folder on Settings. The earlier File System Access path could close the picker and never update the screen.
+
 ## 0.8.1 — 2026-09-02
 
 ### Changed

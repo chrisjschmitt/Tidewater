@@ -1,3 +1,5 @@
+import { asFingerprint, type ExportFingerprint } from './watchFolder'
+
 /**
  * The user's workflow, expressed as configuration rather than code (§4). It
  * lives encrypted alongside the transactions because the tag names people use
@@ -35,6 +37,16 @@ export interface EtmConfig {
   tolerance: number
   buckets: BucketSetting[]
   annualEvents: AnnualEvent[]
+  /**
+   * The last Monarch file brought in (watched folder or Choose a CSV). Used
+   * only to notice a newer export.
+   */
+  lastExport?: ExportFingerprint
+  /**
+   * Folder name from the last time the user picked an export folder. The
+   * browser does not give a disk path, and a directory handle is not stored.
+   */
+  watchFolderName?: string
 }
 
 export const DEFAULT_CONFIG: EtmConfig = {
@@ -59,6 +71,8 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
       : DEFAULT_CONFIG.tolerance,
   buckets: stored?.buckets ?? [],
   annualEvents: stored?.annualEvents ?? [],
+  lastExport: asFingerprint(stored?.lastExport),
+  watchFolderName: stored?.watchFolderName?.trim() || undefined,
 })
 
 const key = (label: string) => label.trim().toLowerCase()

@@ -19,6 +19,15 @@ import {
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
 
+interface WatchProps {
+  folderName?: string
+  csvCount?: number
+  newestName?: string
+  notice?: string
+  onChoose: () => void
+  onForget: () => Promise<void>
+}
+
 interface Props {
   transactions: Transaction[]
   budget: Budget
@@ -26,6 +35,7 @@ interface Props {
   reimbursableParentTag: string
   onConfigChange: (config: ForecastConfig) => void
   onWipe: () => void
+  watch: WatchProps
 }
 
 const WINDOWS: Array<[ForecastWindow, string]> = [
@@ -47,6 +57,7 @@ export default function SettingsPanel({
   reimbursableParentTag,
   onConfigChange,
   onWipe,
+  watch,
 }: Props) {
   const asOf = today()
   const [confirmingWipe, setConfirmingWipe] = useState(false)
@@ -207,12 +218,49 @@ export default function SettingsPanel({
         />
       </section>
 
+      <section className="card p-6">
+        <h2 className="text-base font-semibold tracking-tight text-ink-900">
+          Watch this folder for Monarch exports
+        </h2>
+        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+          Pick the folder you already drop CSVs into. After Open, you should see that folder’s
+          name and how many CSV files are in it — not a full disk path. A newer file is offered
+          for Import review. Nothing is written until you bring it in. After the next unlock,
+          choose the same folder again to check.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button onClick={watch.onChoose} className="btn-primary text-xs">
+            {watch.folderName ? 'Choose a different folder' : 'Choose a folder'}
+          </button>
+          {watch.folderName && (
+            <button onClick={() => void watch.onForget()} className="btn-ghost text-xs">
+              Forget this folder
+            </button>
+          )}
+        </div>
+        {watch.folderName && (
+          <div className="mt-4 rounded-2xl bg-white/70 px-4 py-3.5">
+            <p className="text-sm font-medium text-ink-900">Watching “{watch.folderName}”</p>
+            <p className="mt-1 text-sm text-ink-500">
+              {watch.csvCount === undefined
+                ? 'Choose that folder again to list its CSV files.'
+                : watch.csvCount === 0
+                  ? 'No CSV files in that folder yet.'
+                  : watch.newestName
+                    ? `${watch.csvCount} CSV file${watch.csvCount === 1 ? '' : 's'}. Newest is ${watch.newestName}.`
+                    : `${watch.csvCount} CSV file${watch.csvCount === 1 ? '' : 's'}.`}
+            </p>
+          </div>
+        )}
+        {watch.notice && <p className="mt-3 text-sm text-shell-500">{watch.notice}</p>}
+      </section>
+
       <section className="max-w-xl rounded-2xl border border-shell-300/50 bg-shell-300/10 px-4 py-3.5">
         <p className="text-sm font-medium text-ink-900">Erase expense data</p>
         <p className="mt-0.5 text-xs text-ink-500">
-          Removes this device’s encrypted expense store and the key setup along with it. Your
-          budget, goals, and profile are untouched, and everything here can be imported again from
-          Monarch.
+          Removes this device’s encrypted expense store, the key setup, and any remembered
+          export folder. Your budget, goals, and profile are untouched, and everything here can
+          be imported again from Monarch.
         </p>
         {confirmingWipe ? (
           <div className="mt-3 flex gap-2">

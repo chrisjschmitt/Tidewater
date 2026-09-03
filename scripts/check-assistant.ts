@@ -346,6 +346,11 @@ check(
   'how to use Settings names lookback, household tags, and erase',
   /lookback/i.test(howSettings) && /household/i.test(howSettings) && /erase/i.test(howSettings),
 )
+const howWatch = localAnswer('How do I watch a folder?', budget, synthetic)
+check(
+  'how to watch a folder points at Settings and Import review',
+  /watch/i.test(howWatch) && /folder/i.test(howWatch) && /Import/i.test(howWatch),
+)
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed.`)

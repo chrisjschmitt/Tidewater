@@ -46,7 +46,15 @@ import {
   encodeVaultBackup,
   isEtmVaultBackup,
 } from '../src/lib/etm/storage/backup.ts'
-import { DEFAULT_CONFIG, withBucketSetting } from '../src/lib/etm/config.ts'
+import { DEFAULT_CONFIG, withBucketSetting, withDefaults } from '../src/lib/etm/config.ts'
+import {
+  asFingerprint,
+  isCsvName,
+  isNewerExport,
+  pickNewestCsv,
+  folderNameFromPath,
+  watchFolderLabel,
+} from '../src/lib/etm/watchFolder.ts'
 import {
   closedPlanTrend,
   planSpendAtClose,
@@ -980,6 +988,48 @@ check('the vault blob is not copied onto the budget', !('etm' in parsedVault.bud
 check('the vault blob is still readable', isEtmVaultBackup(parsedVault.etm))
 check('a mangled vault blob is rejected', !isEtmVaultBackup({ version: 1, salt: 'nope' }))
 check('decode of a mangled blob is null, not a wipe', decodeVaultBackup({ version: 1 }) === null)
+
+console.log('\n=== Watched export folder ===')
+
+const older = { name: 'Transactions_Aug.csv', size: 100, lastModified: 1_000 }
+const newer = { name: 'Transactions_Sep.csv', size: 120, lastModified: 2_000 }
+check('a folder name is shown as-is', watchFolderLabel('Transactions') === 'Transactions')
+check('an empty folder name still has words', watchFolderLabel('  ') === 'that folder')
+check(
+  'the folder name is the first path segment',
+  folderNameFromPath('Transactions/export.csv') === 'Transactions',
+)
+check('a .csv name is accepted', isCsvName('Transactions_2026-09-02.csv'))
+check('a dotted hidden name is rejected', !isCsvName('.hidden.csv'))
+check('a non-csv is rejected', !isCsvName('notes.txt'))
+check('case does not matter', isCsvName('export.CSV'))
+check('the first file in an empty vault is newer', isNewerExport(older))
+check(
+  'the same name as the last batch is not newer until a fingerprint exists',
+  !isNewerExport(newer, undefined, newer.name),
+)
+check('the same name, size, and time is not newer', !isNewerExport(older, older))
+check('a later modified time is newer', isNewerExport(newer, older))
+check('an earlier file is not newer', !isNewerExport(older, newer))
+check(
+  'same time and a different size is treated as newer',
+  isNewerExport({ ...older, size: 200 }, older),
+)
+check(
+  'the newest csv wins',
+  pickNewestCsv([older, newer, { name: 'notes.txt', size: 9, lastModified: 9_000 }])?.name ===
+    newer.name,
+)
+check('a mangled fingerprint is dropped', asFingerprint({ name: 'x.csv' }) === undefined)
+check(
+  'withDefaults keeps a valid last export',
+  withDefaults({ lastExport: newer }).lastExport?.name === newer.name,
+)
+check(
+  'withDefaults drops a broken last export',
+  withDefaults({ lastExport: { name: '', size: -1, lastModified: 1 } }).lastExport ===
+    undefined,
+)
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)

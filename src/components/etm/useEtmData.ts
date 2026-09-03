@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DEFAULT_CONFIG, type EtmConfig } from '../../lib/etm/config'
+import type { ExportFingerprint } from '../../lib/etm/watchFolder'
 import { today } from '../../lib/etm/period'
 import { lastFullMonth, refreshSnapshotActuals, snapshotsEqual } from '../../lib/forecast/snapshot'
 import { DEFAULT_FORECAST_CONFIG, type ForecastConfig, type ForecastSnapshot } from '../../lib/forecast/types'
@@ -60,7 +61,7 @@ export interface EtmData {
   flash: (message: string) => void
   persistAccount: (account: Account) => Promise<void>
   removeAccount: (account: Account) => Promise<void>
-  applyImport: (plan: ImportPlan) => Promise<void>
+  applyImport: (plan: ImportPlan, fingerprint?: ExportFingerprint) => Promise<void>
   revertBatch: (batch: ImportBatch) => Promise<void>
   addManual: (transaction: Transaction) => Promise<void>
   removeManual: (transaction: Transaction) => Promise<void>
@@ -248,8 +249,12 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   )
 
   const applyImport = useCallback(
-    async (plan: ImportPlan) => {
+    async (plan: ImportPlan, fingerprint?: ExportFingerprint) => {
       await commitImport(unlockedKey, plan)
+      if (fingerprint) {
+        const current = await loadConfig(unlockedKey)
+        await saveConfig(unlockedKey, { ...current, lastExport: fingerprint })
+      }
       await reload()
       flash(
         `Brought in ${plan.added.length.toLocaleString()} new and refreshed ${plan.updated.length.toLocaleString()}.`,

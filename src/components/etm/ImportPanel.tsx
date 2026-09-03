@@ -1,17 +1,20 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ImportProgress, { type ImportProgressState } from '../ImportProgress'
 import { AccountForm, blankAccount } from './AccountsPanel'
 import { planImport, type ImportPlan } from '../../lib/etm/importer'
 import { MonarchFormatError } from '../../lib/etm/monarch'
 import { monthLabel } from '../../lib/etm/format'
+import { fingerprintOf, type ExportFingerprint } from '../../lib/etm/watchFolder'
 import type { Account, ImportBatch, Transaction } from '../../lib/etm/types'
 
 interface Props {
   accounts: Account[]
   transactions: Transaction[]
   batches: ImportBatch[]
+  incomingFile?: File | null
+  onIncomingConsumed?: () => void
   onCreateAccount: (account: Account) => Promise<void>
-  onCommit: (plan: ImportPlan) => Promise<void>
+  onCommit: (plan: ImportPlan, fingerprint?: ExportFingerprint) => Promise<void>
   onUndo: (batch: ImportBatch) => Promise<void>
 }
 
@@ -19,11 +22,14 @@ export default function ImportPanel({
   accounts,
   transactions,
   batches,
+  incomingFile,
+  onIncomingConsumed,
   onCreateAccount,
   onCommit,
   onUndo,
 }: Props) {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null)
+  const [source, setSource] = useState<File | null>(null)
   const [plan, setPlan] = useState<ImportPlan | null>(null)
   const [progress, setProgress] = useState<ImportProgressState | null>(null)
   const [creating, setCreating] = useState<Account | null>(null)
@@ -55,8 +61,16 @@ export default function ImportPanel({
   }
 
   async function chooseFile(chosen: File) {
+    setSource(chosen)
     await build(chosen.name, await chosen.text(), accounts)
   }
+
+  useEffect(() => {
+    if (!incomingFile) return
+    const chosen = incomingFile
+    onIncomingConsumed?.()
+    void chooseFile(chosen)
+  }, [incomingFile])
 
   async function createAccount(account: Account) {
     await onCreateAccount(account)
@@ -70,8 +84,9 @@ export default function ImportPanel({
     if (!plan) return
     setBusy(true)
     try {
-      await onCommit(plan)
+      await onCommit(plan, source ? fingerprintOf(source) : undefined)
       setFile(null)
+      setSource(null)
       setPlan(null)
     } finally {
       setBusy(false)
@@ -90,7 +105,9 @@ export default function ImportPanel({
           </h2>
           <p className="mt-0.5 max-w-prose text-sm text-ink-500">
             Monarch stays the record of what happened. Import as often as you like — rows already
-            here are recognised, and anything you re-categorized there is refreshed here.
+            here are recognised, and anything you re-categorized there is refreshed here. A
+            watched folder only offers a newer file; nothing is written until you bring it in
+            here.
           </p>
         </header>
 
@@ -114,6 +131,7 @@ export default function ImportPanel({
             <button
               onClick={() => {
                 setFile(null)
+                setSource(null)
                 setPlan(null)
               }}
               className="btn-ghost text-xs"

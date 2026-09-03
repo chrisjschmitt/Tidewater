@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState, type Ref } from 'react'
 import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
 import ForecastPanel from './ForecastPanel'
@@ -8,6 +8,7 @@ import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
 import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
+import { useWatchFolder } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
 import type { Period } from '../../lib/etm/period'
 import type { Budget } from '../../lib/types'
@@ -52,6 +53,17 @@ export default function EtmArea({
   onApplyHouseholdContribution,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
+  const [incomingFile, setIncomingFile] = useState<File | null>(null)
+  const rememberWatchName = useCallback(
+    (name: string | undefined) => data.saveSettings({ ...data.config, watchFolderName: name }),
+    [data.config, data.saveSettings],
+  )
+  const watch = useWatchFolder(
+    data.config.lastExport,
+    data.batches[0]?.fileName,
+    data.config.watchFolderName,
+    rememberWatchName,
+  )
 
   // The month-end screen settles one month at a time, so it keeps a month of
   // its own rather than following a period that may span a year.
@@ -117,6 +129,49 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
+            <input
+              ref={watch.inputRef as Ref<HTMLInputElement>}
+              type="file"
+              multiple
+              className="hidden"
+              {...{ webkitdirectory: '', directory: '' }}
+              onChange={watch.onInputChange}
+            />
+            {watch.offer && (
+              <div className="mb-6 rounded-2xl border border-tide-200 bg-white/70 px-4 py-3.5">
+                <p className="text-sm text-ink-900">
+                  {lastImportPhrase(data)
+                    ? `${watch.offer.file.name} is newer than the ${lastImportPhrase(data)} import. Review it?`
+                    : `${watch.offer.file.name} is in the watched folder. Review it?`}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      setIncomingFile(watch.offer!.file)
+                      watch.dismissOffer()
+                      setTab('import')
+                    }}
+                    className="btn-primary text-xs"
+                  >
+                    Review
+                  </button>
+                  <button onClick={watch.dismissOffer} className="btn-ghost text-xs">
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
+            {!watch.offer && watch.folderName && watch.csvCount === undefined && (
+              <div className="mb-6 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3.5">
+                <p className="text-sm text-ink-900">
+                  To check “{watch.folderName}” for a new export, choose that folder again.
+                </p>
+                <button onClick={watch.openPicker} className="btn-ghost mt-3 text-xs">
+                  Check
+                </button>
+              </div>
+            )}
+
             {tab === 'month' && (
               <WorkflowPanel
                 data={data}
@@ -179,9 +234,12 @@ export default function EtmArea({
                 accounts={data.accounts}
                 transactions={data.transactions}
                 batches={data.batches}
+                incomingFile={incomingFile}
+                onIncomingConsumed={() => setIncomingFile(null)}
                 onCreateAccount={data.persistAccount}
-                onCommit={async (plan) => {
-                  await data.applyImport(plan)
+                onCommit={async (plan, fingerprint) => {
+                  await data.applyImport(plan, fingerprint)
+                  watch.dismissOffer()
                   setTab('transactions')
                 }}
                 onUndo={data.revertBatch}
@@ -205,6 +263,14 @@ export default function EtmArea({
                 reimbursableParentTag={data.config.reimbursableTag}
                 onConfigChange={(config) => void data.saveForecastSettings(config)}
                 onWipe={onWipe}
+                watch={{
+                  folderName: watch.folderName,
+                  csvCount: watch.csvCount,
+                  newestName: watch.newestName,
+                  notice: watch.notice,
+                  onChoose: watch.openPicker,
+                  onForget: watch.forgetFolder,
+                }}
               />
             )}
           </>
@@ -212,4 +278,19 @@ export default function EtmArea({
       </main>
     </div>
   )
+}
+
+function lastImportPhrase(data: EtmData): string | undefined {
+  if (data.config.lastExport) {
+    return new Date(data.config.lastExport.lastModified).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+  const latest = data.batches[0]
+  if (!latest) return undefined
+  return new Date(latest.importedAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })
 }

@@ -60,8 +60,9 @@ New, from the ETM spec:
    data is unreadable; a curious person with device access or a copy of the
    source code learns nothing.
 6. **No bank or Monarch credentials, ever.** There is no API integration.
-   All data arrives by manual CSV import or manual entry, so no credential
-   can leak because none is ever held.
+   All data arrives by CSV file or manual entry. A watched folder is still
+   a local file: Tidewater never holds Monarch or cloud credentials, never
+   reads mail, and never writes an import until the user reviews it.
 7. **Nothing personal in the repo.** Fixtures used for tests are synthetic.
    Real statements, workflow docs, and reconciliation sheets stay gitignored.
 
@@ -259,6 +260,14 @@ needed in ETM).
 4. Derive groupId and the internal flag using the existing rules.
 5. Show an import review (mirroring the current `ImportProgress` pattern):
    new rows, updated rows, skipped duplicates, unmatched accounts.
+
+**Watched folder.** Settings lets the user pick a local folder of Monarch
+CSVs (the browser’s directory file input). Tidewater lists those files
+immediately and offers a newer one for Import review. Nothing is imported
+automatically. The folder name is stored in encrypted `EtmConfig`; the
+browser does not give a disk path, and a directory handle is not kept.
+After the next unlock, the user chooses the same folder again to check.
+Choose a CSV remains. The path is never hardcoded and never committed.
 
 Bank/card statement CSVs (headerless: date, description, debit, credit,
 running balance; bank dates ISO, card dates MM/DD/YYYY) are parsed **only**
@@ -562,7 +571,8 @@ currency. (Monarch amounts are used exactly as exported.)
 ## 9. What this deliberately does not do
 
 - No Monarch or TD Canada Trust API/scraping integration — credentials must
-  never be held, so files and manual entry are the only inputs.
+  never be held, so files and manual entry are the only inputs. A watched
+  local folder is still a file, not a feed.
 - No transaction-level import from bank statements (balances only).
 - No currency conversion.
 - No smartphone layout (unchanged from the product spec: future).
