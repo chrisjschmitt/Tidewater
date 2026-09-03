@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import {
+  canWatchExportFolder,
   folderNameFromPath,
   offerFromFiles,
   type ExportFingerprint,
   type NewerExport,
 } from '../../lib/etm/watchFolder'
 
+export const WATCH_FOLDER_INPUT_ID = 'etm-watch-folder'
+
 export interface WatchFolderState {
+  supported: boolean
   folderName?: string
   csvCount?: number
   newestName?: string
   notice?: string
   offer: NewerExport | null
-  inputRef: RefObject<HTMLInputElement | null>
-  openPicker: () => void
   onInputChange: (event: ChangeEvent<HTMLInputElement>) => void
   forgetFolder: () => Promise<void>
   dismissOffer: () => void
@@ -30,21 +32,16 @@ export function useWatchFolder(
   savedName: string | undefined,
   onRememberName: (name: string | undefined) => Promise<void>,
 ): WatchFolderState {
-  const inputRef = useRef<HTMLInputElement>(null)
   const [folderName, setFolderName] = useState(savedName)
   const [csvCount, setCsvCount] = useState<number | undefined>()
   const [newestName, setNewestName] = useState<string | undefined>()
   const [notice, setNotice] = useState<string | undefined>()
   const [offer, setOffer] = useState<NewerExport | null>(null)
+  const supported = canWatchExportFolder()
 
   useEffect(() => {
     if (savedName && !folderName) setFolderName(savedName)
   }, [savedName, folderName])
-
-  const openPicker = useCallback(() => {
-    setNotice(undefined)
-    inputRef.current?.click()
-  }, [])
 
   const onInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -81,13 +78,12 @@ export function useWatchFolder(
   }, [])
 
   return {
+    supported,
     folderName,
     csvCount,
     newestName,
     notice,
     offer,
-    inputRef,
-    openPicker,
     onInputChange,
     forgetFolder,
     dismissOffer,

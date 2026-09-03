@@ -110,3 +110,25 @@ export function pickNewestCsv(files: ExportFingerprint[]): ExportFingerprint | u
     return best
   })
 }
+
+export interface FolderWatchEnv {
+  userAgent: string
+  platform: string
+  maxTouchPoints: number
+}
+
+/** iPhone/iPad cannot list a folder of CSVs; a directory input also breaks later file picks. */
+export function canWatchExportFolder(
+  env: FolderWatchEnv = typeof navigator === 'undefined'
+    ? { userAgent: '', platform: '', maxTouchPoints: 0 }
+    : {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        maxTouchPoints: navigator.maxTouchPoints,
+      },
+): boolean {
+  if (/iPad|iPhone|iPod/i.test(env.userAgent)) return false
+  // iPadOS 13+ reports as Macintosh with a touch screen.
+  if (env.platform === 'MacIntel' && env.maxTouchPoints > 1) return false
+  return true
+}

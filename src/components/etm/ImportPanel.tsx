@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import ImportProgress, { type ImportProgressState } from '../ImportProgress'
 import { AccountForm, blankAccount } from './AccountsPanel'
 import { planImport, type ImportPlan } from '../../lib/etm/importer'
@@ -35,7 +35,6 @@ export default function ImportPanel({
   const [creating, setCreating] = useState<Account | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   async function build(name: string, text: string, registry: Account[]) {
     setError('')
@@ -111,22 +110,20 @@ export default function ImportPanel({
           </p>
         </header>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          onChange={(e) => {
-            const chosen = e.target.files?.[0]
-            if (chosen) void chooseFile(chosen)
-            e.target.value = ''
-          }}
-        />
-
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => fileRef.current?.click()} className="btn-primary text-xs">
+          <label className="btn-primary cursor-pointer text-xs">
             Choose a CSV
-          </button>
+            <input
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              className="sr-only"
+              onChange={(e) => {
+                const chosen = e.target.files?.[0]
+                if (chosen) void chooseFile(chosen)
+                e.target.value = ''
+              }}
+            />
+          </label>
           {plan && (
             <button
               onClick={() => {

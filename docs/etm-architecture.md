@@ -267,7 +267,9 @@ immediately and offers a newer one for Import review. Nothing is imported
 automatically. The folder name is stored in encrypted `EtmConfig`; the
 browser does not give a disk path, and a directory handle is not kept.
 After the next unlock, the user chooses the same folder again to check.
-Choose a CSV remains. The path is never hardcoded and never committed.
+iPhone and iPad cannot list a folder of CSVs, so that control is omitted
+there (a directory file input can also block Choose a CSV). Choose a CSV
+remains. The path is never hardcoded and never committed.
 
 Bank/card statement CSVs (headerless: date, description, debit, credit,
 running balance; bank dates ISO, card dates MM/DD/YYYY) are parsed **only**

@@ -52,6 +52,7 @@ import {
   isCsvName,
   isNewerExport,
   pickNewestCsv,
+  canWatchExportFolder,
   folderNameFromPath,
   watchFolderLabel,
 } from '../src/lib/etm/watchFolder.ts'
@@ -998,6 +999,26 @@ check('an empty folder name still has words', watchFolderLabel('  ') === 'that f
 check(
   'the folder name is the first path segment',
   folderNameFromPath('Transactions/export.csv') === 'Transactions',
+)
+check(
+  'an iPad cannot watch a folder',
+  !canWatchExportFolder({ userAgent: 'iPad', platform: 'iPad', maxTouchPoints: 5 }),
+)
+check(
+  'iPadOS desktop UA cannot watch a folder',
+  !canWatchExportFolder({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    platform: 'MacIntel',
+    maxTouchPoints: 5,
+  }),
+)
+check(
+  'a Mac can watch a folder',
+  canWatchExportFolder({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    platform: 'MacIntel',
+    maxTouchPoints: 0,
+  }),
 )
 check('a .csv name is accepted', isCsvName('Transactions_2026-09-02.csv'))
 check('a dotted hidden name is rejected', !isCsvName('.hidden.csv'))

@@ -18,13 +18,14 @@ import {
 } from '../../lib/forecast/universe'
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
+import { WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 
 interface WatchProps {
+  supported: boolean
   folderName?: string
   csvCount?: number
   newestName?: string
   notice?: string
-  onChoose: () => void
   onForget: () => Promise<void>
 }
 
@@ -223,36 +224,42 @@ export default function SettingsPanel({
           Watch this folder for Monarch exports
         </h2>
         <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-          Pick the folder you already drop CSVs into. After Open, you should see that folder’s
-          name and how many CSV files are in it — not a full disk path. A newer file is offered
-          for Import review. Nothing is written until you bring it in. After the next unlock,
-          choose the same folder again to check.
+          {watch.supported
+            ? 'Pick the folder you already drop CSVs into. After Open, you should see that folder’s name and how many CSV files are in it — not a full disk path. A newer file is offered for Import review. Nothing is written until you bring it in. After the next unlock, choose the same folder again to check.'
+            : 'This device cannot list the files in a folder. Use Choose a CSV on the Import tab — that is the same review, one file at a time.'}
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button onClick={watch.onChoose} className="btn-primary text-xs">
-            {watch.folderName ? 'Choose a different folder' : 'Choose a folder'}
-          </button>
-          {watch.folderName && (
-            <button onClick={() => void watch.onForget()} className="btn-ghost text-xs">
-              Forget this folder
-            </button>
-          )}
-        </div>
-        {watch.folderName && (
-          <div className="mt-4 rounded-2xl bg-white/70 px-4 py-3.5">
-            <p className="text-sm font-medium text-ink-900">Watching “{watch.folderName}”</p>
-            <p className="mt-1 text-sm text-ink-500">
-              {watch.csvCount === undefined
-                ? 'Choose that folder again to list its CSV files.'
-                : watch.csvCount === 0
-                  ? 'No CSV files in that folder yet.'
-                  : watch.newestName
-                    ? `${watch.csvCount} CSV file${watch.csvCount === 1 ? '' : 's'}. Newest is ${watch.newestName}.`
-                    : `${watch.csvCount} CSV file${watch.csvCount === 1 ? '' : 's'}.`}
-            </p>
-          </div>
-        )}
-        {watch.notice && <p className="mt-3 text-sm text-shell-500">{watch.notice}</p>}
+        {watch.supported ? (
+          <>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <label
+                htmlFor={WATCH_FOLDER_INPUT_ID}
+                className="btn-primary cursor-pointer text-xs"
+              >
+                {watch.folderName ? 'Choose a different folder' : 'Choose a folder'}
+              </label>
+              {watch.folderName && (
+                <button onClick={() => void watch.onForget()} className="btn-ghost text-xs">
+                  Forget this folder
+                </button>
+              )}
+            </div>
+            {watch.folderName && (
+              <div className="mt-4 rounded-2xl bg-white/70 px-4 py-3.5">
+                <p className="text-sm font-medium text-ink-900">Watching “{watch.folderName}”</p>
+                <p className="mt-1 text-sm text-ink-500">
+                  {watch.csvCount === undefined
+                    ? 'Choose that folder again to list its CSV files.'
+                    : watch.csvCount === 0
+                      ? 'No CSV files in that folder yet.'
+                      : watch.newestName
+                        ? `${watch.csvCount} CSV file${watch.csvCount === 1 ? '' : 's'}. Newest is ${watch.newestName}.`
+                        : `${watch.csvCount} CSV file${watch.csvCount === 1 ? '' : 's'}.`}
+                </p>
+              </div>
+            )}
+            {watch.notice && <p className="mt-3 text-sm text-shell-500">{watch.notice}</p>}
+          </>
+        ) : null}
       </section>
 
       <section className="max-w-xl rounded-2xl border border-shell-300/50 bg-shell-300/10 px-4 py-3.5">

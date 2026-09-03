@@ -1,4 +1,4 @@
-import { useCallback, useState, type Ref } from 'react'
+import { useCallback, useState } from 'react'
 import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
 import ForecastPanel from './ForecastPanel'
@@ -8,7 +8,7 @@ import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
 import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
-import { useWatchFolder } from './useWatchFolder'
+import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
 import type { Period } from '../../lib/etm/period'
 import type { Budget } from '../../lib/types'
@@ -129,14 +129,16 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
-            <input
-              ref={watch.inputRef as Ref<HTMLInputElement>}
-              type="file"
-              multiple
-              className="hidden"
-              {...{ webkitdirectory: '', directory: '' }}
-              onChange={watch.onInputChange}
-            />
+            {watch.supported && (
+              <input
+                id={WATCH_FOLDER_INPUT_ID}
+                type="file"
+                multiple
+                className="sr-only"
+                {...{ webkitdirectory: '', directory: '' }}
+                onChange={watch.onInputChange}
+              />
+            )}
             {watch.offer && (
               <div className="mb-6 rounded-2xl border border-tide-200 bg-white/70 px-4 py-3.5">
                 <p className="text-sm text-ink-900">
@@ -161,14 +163,17 @@ export default function EtmArea({
                 </div>
               </div>
             )}
-            {!watch.offer && watch.folderName && watch.csvCount === undefined && (
+            {!watch.offer && watch.supported && watch.folderName && watch.csvCount === undefined && (
               <div className="mb-6 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3.5">
                 <p className="text-sm text-ink-900">
                   To check “{watch.folderName}” for a new export, choose that folder again.
                 </p>
-                <button onClick={watch.openPicker} className="btn-ghost mt-3 text-xs">
+                <label
+                  htmlFor={WATCH_FOLDER_INPUT_ID}
+                  className="btn-ghost mt-3 cursor-pointer text-xs"
+                >
                   Check
-                </button>
+                </label>
               </div>
             )}
 
@@ -264,11 +269,11 @@ export default function EtmArea({
                 onConfigChange={(config) => void data.saveForecastSettings(config)}
                 onWipe={onWipe}
                 watch={{
+                  supported: watch.supported,
                   folderName: watch.folderName,
                   csvCount: watch.csvCount,
                   newestName: watch.newestName,
                   notice: watch.notice,
-                  onChoose: watch.openPicker,
                   onForget: watch.forgetFolder,
                 }}
               />

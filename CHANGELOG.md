@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.3 — 2026-09-03
+
+### Fixed
+- On iPad and iPhone, Settings no longer offers a folder to watch (Safari cannot list the files, and that picker was blocking Choose a CSV). Import’s Choose a CSV is a direct tap again.
+
 ## 0.8.2 — 2026-09-02
 
 ### Added
