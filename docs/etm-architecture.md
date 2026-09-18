@@ -532,7 +532,12 @@ inside it, while the balances can only be recorded once it has.
    Recorded transfers are noted on the reconciliation record.
 3. **Closing balances** — what each account closed the month at, from a
    statement CSV or typed in. Card balances are entered as what is owed,
-   plus any charges that have not posted yet.
+   plus any charges that have not posted yet. Where all the statements have
+   been downloaded into one folder, that folder can be picked once and read
+   in a single pass: every account on this step is listed with the figure its
+   file yields, the files that matched nobody are named, and nothing is
+   recorded until the user confirms the rows they accept. The per-account
+   Record and single-CSV flows stay as they were, as the override.
 4. **Monthly savings** — computes: funding-account balance − float − main
    card balance − main card pending charges, per currency. The result comes
    with a plain-language suggestion (transfer the surplus to the savings
@@ -576,6 +581,17 @@ currency. (Monarch amounts are used exactly as exported.)
   never be held, so files and manual entry are the only inputs. A watched
   local folder is still a file, not a feed.
 - No transaction-level import from bank statements (balances only).
+- No unattended scraping. Downloading the statements *may* be automated, but
+  only the attended, read-only kind: the user signs in themselves, in their
+  own browser, and the automation attaches to the session they already hold.
+  It asks for no password, keeps no secret, stores no cookie, and runs only
+  while the person who started it is sitting there. Nothing about it is a
+  scheduled job that could still be logging in a month from now.
+  What it produces is a folder of CSVs on disk — which is to say, files, the
+  input this module already had. Tidewater's side of it reads that folder for
+  one thing, the same thing it read a single statement for: the closing
+  balance per account. Statements still do not become a second source of
+  transactions, and no amount of automating the download changes that.
 - No currency conversion.
 - No smartphone layout (unchanged from the product spec: future).
 - No server-side anything.

@@ -68,6 +68,17 @@ import {
   parseStatementDate,
 } from '../src/lib/etm/statement.ts'
 import {
+  balanceAnchors,
+  closingBalanceOf,
+  isReadable,
+  matchStatementFiles,
+  parseStatementFileName,
+  reviewRows,
+  scanStatementNames,
+  slugifyLabel,
+  snapshotFor,
+} from '../src/lib/etm/statementFolder.ts'
+import {
   computeSavings,
   dayBefore,
   findUntidy,
@@ -1050,6 +1061,123 @@ check(
   'withDefaults drops a broken last export',
   withDefaults({ lastExport: { name: '', size: -1, lastModified: 1 } }).lastExport ===
     undefined,
+)
+
+console.log('\n=== Statement folder ===')
+
+const statementAccounts = [
+  account('Joint Chequing', 'chequing', 'CAD', 'TD Chequing', {
+    funding: true,
+    lastFour: '1111',
+  }),
+  account('Visa Infinite', 'credit', 'CAD', 'TD Visa', { mainCard: true, lastFour: '4242' }),
+  account('Visa Infinite USD', 'credit', 'USD', 'TD Visa USD', { lastFour: '4242' }),
+  // No digits recorded, so only the slug can tie a file to it.
+  account('Rainy Day', 'savings', 'CAD', 'TD Savings'),
+]
+
+const folderNames = [
+  'TD-joint-chequing-1111-2026-09-02.csv',
+  'TD-joint-chequing-1111-2026-09-18.csv',
+  'TD-visa-infinite-4242-2026-09-18.csv',
+  'TD-visa-infinite-usd-4242-2026-09-18.csv',
+  'TD-rainy-day-8888-2026-09-18.csv',
+  'TD-line-of-credit-7777-2026-09-18.csv',
+  'TD-nonsense.csv',
+  'Transactions_2026-09-18.csv',
+]
+
+const parsedName = parseStatementFileName('TD-visa-infinite-usd-4242-2026-09-18.csv')
+check('a filename yields a slug', parsedName?.labelSlug === 'visa-infinite-usd')
+check('a filename yields the last four', parsedName?.lastFour === '4242')
+check('a filename yields the download date', parsedName?.date === '2026-09-18')
+check('a label is slugified the same way', slugifyLabel('Visa Infinite (USD)') === 'visa-infinite-usd')
+check('an impossible date is not a statement name', parseStatementFileName('TD-visa-4242-2026-13-01.csv') === undefined)
+check('a Monarch export is not a statement name', parseStatementFileName('Transactions_2026-09-18.csv') === undefined)
+
+const scanned = scanStatementNames(folderNames)
+check('only the downloader’s files are scanned', scanned.files.length === 6)
+check('a TD-named file that will not parse is said aloud', scanned.skipped.includes('TD-nonsense.csv'))
+check('a Monarch export is not reported as skipped', !scanned.skipped.includes('Transactions_2026-09-18.csv'))
+
+const matched = matchStatementFiles(balanceAnchors(statementAccounts), folderNames)
+check(
+  'the newest download for an account wins',
+  matched.byAccount.get('acct-joint-chequing')?.date === '2026-09-18',
+)
+check(
+  'shared last four digits are settled by the slug',
+  matched.byAccount.get('acct-visa-infinite')?.name === 'TD-visa-infinite-4242-2026-09-18.csv' &&
+    matched.byAccount.get('acct-visa-infinite-usd')?.name ===
+      'TD-visa-infinite-usd-4242-2026-09-18.csv',
+)
+check(
+  'an account without digits still matches on its nickname',
+  matched.byAccount.get('acct-rainy-day')?.name === 'TD-rainy-day-8888-2026-09-18.csv',
+)
+check(
+  'a file for no account is surfaced, not dropped',
+  matched.unmatched.length === 1 &&
+    matched.unmatched[0]?.name === 'TD-line-of-credit-7777-2026-09-18.csv',
+)
+check(
+  'an older download of the same account is superseded, not orphaned',
+  matched.superseded.length === 1 &&
+    matched.superseded[0]?.name === 'TD-joint-chequing-1111-2026-09-02.csv',
+)
+check(
+  'no file is read as two accounts',
+  new Set([...matched.byAccount.values()].map((file) => file.name)).size ===
+    matched.byAccount.size,
+)
+
+const cardReading = parseStatementCsv(
+  ['2026-09-01,COFFEE,4.50,,-100.00', '2026-09-30,GROCERIES,20.00,,-120.00'].join('\n'),
+)
+check(
+  'a card statement is stored as what is owed, positive',
+  closingBalanceOf(statementAccounts[1]!, cardReading) === 120,
+)
+check(
+  'a chequing statement keeps its own sign',
+  closingBalanceOf(statementAccounts[0]!, cardReading) === -120,
+)
+
+const reads = new Map([
+  ['acct-visa-infinite', { file: parsedName!, reading: cardReading }],
+  [
+    'acct-joint-chequing',
+    { file: parsedName!, error: 'This file has no rows in it.' },
+  ],
+])
+const rows = reviewRows(statementAccounts, reads, '2026-09')
+check('every account on the step gets a row', rows.length === balanceAnchors(statementAccounts).length)
+check('a readable row is offered', rows.filter(isReadable).length === 1)
+check(
+  'an unreadable file keeps its message',
+  rows.find((row) => row.account.id === 'acct-joint-chequing')?.error === 'This file has no rows in it.',
+)
+check(
+  'an account with no file is still listed',
+  rows.some((row) => row.account.id === 'acct-rainy-day' && !row.file),
+)
+check(
+  'a statement closing outside the month is flagged',
+  reviewRows(statementAccounts, reads, '2026-10').find((row) => isReadable(row))?.outsideMonth ===
+    true,
+)
+
+const confirmed = snapshotFor(rows.find(isReadable)!, 'bal-batch')
+check('a confirmed row is a statement snapshot', confirmed?.source === 'statement')
+check('a confirmed row keeps the filename', confirmed?.fileName === parsedName?.name)
+check('a confirmed row records the owed figure', confirmed?.balance === 120)
+check('a confirmed row is dated by the statement, not the download', confirmed?.date === '2026-09-30')
+check(
+  'a pending figure typed in by hand survives a re-read',
+  snapshotFor(rows.find(isReadable)!, 'bal-batch', {
+    ...balance('acct-visa-infinite', '2026-09-30', 100),
+    pending: 40,
+  })?.pending === 40,
 )
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)

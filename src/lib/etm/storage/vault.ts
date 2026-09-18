@@ -7,6 +7,7 @@ import {
   sentinelMatches,
 } from '../crypto'
 import { deleteEtmDb, openEtmDb, type VaultMeta } from './db'
+import { forgetStatementFolder } from './statementFolder'
 import { setEtmPresence } from '../../storage'
 
 /**
@@ -106,5 +107,8 @@ export async function forgetRememberedKey(): Promise<void> {
 /** Erase everything the module has stored on this device. */
 export async function wipeVault(): Promise<void> {
   await deleteEtmDb()
+  // The statement folder is remembered outside this database, so erasing the
+  // module has to say so explicitly or the grant would outlive the data.
+  await forgetStatementFolder()
   await setEtmPresence(null)
 }

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import BalanceForm from './BalanceForm'
 import TransactionTable from './TransactionTable'
 import type { EtmData } from './useEtmData'
+import { useStatementFolder, type StatementFolderReview } from './useStatementFolder'
 import { presentIn } from '../../lib/etm/aggregate'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
@@ -16,6 +17,7 @@ import {
   type Reconciliation,
   type Savings,
 } from '../../lib/etm/workflow'
+import { balanceAnchors, isReadable } from '../../lib/etm/statementFolder'
 import { withPlanAtClose } from '../../lib/etm/closedPlan'
 import type { Account, ReconciliationRecord, SettledTransfer } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
@@ -291,7 +293,8 @@ function Step({
 
 function Balances({ data, month }: { data: EtmData; month: string }) {
   const [editing, setEditing] = useState<Account | null>(null)
-  const anchors = data.accounts.filter((a) => a.funding || a.mainCard || a.kind !== 'chequing')
+  const anchors = balanceAnchors(data.accounts)
+  const folder = useStatementFolder(data.accounts, data.balances, month, data.recordBalance)
 
   if (data.accounts.length === 0) {
     return (
@@ -304,6 +307,54 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
 
   return (
     <div className="space-y-2">
+      {folder.supported && (
+        <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+          <p className="text-sm font-medium text-ink-900">Read a folder of statements</p>
+          <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+            {folder.folderName
+              ? `Statements are read from “${folder.folderName}”. Every account below is listed with what its file says, and nothing is recorded until you confirm it.`
+              : 'If the statements are downloaded into one folder, pick it once and every account’s closing balance can be read in a single pass. Nothing is recorded until you confirm it.'}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => void folder.readFolder()}
+              disabled={folder.busy}
+              className="btn-primary text-xs disabled:opacity-50"
+            >
+              {folder.busy
+                ? 'Reading…'
+                : folder.folderName
+                  ? 'Read statement folder'
+                  : 'Choose a folder'}
+            </button>
+            {folder.folderName && (
+              <>
+                <button onClick={() => void folder.chooseFolder()} className="btn-ghost text-xs">
+                  Choose a different folder
+                </button>
+                <button onClick={() => void folder.forgetFolder()} className="btn-quiet text-xs">
+                  Forget this folder
+                </button>
+              </>
+            )}
+          </div>
+          {folder.notice && <p className="mt-3 text-sm text-shell-500">{folder.notice}</p>}
+        </div>
+      )}
+
+      {folder.review && (
+        <div className="animate-fade">
+          <StatementFolderReviewTable
+            review={folder.review}
+            busy={folder.busy}
+            month={month}
+            onToggle={folder.toggleRow}
+            onConfirm={() => void folder.confirm()}
+            onCancel={folder.dismiss}
+          />
+        </div>
+      )}
+
       {anchors.map((account) => {
         const closing = closingFor(data.balances, account.id, month)
         return (
@@ -355,6 +406,101 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * Every account the step asks about, with what its statement says. Rows that
+ * could not be read are shown rather than dropped: a balance that quietly
+ * failed to arrive is the one thing that would spoil the reconciliation.
+ */
+function StatementFolderReviewTable({
+  review,
+  busy,
+  month,
+  onToggle,
+  onConfirm,
+  onCancel,
+}: {
+  review: StatementFolderReview
+  busy: boolean
+  month: string
+  onToggle: (accountId: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const readable = review.rows.filter(isReadable)
+  const chosen = readable.filter((row) => review.checked.has(row.account.id)).length
+
+  return (
+    <div className="space-y-3 rounded-2xl bg-white/70 px-4 py-4">
+      <p className="text-sm font-medium text-ink-900">
+        What the statements in that folder say
+      </p>
+
+      <div className="space-y-1.5">
+        {review.rows.map((row) => {
+          const ready = isReadable(row)
+          return (
+            <label
+              key={row.account.id}
+              className="flex items-start gap-3 rounded-xl px-2 py-1.5 hover:bg-sand-100"
+            >
+              <input
+                type="checkbox"
+                className="mt-1"
+                disabled={!ready}
+                checked={ready && review.checked.has(row.account.id)}
+                onChange={() => onToggle(row.account.id)}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-ink-900">
+                  {row.account.nickname}
+                  {row.account.kind === 'credit' && <Tag>Owed</Tag>}
+                  {row.outsideMonth && (
+                    <Tag tone="warn">Outside {monthName(month).split(' ')[0]}</Tag>
+                  )}
+                </span>
+                <span className="block text-[11px] text-ink-400">
+                  {isReadable(row)
+                    ? `${amountIn(row.balance, row.account.currency)} as of ${row.reading.date} · ${row.reading.rows.toLocaleString()} rows · ${row.file.name}`
+                    : row.error
+                      ? `${row.file?.name ?? 'That file'} — ${row.error}`
+                      : 'No file for this account in that folder'}
+                </span>
+              </span>
+            </label>
+          )
+        })}
+      </div>
+
+      {review.unmatched.length > 0 && (
+        <p className="text-xs text-ink-400">
+          Not matched to any account on this step:{' '}
+          {review.unmatched.map((file) => file.name).join(', ')}. Adding the last four
+          digits on the Accounts tab is what ties a file to an account.
+        </p>
+      )}
+
+      {review.skipped.length > 0 && (
+        <p className="text-xs text-ink-400">
+          Named unlike the rest, so left alone: {review.skipped.join(', ')}.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={onConfirm}
+          disabled={busy || chosen === 0}
+          className="btn-primary text-xs disabled:opacity-50"
+        >
+          Record {chosen} balance{chosen === 1 ? '' : 's'}
+        </button>
+        <button onClick={onCancel} className="btn-ghost text-xs">
+          Cancel
+        </button>
+      </div>
     </div>
   )
 }

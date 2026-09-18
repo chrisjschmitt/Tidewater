@@ -1,0 +1,33 @@
+{
+  "cdpUrl": "http://localhost:9222",
+  "outputDir": "~/TD-Statements",
+  "easywebHomeUrl": "TODO-set-in-live-session",
+  "pacing": {
+    "actionDelayMs": [1500, 4000],
+    "accountDelayMs": [4000, 10000]
+  },
+  "accounts": [
+    {
+      "label": "Everyday Chequing",
+      "lastFour": "1234",
+      "kind": "bank",
+      "accountLink": "TODO-set-in-live-session",
+      "exportSteps": [
+        { "action": "click", "selector": "TODO-set-in-live-session" },
+        { "action": "selectOption", "selector": "TODO-set-in-live-session", "value": "TODO-set-in-live-session" },
+        { "action": "click", "selector": "TODO-set-in-live-session" }
+      ]
+    },
+    {
+      "label": "Rewards Card",
+      "lastFour": "5678",
+      "kind": "credit",
+      "accountLink": "TODO-set-in-live-session",
+      "exportSteps": [
+        { "action": "click", "selector": "TODO-set-in-live-session" },
+        { "action": "selectOption", "selector": "TODO-set-in-live-session", "value": "TODO-set-in-live-session" },
+        { "action": "click", "selector": "TODO-set-in-live-session" }
+      ]
+    }
+  ]
+}

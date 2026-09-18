@@ -1,0 +1,15 @@
+node_modules
+
+# The real config names the accounts, their last-four digits, and (once the
+# live session fills them in) the exact EasyWeb navigation for each — the same
+# class of data as docs/Workflow.md, which this repo already keeps off GitHub.
+# Copy accounts.example.json to accounts.json and fill it in locally.
+accounts.json
+
+# Run manifests name real accounts and their last-four digits — never commit them.
+runs/
+
+# The dedicated Chrome profile launch-chrome.sh uses holds a live EasyWeb
+# session. It lives in $HOME by default, but is ignored here in case anyone
+# points TD_PROFILE_DIR at the repo.
+.td-downloader-profile/
