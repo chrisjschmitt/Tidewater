@@ -107,8 +107,11 @@ export interface FolderFile {
 export async function listFiles(handle: StatementFolderHandle): Promise<FolderFile[]> {
   const files: FolderFile[] = []
   for await (const entry of handle.values()) {
-    const getFile = entry.getFile
-    if (entry.kind !== 'file' || !getFile) continue
+    if (entry.kind !== 'file' || typeof entry.getFile !== 'function') continue
+    // Bound, not detached: getFile() called as a bare function loses its
+    // handle and Chrome answers with "Illegal invocation", which surfaced as
+    // every statement in the folder failing to read.
+    const getFile = entry.getFile.bind(entry)
     files.push({ name: entry.name, text: async () => (await getFile()).text() })
   }
   return files

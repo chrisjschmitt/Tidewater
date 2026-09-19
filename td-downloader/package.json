@@ -6,6 +6,7 @@
   "description": "Attaches to an already-authenticated Chrome session and triggers TD EasyWeb CSV exports, one account at a time.",
   "scripts": {
     "download": "tsx src/index.ts",
+    "inspect": "tsx src/inspect.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

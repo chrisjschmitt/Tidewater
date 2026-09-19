@@ -126,6 +126,13 @@ accounts already downloaded today are skipped.
 The heuristics all live in `src/session-guard.ts`, so adding a marker EasyWeb
 starts using is a one-file change.
 
+## When an account has nothing to export
+
+TD cancels the download outright when the chosen period holds no transactions —
+a dormant card produces no file, not an empty one. The account is reported
+failed with a message saying so; record its closing balance by hand in the
+Month end screen that month (for a card nobody used, it is whatever it was).
+
 ## Filling in the selectors (the paired live session)
 
 **The shipped `accounts.json` has no real selectors.** Every selector field is

@@ -343,7 +343,20 @@ async function downloadAccount(
 
   // Temp name first, rename after: a reader watching this directory should
   // never see a partially written CSV under its final name.
-  await download.saveAs(partialPath)
+  try {
+    await download.saveAs(partialPath)
+  } catch (error) {
+    // TD starts a download and then cancels it when the chosen period holds
+    // no transactions at all — seen live on a dormant card. Said plainly,
+    // because "saveAs: canceled" reads like the tool's fault when the account
+    // simply had nothing to say this month.
+    if (messageOf(error).includes('canceled')) {
+      throw new Error(
+        'TD cancelled the export — usually the account has no transactions in the selected period. Record its balance by hand this month.',
+      )
+    }
+    throw error
+  }
   await rename(partialPath, finalPath)
 
   // Checked after the export too — an export click is a common place for a
