@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — 2026-09-18
+
+### Added
+- Month end can read a whole folder of TD statement exports in one pass. Pick the folder once on the Closing balances step; every account is listed with what its file says — matched by the account's last four digits — and nothing is recorded until you confirm. The one-at-a-time flows stay as the manual override.
+- A companion downloader (`td-downloader/`) attaches to a Chrome window you logged into by hand and collects each account's CSV export under a clean, dated name. It holds no credentials, runs only while you watch, stops and hands back if TD shows a login or a challenge, and a re-run the same day picks up where it left off.
+
+### Fixed
+- Reading the statement folder no longer fails on every file. The browser's file handles were being called detached from their entries, which Chrome refuses.
+
 ## 0.8.3 — 2026-09-03
 
 ### Fixed
