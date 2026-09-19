@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import BalanceForm from './BalanceForm'
 import TransactionTable from './TransactionTable'
 import type { EtmData } from './useEtmData'
@@ -295,6 +295,9 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
   const [editing, setEditing] = useState<Account | null>(null)
   const anchors = balanceAnchors(data.accounts)
   const folder = useStatementFolder(data.accounts, data.balances, month, data.recordBalance)
+  // The picker-dialog path for browsers that cannot hold a folder handle —
+  // the iPad above all. One multi-select in Files beats nine single reads.
+  const filePicker = useRef<HTMLInputElement>(null)
 
   if (data.accounts.length === 0) {
     return (
@@ -307,40 +310,69 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
 
   return (
     <div className="space-y-2">
-      {folder.supported && (
-        <div className="rounded-2xl bg-white/70 px-4 py-3.5">
-          <p className="text-sm font-medium text-ink-900">Read a folder of statements</p>
-          <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-            {folder.folderName
+      <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+        <p className="text-sm font-medium text-ink-900">
+          {folder.supported ? 'Read a folder of statements' : 'Read the statement files together'}
+        </p>
+        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+          {folder.supported
+            ? folder.folderName
               ? `Statements are read from “${folder.folderName}”. Every account below is listed with what its file says, and nothing is recorded until you confirm it.`
-              : 'If the statements are downloaded into one folder, pick it once and every account’s closing balance can be read in a single pass. Nothing is recorded until you confirm it.'}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => void folder.readFolder()}
-              disabled={folder.busy}
-              className="btn-primary text-xs disabled:opacity-50"
-            >
-              {folder.busy
-                ? 'Reading…'
-                : folder.folderName
-                  ? 'Read statement folder'
-                  : 'Choose a folder'}
-            </button>
-            {folder.folderName && (
-              <>
-                <button onClick={() => void folder.chooseFolder()} className="btn-ghost text-xs">
-                  Choose a different folder
-                </button>
-                <button onClick={() => void folder.forgetFolder()} className="btn-quiet text-xs">
-                  Forget this folder
-                </button>
-              </>
-            )}
-          </div>
-          {folder.notice && <p className="mt-3 text-sm text-shell-500">{folder.notice}</p>}
+              : 'If the statements are downloaded into one folder, pick it once and every account’s closing balance can be read in a single pass. Nothing is recorded until you confirm it.'
+            : 'This browser cannot hold on to a folder, but the statement files can be chosen together — select them all in one pass. Nothing is recorded until you confirm it.'}
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {folder.supported ? (
+            <>
+              <button
+                onClick={() => void folder.readFolder()}
+                disabled={folder.busy}
+                className="btn-primary text-xs disabled:opacity-50"
+              >
+                {folder.busy
+                  ? 'Reading…'
+                  : folder.folderName
+                    ? 'Read statement folder'
+                    : 'Choose a folder'}
+              </button>
+              {folder.folderName && (
+                <>
+                  <button onClick={() => void folder.chooseFolder()} className="btn-ghost text-xs">
+                    Choose a different folder
+                  </button>
+                  <button onClick={() => void folder.forgetFolder()} className="btn-quiet text-xs">
+                    Forget this folder
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <input
+                ref={filePicker}
+                type="file"
+                multiple
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? [])
+                  // Cleared so choosing the same files next month fires again.
+                  event.target.value = ''
+                  if (files.length > 0) void folder.readFiles(files)
+                }}
+              />
+              <button
+                onClick={() => filePicker.current?.click()}
+                disabled={folder.busy}
+                className="btn-primary text-xs disabled:opacity-50"
+              >
+                {folder.busy ? 'Reading…' : 'Choose the statement files'}
+              </button>
+            </>
+          )}
         </div>
-      )}
+        {folder.notice && <p className="mt-3 text-sm text-shell-500">{folder.notice}</p>}
+      </div>
 
       {folder.review && (
         <div className="animate-fade">

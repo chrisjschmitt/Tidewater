@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.1 — 2026-09-18
+
+### Added
+- On an iPad — or any browser that cannot hold on to a folder — the Closing balances step offers "Choose the statement files" instead: select all the downloads together in one dialog and get the same review, the same matching by last four digits, and the same confirm. Nothing about the desktop folder read changes.
+
 ## 0.9.0 — 2026-09-18
 
 ### Added

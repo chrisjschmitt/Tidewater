@@ -35,6 +35,7 @@ export interface StatementFolderReview {
 }
 
 export interface StatementFolderState {
+  /** Whether a folder can be picked and remembered. Files can always be chosen. */
   supported: boolean
   folderName?: string
   busy: boolean
@@ -42,6 +43,8 @@ export interface StatementFolderState {
   review: StatementFolderReview | null
   chooseFolder: () => Promise<void>
   readFolder: () => Promise<void>
+  /** The picker-dialog path for browsers with no folder access — the iPad above all. */
+  readFiles: (files: File[]) => Promise<void>
   forgetFolder: () => Promise<void>
   toggleRow: (accountId: string) => void
   confirm: () => Promise<void>
@@ -84,6 +87,40 @@ export function useStatementFolder(
     }
   }, [])
 
+  /**
+   * The shared middle: a list of named, readable files becomes the review,
+   * wherever the list came from — a remembered folder on a desktop, or a
+   * multi-select picker dialog on an iPad. Returns how many files matched so
+   * the caller can word its own "nothing here" notice.
+   */
+  const buildReview = useCallback(
+    async (files: Array<{ name: string; text: () => Promise<string> }>) => {
+      // Only the accounts this step asks about, so a file for anything else
+      // is reported as unmatched rather than quietly assigned somewhere.
+      const match = matchStatementFiles(
+        balanceAnchors(accounts),
+        files.map((file) => file.name),
+      )
+      const reads = new Map<string, StatementRead>()
+      for (const [accountId, name] of match.byAccount) {
+        const file = files.find((item) => item.name === name.name)
+        if (!file) continue
+        reads.set(accountId, { file: name, ...(await read(file.text)) })
+      }
+      const rows = reviewRows(accounts, reads, month)
+      setReview({
+        rows,
+        unmatched: match.unmatched,
+        skipped: match.skipped,
+        // Everything readable starts checked: the common case is that the
+        // whole folder is right, and the point of the step is not to retype it.
+        checked: new Set(rows.filter(isReadable).map((row) => row.account.id)),
+      })
+      return match.byAccount.size
+    },
+    [accounts, month],
+  )
+
   const scan = useCallback(
     async (folder: StatementFolderHandle) => {
       setBusy(true)
@@ -93,29 +130,8 @@ export function useStatementFolder(
           setNotice('Reading that folder was not allowed. Choose it again to grant access.')
           return
         }
-        const files = await listFiles(folder)
-        // Only the accounts this step asks about, so a file for anything else
-        // is reported as unmatched rather than quietly assigned somewhere.
-        const match = matchStatementFiles(
-          balanceAnchors(accounts),
-          files.map((file) => file.name),
-        )
-        const reads = new Map<string, StatementRead>()
-        for (const [accountId, name] of match.byAccount) {
-          const file = files.find((item) => item.name === name.name)
-          if (!file) continue
-          reads.set(accountId, { file: name, ...(await read(file.text)) })
-        }
-        const rows = reviewRows(accounts, reads, month)
-        setReview({
-          rows,
-          unmatched: match.unmatched,
-          skipped: match.skipped,
-          // Everything readable starts checked: the common case is that the
-          // whole folder is right, and the point of the step is not to retype it.
-          checked: new Set(rows.filter(isReadable).map((row) => row.account.id)),
-        })
-        if (match.byAccount.size === 0) {
+        const matched = await buildReview(await listFiles(folder))
+        if (matched === 0) {
           setNotice(
             `Nothing in “${folder.name}” read as a TD statement export. Files are expected to be named TD-<account>-<last four>-<date>.csv.`,
           )
@@ -126,7 +142,29 @@ export function useStatementFolder(
         setBusy(false)
       }
     },
-    [accounts, month],
+    [buildReview],
+  )
+
+  const readFiles = useCallback(
+    async (picked: File[]) => {
+      setBusy(true)
+      setNotice(undefined)
+      try {
+        const matched = await buildReview(
+          picked.map((file) => ({ name: file.name, text: () => file.text() })),
+        )
+        if (matched === 0) {
+          setNotice(
+            'None of the chosen files read as a TD statement export. They are expected to be named TD-<account>-<last four>-<date>.csv.',
+          )
+        }
+      } catch {
+        setNotice('Those files could not be read. Choose them again.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [buildReview],
   )
 
   const chooseFolder = useCallback(async () => {
@@ -198,6 +236,7 @@ export function useStatementFolder(
     review,
     chooseFolder,
     readFolder,
+    readFiles,
     forgetFolder,
     toggleRow,
     confirm,
