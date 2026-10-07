@@ -162,7 +162,11 @@ export function useStatementFolder(
       }
       // Read through per-account stand-ins, but recorded against the file the
       // user actually has, so a balance's provenance names something real.
-      const rows = reviewRows(accounts, reads, month).map((row) =>
+      const carry = {
+        balances,
+        ...(combined ? { downloadDate: combined.date, fileName: combined.name } : {}),
+      }
+      const rows = reviewRows(accounts, reads, month, carry).map((row) =>
         combined && row.file ? { ...row, file: { ...row.file, name: combined.name } } : row,
       )
       setReview({
@@ -189,7 +193,7 @@ export function useStatementFolder(
       })
       return match.byAccount.size + (feed?.plan.rowsRead ?? 0)
     },
-    [accounts, month, feedOptions],
+    [accounts, balances, month, feedOptions],
   )
 
   const scan = useCallback(

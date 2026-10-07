@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.4 — 2026-10-07
+
+### Fixed
+- Closing balances now carries a balance forward when an account had no transactions in the month. If an account's newest row predates the month but the file was downloaded within it, the balance is recorded for the month as of the download day. An account missing from the TD file altogether (TD exports nothing for an account with no transactions) is offered its last recorded balance. Both are marked "Carried forward" in the review.
+
 ## 0.10.3 — 2026-10-07
 
 ### Added

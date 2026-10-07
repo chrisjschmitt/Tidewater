@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { planTdImport } from '../src/lib/etm/importer.ts'
 import { counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
-import { downloadProgress, matchStatementFiles, scanStatementNames } from '../src/lib/etm/statementFolder.ts'
+import { downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
 import {
   TdFileError,
   isCombinedFileName,
@@ -175,6 +175,25 @@ const parts = ledgerView([splitRow], { global: '2026-01-01', perAccount: {} })
 check('split row replaced by its parts', parts.length === 2 && parts[0]!.id === 's1#1')
 check('parts sum to the row', Math.round(parts.reduce((s, t) => s + t.amount, 0) * 100) / 100 === -100)
 check('parts carry their own category and group', parts[1]!.category === 'Gifts' && parts[1]!.groupId === 'joy', parts[1]!.groupId)
+
+console.log('=== Carrying a balance forward ===')
+const septFile = { name: 'TD-transactions-2026-10-07.csv', labelSlug: 'rewards-visa', lastFour: '2222', date: '2026-10-07' }
+const quietRead = new Map([[visa.id, { file: septFile, reading: { date: '2026-09-29', balance: 427.26, rows: 3, firstDate: '2026-09-15' } }]])
+const quiet = reviewRows(accounts, quietRead, '2026-10', { balances: [], downloadDate: '2026-10-07' }).find((r) => r.account.id === visa.id)!
+check('no transactions this month: carried forward, not left outside the month', quiet.carriedFrom === '2026-09-29' && quiet.asOf === '2026-10-07' && !quiet.outsideMonth)
+check('carried balance is recorded inside the month', snapshotFor(quiet, 'b1')?.date === '2026-10-07' && snapshotFor(quiet, 'b1')?.balance === 427.26)
+const lastMonth = reviewRows(accounts, quietRead, '2026-09', { balances: [] }).find((r) => r.account.id === visa.id)!
+check('a row inside the month is recorded as itself', !lastMonth.carriedFrom && lastMonth.reading?.date === '2026-09-29')
+const absent = reviewRows(accounts, new Map(), '2026-10', {
+  balances: [{ id: 'old', accountId: chequing.id, date: '2026-09-30', balance: 1234.5, source: 'statement' }],
+  downloadDate: '2026-10-07',
+  fileName: 'TD-transactions-2026-10-07.csv',
+}).find((r) => r.account.id === chequing.id)!
+check('missing from the file: last recorded balance carried forward', absent.carriedFrom === '2026-09-30' && absent.balance === 1234.5 && snapshotFor(absent, 'b2')?.date === '2026-10-07')
+const noHistory = reviewRows(accounts, new Map(), '2026-10', { balances: [], downloadDate: '2026-10-07' }).find((r) => r.account.id === chequing.id)!
+check('missing and nothing recorded before: nothing invented', !noHistory.reading && !noHistory.carriedFrom)
+const lateMonth = reviewRows(accounts, quietRead, '2026-11', { balances: [], downloadDate: '2026-10-07' }).find((r) => r.account.id === visa.id)!
+check('a download from before the month carries nothing into it', !lateMonth.carriedFrom && lateMonth.outsideMonth === true)
 
 console.log('=== Download progress ===')
 const day = '2026-10-07'

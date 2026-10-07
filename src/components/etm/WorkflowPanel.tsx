@@ -542,9 +542,12 @@ function StatementFolderReviewTable({
                   {row.outsideMonth && (
                     <Tag tone="warn">Outside {monthName(month).split(' ')[0]}</Tag>
                   )}
+                  {row.carriedFrom && <Tag>Carried forward</Tag>}
                 </span>
                 <span className="block text-[11px] text-ink-400">
-                  {isReadable(row)
+                  {isReadable(row) && row.carriedFrom
+                    ? `${amountIn(row.balance, row.account.currency)} as of ${row.asOf} · unchanged since ${row.carriedFrom}${row.reading.rows === 0 ? ' (not in the file: TD exports nothing for an account with no transactions)' : ', no transactions since'}`
+                    : isReadable(row)
                     ? `${amountIn(row.balance, row.account.currency)} as of ${row.reading.date} · ${row.reading.rows.toLocaleString()} rows · ${row.file.name}`
                     : row.error
                       ? `${row.file?.name ?? 'That file'} — ${row.error}`

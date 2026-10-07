@@ -186,6 +186,40 @@ export interface StatementReviewRow {
    * the user may know why — but not silently recorded as that month's anchor.
    */
   outsideMonth?: boolean
+  /**
+   * The balance holds unchanged from this earlier date: the account had no
+   * transactions between it and the download, so the figure is recorded as of
+   * the download (within the month) rather than left out of the month.
+   */
+  carriedFrom?: string
+  /** The date the snapshot is recorded at, when it differs from the last row's. */
+  asOf?: string
+}
+
+/** What a carried-forward balance needs: the day of the download, and what is already recorded. */
+export interface CarryContext {
+  /** Download day of the combined file; accounts absent from it are carried from `balances`. */
+  downloadDate?: string
+  balances: BalanceSnapshot[]
+  fileName?: string
+}
+
+const monthEnd = (month: string): string => {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10)
+}
+
+/** The day inside `month` a balance unchanged since before the month is recorded at, or nothing. */
+function carryDate(month: string, downloadDate: string | undefined): string | undefined {
+  if (!downloadDate || downloadDate < `${month}-01`) return undefined
+  const end = monthEnd(month)
+  return downloadDate > end ? end : downloadDate
+}
+
+function latestBefore(balances: BalanceSnapshot[], accountId: string, date: string): BalanceSnapshot | undefined {
+  return balances
+    .filter((b) => b.accountId === accountId && b.date < date)
+    .sort((a, z) => z.date.localeCompare(a.date))[0]
 }
 
 /**
@@ -197,20 +231,35 @@ export function reviewRows(
   accounts: Account[],
   reads: Map<string, StatementRead>,
   month: string,
+  carry?: CarryContext,
 ): StatementReviewRow[] {
   return balanceAnchors(accounts).map((account) => {
     const read = reads.get(account.id)
-    if (!read) return { account }
+    if (!read) {
+      // Missing from the downloader's combined file: TD exports nothing for an
+      // account with no transactions, so its last recorded balance still holds.
+      const asOf = carryDate(month, carry?.downloadDate)
+      const previous = asOf && account.lastFour?.trim() ? latestBefore(carry!.balances, account.id, `${month}-01`) : undefined
+      if (!asOf || !previous) return { account }
+      return {
+        account,
+        file: { name: carry?.fileName ?? 'TD download', labelSlug: '', lastFour: account.lastFour ?? '', date: carry!.downloadDate! },
+        reading: { date: previous.date, balance: previous.balance, rows: 0, firstDate: previous.date },
+        balance: previous.balance,
+        carriedFrom: previous.date,
+        asOf,
+      }
+    }
     if (!read.reading) {
       return { account, file: read.file, error: read.error ?? 'That file could not be read.' }
     }
-    return {
-      account,
-      file: read.file,
-      reading: read.reading,
-      balance: closingBalanceOf(account, read.reading),
-      ...(read.reading.date.slice(0, 7) === month ? {} : { outsideMonth: true }),
-    }
+    const balance = closingBalanceOf(account, read.reading)
+    if (read.reading.date.slice(0, 7) === month) return { account, file: read.file, reading: read.reading, balance }
+    // The last row is from before the month, and the file was downloaded
+    // within (or after) it: nothing has moved since, so the balance holds.
+    const asOf = read.reading.date < `${month}-01` ? carryDate(month, read.file.date) : undefined
+    if (asOf) return { account, file: read.file, reading: read.reading, balance, carriedFrom: read.reading.date, asOf }
+    return { account, file: read.file, reading: read.reading, balance, outsideMonth: true }
   })
 }
 
@@ -235,7 +284,7 @@ export function snapshotFor(
   return {
     id,
     accountId: row.account.id,
-    date: row.reading.date,
+    date: row.asOf ?? row.reading.date,
     balance: row.balance,
     // Pending charges appear in no export, so a batch read cannot learn them.
     // Whatever the user typed in before is kept rather than quietly dropped.
