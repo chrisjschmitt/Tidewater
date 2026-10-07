@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.2 — 2026-10-07
+
+### Fixed
+- A card's closing balance read from TD could be a few rows out of date. Card exports list the newest row first, and when several rows share the last day the oldest of them was taken. The newest one is now used, as it always was for bank accounts.
+
 ## 0.10.1 — 2026-10-07
 
 ### Fixed

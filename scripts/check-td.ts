@@ -91,6 +91,14 @@ check('bank closing balance is the last row by date', cheqReading.balance === 32
 const cardReading = parseStatementCsv(card.asStatementText)
 check('card closing balance from newest-first rows', cardReading.balance === 682.4 && cardReading.date === '2026-09-25', `${cardReading.balance}`)
 
+const sameDay = parseStatementCsv(
+  ['10/05/2026,SHOP A,62.15,,472.32,', '10/05/2026,SHOP B,68.75,,410.17,', '10/05/2026,PAYMENT,,3051.33,341.42,', '10/04/2026,SHOP C,15.26,,3392.75,'].join('\n'),
+)
+check('newest-first card, several rows on the last day: the first of them closes', sameDay.balance === 472.32, `${sameDay.balance}`)
+const sameDayBank = parseStatementCsv(['2026-10-04,A,1,,100', '2026-10-05,B,2,,98', '2026-10-05,C,3,,95'].join('\n'))
+check('oldest-first bank, several rows on the last day: the last of them closes', sameDayBank.balance === 95, `${sameDayBank.balance}`)
+check('trailing empty column on card lines is not taken as the balance', sameDay.rows === 4)
+
 console.log('=== TD import plan and dedup ===')
 const plan1 = await planTdImport(first, {
   fileName: 'TD-transactions-2026-10-05.csv',

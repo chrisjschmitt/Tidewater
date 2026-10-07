@@ -44,7 +44,12 @@ export function parseStatementCsv(text: string): StatementReading {
   const readings: Array<{ date: string; balance: number }> = []
   for (const row of body) {
     const date = parseStatementDate(row[0] ?? '')
-    const balance = parseNumber(row[row.length - 1] ?? '')
+    // The running balance is the last filled cell: card exports end each line
+    // with an empty extra column.
+    const cells = row.map((cell) => (cell ?? '').trim())
+    let last = cells.length - 1
+    while (last > 1 && cells[last] === '') last--
+    const balance = parseNumber(cells[last] ?? '')
     if (!date || balance === null) continue
     readings.push({ date, balance })
   }
@@ -55,10 +60,15 @@ export function parseStatementCsv(text: string): StatementReading {
     )
   }
 
-  // Statements arrive both oldest-first and newest-first, so the closing
-  // balance is the latest date rather than the last line.
+  // Statements arrive both oldest-first (bank) and newest-first (card), so the
+  // closing balance is the latest date rather than the last line. Several rows
+  // can share that date, and then the file's own order decides: in a
+  // newest-first file the closing row is the first of them, not the last.
   const sorted = [...readings].sort((a, z) => a.date.localeCompare(z.date))
-  const closing = sorted[sorted.length - 1]!
+  const latest = sorted[sorted.length - 1]!.date
+  const newestFirst = readings[0]!.date > readings[readings.length - 1]!.date
+  const onLatest = readings.filter((reading) => reading.date === latest)
+  const closing = newestFirst ? onLatest[0]! : onLatest[onLatest.length - 1]!
 
   return {
     date: closing.date,
