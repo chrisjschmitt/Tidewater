@@ -48,6 +48,10 @@ Tidewater's **Download from TD** button opens a macOS Shortcut named
 **Tidewater TD Download**. The Shortcut does the same two steps as above, with
 your login in between:
 
+In the two shell actions below, replace `/path/to/TideWater` with where your
+copy of the repo actually lives (for example `/Users/you/Projects/apps/TideWater`).
+Left as written, the Shortcut fails with "no such file or directory".
+
 1. Open the Shortcuts app → **+** → name it `Tidewater TD Download`.
 2. Add **Run Shell Script** with:
    `/path/to/TideWater/td-downloader/run-from-tidewater.sh start-chrome`
@@ -59,8 +63,9 @@ your login in between:
    (it opens Terminal and runs `npm run download`, so you watch the progress
    and Ctrl+C still works).
 
-The first time, Chrome asks whether Tidewater may open Shortcuts; tick
-"Always allow". The login is still yours alone: nothing in the Shortcut or the
+The first time, your browser asks whether Tidewater may open Shortcuts (tick
+"Always allow" in Chrome), and macOS may ask whether Shortcuts can control
+Terminal — allow it, or the download step cannot open Terminal. The login is still yours alone: nothing in the Shortcut or the
 script sees or types a password.
 
 ## Where the files land
