@@ -146,8 +146,15 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                 <span className={row.category === 'Uncategorized' ? 'text-shell-500' : 'text-ink-700'}>
-                  {lines.map((l) => `${l.category}${lines.length > 1 ? ` ${amountIn(l.amount, row.currency)}` : ''}`).join(' + ')}
+                  {lines
+                    .map((l) => `${l.category}${lines.length > 1 ? ` ${amountIn(l.amount, row.currency)}` : ''}${l.notes ? ` (${l.notes})` : ''}`)
+                    .join(' + ')}
                 </span>
+                {lines.length > 1 && (
+                  <span className="rounded-full bg-sand-200 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500">
+                    Split in {lines.length}
+                  </span>
+                )}
                 {row.tags.length > 0 && <span className="text-xs text-ink-400">{row.tags.join(', ')}</span>}
                 {row.notes && <span className="text-xs italic text-ink-500">{row.notes}</span>}
                 {row.reviewed && <span className="rounded-full bg-tide-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-tide-700">Confirmed</span>}

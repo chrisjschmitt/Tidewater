@@ -198,6 +198,9 @@ const parts = ledgerView([splitRow], { global: '2026-01-01', perAccount: {} })
 check('split row replaced by its parts', parts.length === 2 && parts[0]!.id === 's1#1')
 check('parts sum to the row', Math.round(parts.reduce((s, t) => s + t.amount, 0) * 100) / 100 === -100)
 check('parts carry their own category and group', parts[1]!.category === 'Gifts' && parts[1]!.groupId === 'joy', parts[1]!.groupId)
+check('parts are marked as parts of a split', parts[0]!.splitOf?.part === 1 && parts[1]!.splitOf?.parts === 2 && parts[1]!.splitOf?.parentId === 's1')
+const commented = ledgerView([{ ...splitRow, notes: 'whole', split: [{ ...splitRow.split![0]!, notes: 'mine' }, splitRow.split![1]!] }], { global: '2026-01-01', perAccount: {} })
+check('a part’s own comment wins; others show the row’s', commented[0]!.notes === 'mine' && commented[1]!.notes === 'whole')
 
 console.log('=== Carrying a balance forward ===')
 const septFile = { name: 'TD-transactions-2026-10-07.csv', labelSlug: 'rewards-visa', lastFour: '2222', date: '2026-10-07' }

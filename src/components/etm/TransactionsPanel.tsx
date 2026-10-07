@@ -238,6 +238,11 @@ export default function TransactionsPanel({
                           {t.merchant || t.originalStatement || t.category}
                           {t.source === 'manual' && <Tag>Manual</Tag>}
                           {t.source === 'td' && <Tag>TD</Tag>}
+                          {t.splitOf && (
+                            <Tag>
+                              Split {t.splitOf.part} of {t.splitOf.parts}
+                            </Tag>
+                          )}
                           {t.internal && <Tag>Internal</Tag>}
                           {heldOut && <Tag>{heldOut}</Tag>}
                         </span>
@@ -308,6 +313,8 @@ export default function TransactionsPanel({
       {adding && (
         <ManualEntryForm
           accounts={accounts}
+          categories={choices.categories.filter((c) => c !== 'Uncategorized')}
+          tags={choices.tags}
           onClose={() => setAdding(false)}
           onCreateAccount={onCreateAccount}
           onSave={async (entry, account) => {

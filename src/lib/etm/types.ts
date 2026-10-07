@@ -114,6 +114,8 @@ export interface SplitLine {
   category: string
   tags: string[]
   merchant?: string
+  /** A comment for this part alone; the row's comment covers the parts without one. */
+  notes?: string
 }
 
 /** How the rules arrived at a TD row's outcome, kept so the review can say why. */
@@ -166,6 +168,8 @@ export interface Transaction {
   prediction?: Prediction
   /** TD rows: the combined file the row arrived in. */
   feedFile?: string
+  /** Set on the ledger's parts of a split row (never stored): which part, of how many, of which row. */
+  splitOf?: { part: number; parts: number; parentId: string }
 }
 
 /** One import, kept so it can be reviewed and undone. */

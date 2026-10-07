@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.2 — 2026-10-07
+
+### Changed
+- Tags are picked, not typed: chips with × to remove and an "Add tag…" list of existing tags (or "New tag…"), in Edit and in "Add a transaction".
+- Category is a list of existing categories (or "New category…"), in Edit and in "Add a transaction".
+- A split can be entered by % as well as by amount; percentages must add up to 100%, rounding goes to the last part, and each part's amount is shown as you type.
+- Each part of a split can have its own comment.
+- Split rows are marked "Split 1 of 2", "Split 2 of 2" in Transactions, and "Split in 2" on the Review tab.
+
 ## 0.13.1 — 2026-10-07
 
 ### Added

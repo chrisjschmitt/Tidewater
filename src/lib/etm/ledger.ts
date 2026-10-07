@@ -135,7 +135,9 @@ export function ledgerView(
         internal: isInternalCategory(line.category),
         tags: line.tags,
         merchant: line.merchant ?? row.merchant,
+        notes: line.notes?.trim() ? line.notes : row.notes,
         split: undefined,
+        splitOf: { part: index + 1, parts: row.split!.length, parentId: row.id },
       })
     })
   }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Modal from '../Modal'
+import { CategorySelect, TagPicker } from './pickers'
 import { uid } from '../../lib/format'
 import type { ManualEntry } from '../../lib/etm/manual'
 import type { Account } from '../../lib/etm/types'
@@ -9,10 +10,13 @@ interface Props {
   onClose: () => void
   onSave: (entry: ManualEntry, account: Account) => Promise<void>
   onCreateAccount: (account: Account) => Promise<void>
+  /** Existing categories and tags, offered as lists. */
+  categories?: string[]
+  tags?: string[]
 }
 
 /** Cash and anything else no export knows about. */
-export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAccount }: Props) {
+export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAccount, categories = [], tags = [] }: Props) {
   const [entry, setEntry] = useState<ManualEntry>({
     date: new Date().toISOString().slice(0, 10),
     merchant: '',
@@ -24,7 +28,7 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
     owner: '',
   })
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '')
-  const [tagText, setTagText] = useState('')
+  const [tagList, setTagList] = useState<string[]>([])
   const [error, setError] = useState('')
 
   const hasCash = accounts.some((a) => /cash/i.test(a.nickname))
@@ -62,7 +66,7 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
       return
     }
     await onSave(
-      { ...entry, tags: tagText.split(',').map((t) => t.trim()).filter(Boolean) },
+      { ...entry, tags: tagList },
       account,
     )
   }
@@ -168,11 +172,11 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
           </label>
           <label className="block">
             <span className="label mb-1.5">Category</span>
-            <input
+            <CategorySelect
               className="field"
-              placeholder="Groceries"
               value={entry.category}
-              onChange={(e) => set('category', e.target.value)}
+              options={categories}
+              onChange={(category) => set('category', category)}
             />
             <span className="mt-1 block text-xs text-ink-400">
               Use the same wording as your other categories so it groups the same way.
@@ -183,12 +187,7 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="label mb-1.5">Tags</span>
-            <input
-              className="field"
-              placeholder="Reimbursable: Healthcare Account"
-              value={tagText}
-              onChange={(e) => setTagText(e.target.value)}
-            />
+            <TagPicker value={tagList} options={tags} onChange={setTagList} />
           </label>
           <label className="block">
             <span className="label mb-1.5">Whose</span>
