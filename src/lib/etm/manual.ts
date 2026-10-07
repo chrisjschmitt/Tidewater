@@ -1,4 +1,6 @@
-import { groupForCategory, isInternalCategory } from '../categories'
+import { isInternalCategory } from '../categories'
+import type { GroupId } from '../types'
+import { etmGroupFor } from './groups'
 import { uid } from '../format'
 import type { Account, Transaction } from './types'
 
@@ -18,7 +20,11 @@ export interface ManualEntry {
   owner: string
 }
 
-export function createManualTransaction(entry: ManualEntry, account: Account): Transaction {
+export function createManualTransaction(
+  entry: ManualEntry,
+  account: Account,
+  groups?: Record<string, GroupId>,
+): Transaction {
   const amount = Math.abs(entry.amount) * (entry.spend ? -1 : 1)
   const category = entry.category.trim() || 'Uncategorized'
 
@@ -33,7 +39,7 @@ export function createManualTransaction(entry: ManualEntry, account: Account): T
     accountId: account.id,
     monarchAccount: '',
     category,
-    groupId: groupForCategory(category),
+    groupId: etmGroupFor(category, groups),
     internal: isInternalCategory(category),
     tags: entry.tags,
     owner: entry.owner.trim(),

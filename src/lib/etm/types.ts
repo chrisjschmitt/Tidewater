@@ -100,9 +100,31 @@ export interface SettledTransfer {
   recordedAt: string
 }
 
-export type TransactionSource = 'monarch' | 'manual'
+/**
+ * `td` rows come from the TD downloader's combined file. Until an account's
+ * cutover date they are a shadow feed, compared against Monarch but not
+ * counted; from it, they count and Monarch's rows become the comparison
+ * (see ledger.ts).
+ */
+export type TransactionSource = 'monarch' | 'manual' | 'td'
 
-/** One row of a Monarch export, or one manually entered cash purchase. */
+/** One part of a split transaction. The parts always sum to the row's amount. */
+export interface SplitLine {
+  amount: number
+  category: string
+  tags: string[]
+  merchant?: string
+}
+
+/** How the rules arrived at a TD row's outcome, kept so the review can say why. */
+export interface Prediction {
+  layer: 'fixed' | 'template' | 'user' | 'learned' | 'trip' | 'keyword' | 'review' | 'manual'
+  ruleId?: string
+  confidence: 'high' | 'medium' | 'low'
+  reviewReasons: string[]
+}
+
+/** One row of a Monarch export or the TD feed, or one manually entered cash purchase. */
 export interface Transaction {
   /** Content hash of the row plus an occurrence index. See identity.ts. */
   id: string
@@ -134,6 +156,14 @@ export interface Transaction {
    * ids of its own and would need to dedup against these CSV-imported rows.
    */
   externalId?: string
+  /** Parts of a split; the row itself is then never counted, only its parts. */
+  split?: SplitLine[]
+  /** TD rows: the running balance TD printed beside the row. */
+  balance?: number
+  /** TD rows: how the category, tags and split were decided. */
+  prediction?: Prediction
+  /** TD rows: the combined file the row arrived in. */
+  feedFile?: string
 }
 
 /** One import, kept so it can be reviewed and undone. */

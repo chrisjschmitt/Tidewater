@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { ConfigError, loadConfig } from './config.js'
 import { RunAbort, runDownloads } from './engine.js'
 import { RUNS_DIR_NAME } from './manifest.js'
-import { formatReport, formatSummary } from './report.js'
+import { formatCombined, formatReport, formatSummary, notifyMac } from './report.js'
 import { REAUTH_MESSAGE } from './session-guard.js'
 import type { PacingRange } from './types.js'
 
@@ -43,6 +43,10 @@ async function main(): Promise<void> {
   console.log('')
   console.log(formatSummary(outcome.results))
   console.log(`manifest: ${outcome.manifestPath}`)
+  console.log('')
+  const combinedLine = formatCombined(outcome.combined, config.accounts.length)
+  console.log(combinedLine)
+  await notifyMac('TD download finished', combinedLine)
 
   if (outcome.sessionBlocked) {
     console.log('')

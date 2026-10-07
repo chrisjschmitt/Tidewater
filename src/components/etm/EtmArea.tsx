@@ -228,6 +228,7 @@ export default function EtmArea({
                 transactions={data.transactions}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
+                groups={data.config.categoryGroups}
                 onCreateAccount={data.persistAccount}
                 onAddManual={data.addManual}
                 onRemove={data.removeManual}
@@ -237,7 +238,8 @@ export default function EtmArea({
             {tab === 'import' && (
               <ImportPanel
                 accounts={data.accounts}
-                transactions={data.transactions}
+                transactions={data.allRows}
+                groups={data.config.categoryGroups}
                 batches={data.batches}
                 incomingFile={incomingFile}
                 onIncomingConsumed={() => setIncomingFile(null)}

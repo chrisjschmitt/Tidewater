@@ -1,8 +1,12 @@
 /**
- * The output filename contract, in one place because another component reads
- * these files by name:
+ * The output filename contract, in one place because Tidewater reads these
+ * files by name:
  *
- *     TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv
+ *     TD-transactions-<YYYY-MM-DD>.csv           every account, one file (what Tidewater imports)
+ *     raw/TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv   each account's export, kept for checking
+ *
+ * Per-account files are first saved next to the combined one and moved into
+ * `raw/` once combine.ts has folded them in.
  *
  * The date is today's *local* date, not UTC. A run at 9pm Eastern belongs to
  * that evening's date the way the person running it would say it, and a UTC
@@ -22,6 +26,12 @@ export function localDateStamp(now: Date = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+export const RAW_DIR_NAME = 'raw'
+
+export function combinedFilename(dateStamp: string): string {
+  return `TD-transactions-${dateStamp}.csv`
 }
 
 export function outputFilename(label: string, lastFour: string, dateStamp: string): string {

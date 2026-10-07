@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.0 — 2026-10-07
+
+### Added
+- The TD downloader (now 0.2.0) writes one combined file, `TD-transactions-<date>.csv`, with an Account column, and moves each account's own export into `raw/`. Progress prints one line per account as each file is saved, and the run ends with a "Combined file ready" line and a Mac notification.
+- On the Mac that has the downloader, Closing balances offers "Download from TD": it opens the "Tidewater TD Download" Shortcut (bank Chrome window, you log in, the download runs in Terminal) and ticks each account off as its file arrives, then offers to read the combined file.
+- Reading the combined file records the closing balances as before and can also bring in the TD transactions themselves. Until the switch-over from Monarch, they are kept beside Monarch's rows for comparison and do not count in any total. Reading the same file again adds nothing.
+
+### Changed
+- Expense tracking can now hold rows from two feeds: Monarch and TD. Which one counts for an account is decided by a switch-over date, not set anywhere yet, so every total is exactly what it was.
+
 ## 0.9.1 — 2026-09-18
 
 ### Added

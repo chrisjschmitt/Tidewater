@@ -26,6 +26,7 @@ interface Props {
   onAddManual: (transaction: Transaction) => Promise<void>
   onRemove: (transaction: Transaction) => Promise<void>
   onCreateAccount: (account: Account) => Promise<void>
+  groups?: Record<string, GroupId>
 }
 
 /** Beyond this the table is paged, so a decade of history never stalls the view. */
@@ -36,6 +37,7 @@ export default function TransactionsPanel({
   transactions,
   period,
   reimbursableTag,
+  groups,
   onAddManual,
   onRemove,
   onCreateAccount,
@@ -272,7 +274,7 @@ export default function TransactionsPanel({
           onClose={() => setAdding(false)}
           onCreateAccount={onCreateAccount}
           onSave={async (entry, account) => {
-            await onAddManual(createManualTransaction(entry, account))
+            await onAddManual(createManualTransaction(entry, account, groups))
             setAdding(false)
           }}
         />

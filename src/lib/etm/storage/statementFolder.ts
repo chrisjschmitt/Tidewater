@@ -116,3 +116,30 @@ export async function listFiles(handle: StatementFolderHandle): Promise<FolderFi
   }
   return files
 }
+
+/** Without prompting: polling must never pop a permission dialog. */
+export async function hasReadAccess(handle: StatementFolderHandle): Promise<boolean> {
+  try {
+    return (await handle.queryPermission?.({ mode: 'read' })) === 'granted'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * File names only, from the folder and its `raw/` subfolder, where the
+ * downloader moves each account's export once it has been combined. Nothing
+ * is opened, so this is cheap enough to poll while a download runs.
+ */
+export async function listNames(handle: StatementFolderHandle): Promise<string[]> {
+  const names: string[] = []
+  for await (const entry of handle.values()) {
+    if (entry.kind === 'file') names.push(entry.name)
+    else if (entry.kind === 'directory' && entry.name === 'raw') {
+      const sub = entry as unknown as StatementFolderHandle
+      if (typeof sub.values !== 'function') continue
+      for await (const inner of sub.values()) if (inner.kind === 'file') names.push(inner.name)
+    }
+  }
+  return names
+}

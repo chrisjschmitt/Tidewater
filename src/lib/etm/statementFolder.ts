@@ -1,4 +1,5 @@
 import type { StatementReading } from './statement'
+import { isCombinedFileName } from './td'
 import type { Account, BalanceSnapshot } from './types'
 
 /**
@@ -63,6 +64,8 @@ export function scanStatementNames(names: string[]): FolderScan {
   for (const name of names) {
     const trimmed = name.trim()
     if (!/^TD-.*\.csv$/i.test(trimmed)) continue
+    // The downloader's combined file is read by td.ts, not as one account's export.
+    if (isCombinedFileName(trimmed)) continue
     const parsed = parseStatementFileName(trimmed)
     if (parsed) files.push(parsed)
     else skipped.push(trimmed)
@@ -239,5 +242,32 @@ export function snapshotFor(
     ...(existing?.pending ? { pending: existing.pending } : {}),
     source: 'statement',
     fileName: row.file.name,
+  }
+}
+
+/** Where one account stands while a download runs, judged from file names alone. */
+export type DownloadState = 'waiting' | 'downloaded'
+
+export interface DownloadProgress {
+  accounts: Array<{ account: Account; state: DownloadState }>
+  /** The combined file for the day, once the downloader has written it. */
+  combined?: string
+}
+
+/**
+ * Progress of today's download, from a listing of the statement folder and its
+ * `raw/` subfolder. Only names are looked at: an account is downloaded once its
+ * `TD-<label>-<last four>-<day>.csv` appears in either place, and the run is
+ * finished when `TD-transactions-<day>.csv` does.
+ */
+export function downloadProgress(accounts: Account[], names: string[], day: string): DownloadProgress {
+  const todays = names.filter((name) => parseStatementFileName(name)?.date === day)
+  const match = matchStatementFiles(accounts, todays)
+  const combined = names.find((name) => name.trim().toLowerCase() === `td-transactions-${day}.csv`)
+  return {
+    accounts: accounts
+      .filter((account) => account.lastFour?.trim())
+      .map((account) => ({ account, state: match.byAccount.has(account.id) ? 'downloaded' : 'waiting' })),
+    ...(combined ? { combined: combined.trim() } : {}),
   }
 }

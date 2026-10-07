@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { chromium } from 'playwright'
 import type { Browser, Page } from 'playwright'
 
+import { type CombineResult, combineDay, countExportRows } from './combine.js'
 import { PLACEHOLDER_MESSAGE, SELECTOR_PLACEHOLDER, hasPlaceholderSelectors } from './config.js'
 import { HaltRequest, installSigintHandler } from './halt.js'
 import { RunLog, alreadyOkToday, resumeKey } from './manifest.js'
@@ -43,6 +44,8 @@ const NAV_TIMEOUT_MS = 45_000
 
 export interface RunOutcome {
   results: AccountResult[]
+  /** The file Tidewater imports, built from every account saved today. */
+  combined?: CombineResult
   manifestPath: string
   haltReason?: string
   /** True when the run ended because the page stopped looking logged in. */
@@ -102,7 +105,10 @@ export async function runDownloads(
       page = await openRunPage(browser)
     }
 
+    let position = 0
     for (const account of config.accounts) {
+      position++
+      const counter = `${position}/${config.accounts.length}`
       const key = resumeKey(account.label, account.lastFour)
 
       if (done.has(key)) {
@@ -113,7 +119,7 @@ export async function runDownloads(
           error: 'already ok today',
           finishedAt: new Date().toISOString(),
         })
-        log(`  skip  ${account.label} — already ok today`)
+        log(`  ✓ ${counter} ${account.label} (…${account.lastFour}): already downloaded today`)
         continue
       }
 
@@ -128,7 +134,7 @@ export async function runDownloads(
           error: PLACEHOLDER_MESSAGE,
           finishedAt: new Date().toISOString(),
         })
-        log(`  fail  ${account.label} — ${PLACEHOLDER_MESSAGE}`)
+        log(`  ✗ ${counter} ${account.label} (…${account.lastFour}) failed: ${PLACEHOLDER_MESSAGE}`)
         continue
       }
 
@@ -176,9 +182,12 @@ export async function runDownloads(
       }
       await runLog.record(result)
 
-      if (result.status === 'ok') log(`  ok    ${account.label} — ${result.file ?? ''}`)
-      else if (result.status === 'halted') log(`  halt  ${account.label} — ${result.error ?? ''}`)
-      else log(`  fail  ${account.label} — ${result.error ?? ''}`)
+      const who = `${counter} ${account.label} (…${account.lastFour})`
+      if (result.status === 'ok') {
+        const rows = result.file ? await countExportRows(result.file).catch(() => null) : null
+        log(`  ✓ ${who}: ${rows === null ? 'saved' : `${rows} ${rows === 1 ? 'row' : 'rows'} saved`}`)
+      } else if (result.status === 'halted') log(`  ■ ${who} halted: ${result.error ?? ''}`)
+      else log(`  ✗ ${who} failed: ${result.error ?? ''}`)
 
       if (result.status === 'halted') {
         haltReason = 'stopped at your request (Ctrl+C)'
@@ -208,7 +217,11 @@ export async function runDownloads(
   removeSigintHandler()
   await runLog.finish()
 
-  const outcome: RunOutcome = { results: [...runLog.results], manifestPath: runLog.file }
+  // Built even after a halt or a failed account: whatever did arrive today is
+  // still worth importing, and the report names what is missing.
+  const combined = await combineDay(config.accounts, config.outputDir, dateStamp)
+
+  const outcome: RunOutcome = { results: [...runLog.results], manifestPath: runLog.file, combined }
   if (haltReason !== undefined) outcome.haltReason = haltReason
   if (sessionBlocked) outcome.sessionBlocked = true
   return outcome

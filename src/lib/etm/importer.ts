@@ -1,8 +1,12 @@
-import { groupForCategory, isInternalCategory } from '../categories'
+import { isInternalCategory } from '../categories'
 import { uid } from '../format'
+import type { GroupId } from '../types'
+import { etmGroupFor } from './groups'
 import { occurrenceCounter, transactionId } from './identity'
 import { parseMonarchCsv, type MonarchRow } from './monarch'
-import { monthOf, type Account, type Transaction } from './types'
+import { matchStatementFiles } from './statementFolder'
+import { pseudoFileName, type TdAccountBlock, type TdFeedRow } from './td'
+import { monthOf, type Account, type Prediction, type SplitLine, type Transaction } from './types'
 
 /**
  * Turns parsed rows into transactions and works out what the store already
@@ -64,7 +68,12 @@ export function findUnmatchedAccounts(rows: MonarchRow[], accounts: Account[]): 
 
 export async function planImport(
   text: string,
-  options: { fileName: string; accounts: Account[]; existing: Map<string, Transaction> },
+  options: {
+    fileName: string
+    accounts: Account[]
+    existing: Map<string, Transaction>
+    groups?: Record<string, GroupId>
+  },
 ): Promise<ImportPlan> {
   const { rows, skipped } = parseMonarchCsv(text)
   const { fileName, accounts, existing } = options
@@ -114,7 +123,7 @@ export async function planImport(
       accountId: account.id,
       monarchAccount: row.account,
       category: row.category,
-      groupId: groupForCategory(row.category),
+      groupId: etmGroupFor(row.category, options.groups),
       internal: isInternalCategory(row.category),
       tags: row.tags,
       owner: row.owner,
@@ -162,4 +171,125 @@ function accountIndex(accounts: Account[]): Map<string, Account> {
     if (account.monarchName) index.set(normalize(account.monarchName), account)
   }
   return index
+}
+
+/** What the rules decide for one TD row; absent fields fall back to Uncategorized. */
+export interface TdOutcome {
+  merchant: string
+  category: string
+  tags: string[]
+  split?: SplitLine[]
+  prediction: Prediction
+}
+
+export type TdCategorizer = (row: TdFeedRow, account: Account) => TdOutcome
+
+/** Before any rules exist: every row waits for review, named as TD wrote it. */
+export const uncategorized: TdCategorizer = (row) => ({
+  merchant: row.description,
+  category: 'Uncategorized',
+  tags: [],
+  prediction: { layer: 'review', confidence: 'low', reviewReasons: ['No rule matched'] },
+})
+
+/**
+ * The TD feed's plan. Accounts are matched the way the folder reader matches
+ * files — last four first, then the label — so a combined file and the old
+ * per-account files land on the same accounts.
+ *
+ * TD owns only the facts of a row: when, which account, how much, what the
+ * bank wrote, and the running balance. Category, tags, split and merchant
+ * belong to the rules and to the user, so a row already stored is never
+ * revised by a later download, however its prediction would come out now.
+ */
+export async function planTdImport(
+  blocks: TdAccountBlock[],
+  options: {
+    fileName: string
+    fileDate: string
+    accounts: Account[]
+    existing: Map<string, Transaction>
+    groups?: Record<string, GroupId>
+    categorize?: TdCategorizer
+  },
+): Promise<ImportPlan & { unmatchedBlocks: TdAccountBlock[] }> {
+  const { fileName, fileDate, accounts, existing } = options
+  const categorize = options.categorize ?? uncategorized
+  const batchId = uid('batch')
+  const names = blocks.map((block) => pseudoFileName(block, fileDate))
+  const match = matchStatementFiles(accounts, names)
+  const accountFor = new Map<string, Account>()
+  for (const [accountId, file] of match.byAccount) {
+    const account = accounts.find((a) => a.id === accountId)
+    if (account) accountFor.set(file.name, account)
+  }
+
+  const plan: ImportPlan & { unmatchedBlocks: TdAccountBlock[] } = {
+    batchId,
+    fileName,
+    rowsRead: blocks.reduce((sum, block) => sum + block.rows.length, 0),
+    skippedRows: 0,
+    added: [],
+    updated: [],
+    unchanged: 0,
+    unmatched: [],
+    unmatchedBlocks: [],
+    internal: 0,
+    firstDate: '',
+    lastDate: '',
+    months: [],
+  }
+  const months = new Set<string>()
+
+  for (const [index, block] of blocks.entries()) {
+    const account = accountFor.get(names[index]!)
+    if (!account) {
+      plan.unmatchedBlocks.push(block)
+      plan.unmatched.push({ monarchName: `${block.account} (…${block.lastFour})`, rows: block.rows.length, sample: block.rows[0]?.description ?? '' })
+      continue
+    }
+    // Counted per account within the file, in TD's own order, so the same
+    // download read twice — or an overlapping one — gives the same ids.
+    const nextOccurrence = occurrenceCounter()
+    for (const row of block.rows) {
+      const parts = { date: row.date, account: `td:${block.lastFour}`, amount: row.amount, originalStatement: row.description }
+      const id = await transactionId(parts, nextOccurrence(parts))
+      if (!plan.firstDate || row.date < plan.firstDate) plan.firstDate = row.date
+      if (!plan.lastDate || row.date > plan.lastDate) plan.lastDate = row.date
+      if (existing.has(id)) {
+        plan.unchanged++
+        continue
+      }
+      const outcome = categorize(row, account)
+      const next: Transaction = {
+        id,
+        date: row.date,
+        merchant: outcome.merchant,
+        originalStatement: row.description,
+        notes: '',
+        amount: row.amount,
+        currency: account.currency,
+        accountId: account.id,
+        monarchAccount: '',
+        category: outcome.category,
+        groupId: etmGroupFor(outcome.category, options.groups),
+        internal: isInternalCategory(outcome.category),
+        tags: outcome.tags,
+        owner: '',
+        reviewed: false,
+        source: 'td',
+        importBatchId: batchId,
+        prediction: outcome.prediction,
+        feedFile: fileName,
+        ...(outcome.split && outcome.split.length > 0 ? { split: outcome.split } : {}),
+        ...(row.balance === undefined ? {} : { balance: row.balance }),
+      }
+      if (next.internal) plan.internal++
+      plan.added.push(next)
+      months.add(monthOf(row.date))
+    }
+  }
+
+  plan.months = [...months].sort()
+  return plan
 }

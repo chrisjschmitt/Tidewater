@@ -46,7 +46,7 @@ covered in `README.md` under "Looking human".
 | Field         | Type                  | Notes |
 | ------------- | --------------------- | ----- |
 | `label`       | string                | Short human label. It also becomes part of the output filename (lowercased, non-alphanumerics collapsed to single dashes), so changing it changes filenames. |
-| `lastFour`    | string, 4 digits      | Last four of the account or card. Kept as a string because leading zeros matter (`0913`). |
+| `lastFour`    | string, 4 digits      | Last four of the account or card. Kept as a string because leading zeros matter (`0042`). |
 | `kind`        | `"bank" \| "credit"`  | Only used for reporting today; bank and card exports differ enough that a downstream reader may care. |
 | `accountLink` | string                | Selector or link text that reaches the account's page from the EasyWeb home. Playwright selector syntax, so `text=Expense Account` works as well as a CSS selector. |
 | `exportSteps` | array of steps        | The clicks that trigger the CSV download, in order. The **last** step is the one expected to start the download; the tool arms its download listener around the whole sequence, so an extra confirmation click after it is fine. |
@@ -67,8 +67,8 @@ TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv
 
 `label-slug` is `label` lowercased with every run of non-alphanumeric
 characters collapsed to a single dash and leading/trailing dashes trimmed. The
-date is today's **local** date. So `Expense Account` / `6016` becomes
-`TD-expense-account-6016-2026-09-18.csv`.
+date is today's **local** date. So `Expense Account` / `1001` becomes
+`TD-expense-account-1001-2026-09-18.csv`, saved first beside the combined `TD-transactions-2026-09-18.csv` and then moved into `raw/`.
 
 Another component reads these files by name, so treat the shape as fixed. A
 same-day re-run overwrites its own files; files from other days are never

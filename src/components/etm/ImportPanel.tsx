@@ -1,3 +1,4 @@
+import type { GroupId } from '../../lib/types'
 import { useEffect, useState } from 'react'
 import ImportProgress, { type ImportProgressState } from '../ImportProgress'
 import { AccountForm, blankAccount } from './AccountsPanel'
@@ -9,7 +10,9 @@ import type { Account, ImportBatch, Transaction } from '../../lib/etm/types'
 
 interface Props {
   accounts: Account[]
+  /** Every stored row, shadow feed included, so dedup sees all of them. */
   transactions: Transaction[]
+  groups?: Record<string, GroupId>
   batches: ImportBatch[]
   incomingFile?: File | null
   onIncomingConsumed?: () => void
@@ -21,6 +24,7 @@ interface Props {
 export default function ImportPanel({
   accounts,
   transactions,
+  groups,
   batches,
   incomingFile,
   onIncomingConsumed,
@@ -42,7 +46,7 @@ export default function ImportPanel({
     try {
       const existing = new Map(transactions.map((t) => [t.id, t]))
       setProgress({ fileName: name, label: 'Matching against what is already here…', percent: 60 })
-      const next = await planImport(text, { fileName: name, accounts: registry, existing })
+      const next = await planImport(text, { fileName: name, accounts: registry, existing, groups })
       setProgress({ fileName: name, label: 'Almost ready…', percent: 100 })
       setFile({ name, text })
       setPlan(next)

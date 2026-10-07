@@ -1,9 +1,9 @@
 {
   "name": "tidewater",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.10.0",
   "type": "module",
-  "description": "Tidewater — a calm, abundance-minded personal budgeting PWA. All data stays on your device.",
+  "description": "Tidewater \u2014 a calm, abundance-minded personal budgeting PWA. All data stays on your device.",
   "scripts": {
     "dev": "vite",
     "dev:public": "vite --mode public",
@@ -17,6 +17,7 @@
     "check:starter": "esbuild scripts/check-starter.ts --bundle --platform=node --format=esm --outfile=.tmp/check-starter.mjs --log-level=error && node .tmp/check-starter.mjs",
     "check:assistant": "esbuild scripts/check-assistant.ts --bundle --platform=node --format=esm --define:__ETM_AVAILABLE__=true --outfile=.tmp/check-assistant.mjs --log-level=error && node .tmp/check-assistant.mjs",
     "check:etm": "esbuild scripts/check-etm.ts --bundle --platform=node --format=esm --outfile=.tmp/check-etm.mjs --log-level=error && node .tmp/check-etm.mjs",
+    "check:td": "esbuild scripts/check-td.ts --bundle --platform=node --format=esm --outfile=.tmp/check-td.mjs --log-level=error && node .tmp/check-td.mjs",
     "check:forecast": "esbuild scripts/check-forecast.ts --bundle --platform=node --format=esm --define:__ETM_AVAILABLE__=true --outfile=.tmp/check-forecast.mjs --log-level=error && node .tmp/check-forecast.mjs",
     "backtest:forecast": "esbuild scripts/backtest-forecast.ts --bundle --platform=node --format=esm --outfile=.tmp/backtest-forecast.mjs --log-level=error && node .tmp/backtest-forecast.mjs"
   },

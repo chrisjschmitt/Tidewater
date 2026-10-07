@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { planTdImport, type ImportPlan, type TdCategorizer } from '../../lib/etm/importer'
 import { parseStatementCsv, StatementFormatError } from '../../lib/etm/statement'
+import { newestCombined, parseTdCombinedCsv, pseudoFileName, TdFileError } from '../../lib/etm/td'
+import type { GroupId } from '../../lib/types'
 import {
   balanceAnchors,
   isReadable,
@@ -23,7 +26,7 @@ import {
 import { canWatchExportFolder } from '../../lib/etm/watchFolder'
 import { closingFor } from '../../lib/etm/workflow'
 import { uid } from '../../lib/format'
-import type { Account, BalanceSnapshot } from '../../lib/etm/types'
+import type { Account, BalanceSnapshot, Transaction } from '../../lib/etm/types'
 
 export interface StatementFolderReview {
   rows: StatementReviewRow[]
@@ -32,12 +35,28 @@ export interface StatementFolderReview {
   skipped: string[]
   /** Account ids the user is willing to record. Partial is allowed. */
   checked: Set<string>
+  /**
+   * The TD rows in the downloader's combined file, when that is what was read.
+   * Brought in with the balances unless the user unticks it.
+   */
+  feed?: { plan: ImportPlan & { unmatchedBlocks: unknown[] }; fileName: string; include: boolean }
+}
+
+/** What the combined file's rows need to become a TD import alongside the balances. */
+export interface FeedOptions {
+  /** Every stored row, so a re-read of the same file adds nothing. */
+  existing: Transaction[]
+  groups?: Record<string, GroupId>
+  categorize?: TdCategorizer
+  onImport: (plan: ImportPlan) => Promise<void>
 }
 
 export interface StatementFolderState {
   /** Whether a folder can be picked and remembered. Files can always be chosen. */
   supported: boolean
   folderName?: string
+  /** The remembered folder, for the download-progress watcher. */
+  handle?: StatementFolderHandle
   busy: boolean
   notice?: string
   review: StatementFolderReview | null
@@ -47,6 +66,7 @@ export interface StatementFolderState {
   readFiles: (files: File[]) => Promise<void>
   forgetFolder: () => Promise<void>
   toggleRow: (accountId: string) => void
+  toggleFeed: () => void
   confirm: () => Promise<void>
   dismiss: () => void
 }
@@ -66,6 +86,7 @@ export function useStatementFolder(
   balances: BalanceSnapshot[],
   month: string,
   onRecord: (snapshot: BalanceSnapshot) => Promise<void>,
+  feedOptions?: FeedOptions,
 ): StatementFolderState {
   const [handle, setHandle] = useState<StatementFolderHandle | undefined>()
   const [busy, setBusy] = useState(false)
@@ -94,7 +115,32 @@ export function useStatementFolder(
    * the caller can word its own "nothing here" notice.
    */
   const buildReview = useCallback(
-    async (files: Array<{ name: string; text: () => Promise<string> }>) => {
+    async (listed: Array<{ name: string; text: () => Promise<string> }>) => {
+      // The downloader's combined file, when present, stands in for the
+      // per-account files: each account's block is read exactly as its own
+      // export would have been, and its rows become the TD feed.
+      let files = listed
+      let feed: StatementFolderReview['feed']
+      const combined = newestCombined(listed.map((file) => file.name))
+      if (combined) {
+        const source = listed.find((file) => file.name === combined.name)!
+        const blocks = parseTdCombinedCsv(await source.text())
+        files = blocks.map((block) => ({
+          name: pseudoFileName(block, combined.date),
+          text: async () => block.asStatementText,
+        }))
+        if (feedOptions) {
+          const plan = await planTdImport(blocks, {
+            fileName: combined.name,
+            fileDate: combined.date,
+            accounts,
+            existing: new Map(feedOptions.existing.map((row) => [row.id, row])),
+            groups: feedOptions.groups,
+            categorize: feedOptions.categorize,
+          })
+          feed = { plan, fileName: combined.name, include: plan.added.length > 0 }
+        }
+      }
       // Only the accounts this step asks about, so a file for anything else
       // is reported as unmatched rather than quietly assigned somewhere.
       const match = matchStatementFiles(
@@ -107,18 +153,25 @@ export function useStatementFolder(
         if (!file) continue
         reads.set(accountId, { file: name, ...(await read(file.text)) })
       }
-      const rows = reviewRows(accounts, reads, month)
+      // Read through per-account stand-ins, but recorded against the file the
+      // user actually has, so a balance's provenance names something real.
+      const rows = reviewRows(accounts, reads, month).map((row) =>
+        combined && row.file ? { ...row, file: { ...row.file, name: combined.name } } : row,
+      )
       setReview({
         rows,
-        unmatched: match.unmatched,
+        // A combined file's blocks for accounts this step does not ask about
+        // (Chris's own account, say) are expected, not worth flagging.
+        unmatched: combined ? [] : match.unmatched,
         skipped: match.skipped,
         // Everything readable starts checked: the common case is that the
         // whole folder is right, and the point of the step is not to retype it.
         checked: new Set(rows.filter(isReadable).map((row) => row.account.id)),
+        ...(feed ? { feed } : {}),
       })
-      return match.byAccount.size
+      return match.byAccount.size + (feed?.plan.rowsRead ?? 0)
     },
-    [accounts, month],
+    [accounts, month, feedOptions],
   )
 
   const scan = useCallback(
@@ -133,11 +186,11 @@ export function useStatementFolder(
         const matched = await buildReview(await listFiles(folder))
         if (matched === 0) {
           setNotice(
-            `Nothing in “${folder.name}” read as a TD statement export. Files are expected to be named TD-<account>-<last four>-<date>.csv.`,
+            `Nothing in “${folder.name}” read as a TD statement export. The downloader writes TD-transactions-<date>.csv (or, before version 0.2, one TD-<account>-<last four>-<date>.csv per account).`,
           )
         }
-      } catch {
-        setNotice('That folder could not be read. Choose it again.')
+      } catch (err) {
+        setNotice(err instanceof TdFileError ? err.message : 'That folder could not be read. Choose it again.')
       } finally {
         setBusy(false)
       }
@@ -155,11 +208,11 @@ export function useStatementFolder(
         )
         if (matched === 0) {
           setNotice(
-            'None of the chosen files read as a TD statement export. They are expected to be named TD-<account>-<last four>-<date>.csv.',
+            'None of the chosen files read as a TD statement export. Choose TD-transactions-<date>.csv (or the older per-account TD-<account>-<last four>-<date>.csv files).',
           )
         }
-      } catch {
-        setNotice('Those files could not be read. Choose them again.')
+      } catch (err) {
+        setNotice(err instanceof TdFileError ? err.message : 'Those files could not be read. Choose them again.')
       } finally {
         setBusy(false)
       }
@@ -205,10 +258,19 @@ export function useStatementFolder(
     })
   }, [])
 
+  const toggleFeed = useCallback(() => {
+    setReview((current) =>
+      current?.feed ? { ...current, feed: { ...current.feed, include: !current.feed.include } } : current,
+    )
+  }, [])
+
   const confirm = useCallback(async () => {
     if (!review) return
     setBusy(true)
     try {
+      if (review.feed?.include && review.feed.plan.added.length > 0 && feedOptions) {
+        await feedOptions.onImport(review.feed.plan)
+      }
       for (const row of review.rows) {
         if (!review.checked.has(row.account.id)) continue
         // Reuse the id of any balance already recorded for this month, so a
@@ -221,7 +283,7 @@ export function useStatementFolder(
     } finally {
       setBusy(false)
     }
-  }, [balances, month, onRecord, review])
+  }, [balances, feedOptions, month, onRecord, review])
 
   const dismiss = useCallback(() => {
     setReview(null)
@@ -231,6 +293,7 @@ export function useStatementFolder(
   return {
     supported,
     folderName: handle?.name,
+    handle,
     busy,
     notice,
     review,
@@ -239,6 +302,7 @@ export function useStatementFolder(
     readFiles,
     forgetFolder,
     toggleRow,
+    toggleFeed,
     confirm,
     dismiss,
   }

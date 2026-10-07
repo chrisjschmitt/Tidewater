@@ -97,7 +97,7 @@ export function parseStatementDate(raw: string): string {
   return ''
 }
 
-function parseNumber(raw: string): number | null {
+export function parseNumber(raw: string): number | null {
   const value = (raw ?? '').trim()
   if (!value) return null
   const negated = /^\(.*\)$/.test(value)

@@ -3,6 +3,13 @@ import BalanceForm from './BalanceForm'
 import TransactionTable from './TransactionTable'
 import type { EtmData } from './useEtmData'
 import { useStatementFolder, type StatementFolderReview } from './useStatementFolder'
+import {
+  downloaderAvailableHere,
+  readDownloaderHere,
+  useDownloadProgress,
+  writeDownloaderHere,
+  type DownloadWatch,
+} from './useDownloadProgress'
 import { presentIn } from '../../lib/etm/aggregate'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
@@ -294,7 +301,14 @@ function Step({
 function Balances({ data, month }: { data: EtmData; month: string }) {
   const [editing, setEditing] = useState<Account | null>(null)
   const anchors = balanceAnchors(data.accounts)
-  const folder = useStatementFolder(data.accounts, data.balances, month, data.recordBalance)
+  const feedOptions = useMemo(
+    () => ({ existing: data.allRows, groups: data.config.categoryGroups, onImport: (plan: Parameters<EtmData['applyImport']>[0]) => data.applyImport(plan) }),
+    [data],
+  )
+  const folder = useStatementFolder(data.accounts, data.balances, month, data.recordBalance, feedOptions)
+  const download = useDownloadProgress(folder.handle, data.accounts)
+  const [downloaderHere, setDownloaderHere] = useState(readDownloaderHere)
+  const canDownload = downloaderAvailableHere()
   // The picker-dialog path for browsers that cannot hold a folder handle —
   // the iPad above all. One multi-select in Files beats nine single reads.
   const filePicker = useRef<HTMLInputElement>(null)
@@ -310,6 +324,17 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
 
   return (
     <div className="space-y-2">
+      {canDownload && (
+        <DownloadFromTd
+          watch={download}
+          enabled={downloaderHere}
+          onEnable={(on) => {
+            writeDownloaderHere(on)
+            setDownloaderHere(on)
+          }}
+          onRead={() => void folder.readFolder()}
+        />
+      )}
       <div className="rounded-2xl bg-white/70 px-4 py-3.5">
         <p className="text-sm font-medium text-ink-900">
           {folder.supported ? 'Read a folder of statements' : 'Read the statement files together'}
@@ -381,6 +406,7 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
             busy={folder.busy}
             month={month}
             onToggle={folder.toggleRow}
+            onToggleFeed={folder.toggleFeed}
             onConfirm={() => void folder.confirm()}
             onCancel={folder.dismiss}
           />
@@ -452,6 +478,7 @@ function StatementFolderReviewTable({
   busy,
   month,
   onToggle,
+  onToggleFeed,
   onConfirm,
   onCancel,
 }: {
@@ -459,11 +486,15 @@ function StatementFolderReviewTable({
   busy: boolean
   month: string
   onToggle: (accountId: string) => void
+  onToggleFeed: () => void
   onConfirm: () => void
   onCancel: () => void
 }) {
   const readable = review.rows.filter(isReadable)
   const chosen = readable.filter((row) => review.checked.has(row.account.id)).length
+  const feed = review.feed
+  const feedNew = feed?.plan.added.length ?? 0
+  const bringing = Boolean(feed?.include && feedNew > 0)
 
   return (
     <div className="space-y-3 rounded-2xl bg-white/70 px-4 py-4">
@@ -521,13 +552,42 @@ function StatementFolderReviewTable({
         </p>
       )}
 
+      {feed && (
+        <label className="flex items-start gap-3 rounded-xl bg-sand-100/60 px-2 py-2">
+          <input
+            type="checkbox"
+            className="mt-1"
+            disabled={feedNew === 0}
+            checked={bringing}
+            onChange={onToggleFeed}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-ink-900">
+              {feedNew > 0
+                ? `Also bring in ${feedNew.toLocaleString()} TD transaction${feedNew === 1 ? '' : 's'}`
+                : 'Every TD transaction in this file is already here'}
+            </span>
+            <span className="block text-[11px] text-ink-400">
+              From {feed.fileName}
+              {feed.plan.unchanged > 0 && ` · ${feed.plan.unchanged.toLocaleString()} already here`}
+              {feed.plan.unmatched.length > 0 &&
+                ` · not matched to an account: ${feed.plan.unmatched.map((u) => u.monarchName).join(', ')}`}
+              . Until the switch-over, these are kept beside Monarch's rows for comparison and do not
+              count in any total.
+            </span>
+          </span>
+        </label>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onConfirm}
-          disabled={busy || chosen === 0}
+          disabled={busy || (chosen === 0 && !bringing)}
           className="btn-primary text-xs disabled:opacity-50"
         >
-          Record {chosen} balance{chosen === 1 ? '' : 's'}
+          {chosen === 0 && bringing
+            ? `Bring in ${feedNew.toLocaleString()} TD rows`
+            : `Record ${chosen} balance${chosen === 1 ? '' : 's'}${bringing ? ` and ${feedNew.toLocaleString()} TD rows` : ''}`}
         </button>
         <button onClick={onCancel} className="btn-ghost text-xs">
           Cancel
@@ -898,4 +958,106 @@ const Tag = ({ children, tone }: { children: React.ReactNode; tone?: 'warn' }) =
 function endOf(month: string): string {
   const [y, m] = month.split('-').map(Number)
   return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10)
+}
+
+/**
+ * Mac only: starts the TD downloader through its Shortcut and follows the run
+ * by watching the statement folder, one tick per account, until the combined
+ * file is there to read. Shown once this Mac has been marked as the one with
+ * the downloader on it.
+ */
+function DownloadFromTd({
+  watch,
+  enabled,
+  onEnable,
+  onRead,
+}: {
+  watch: DownloadWatch
+  enabled: boolean
+  onEnable: (on: boolean) => void
+  onRead: () => void
+}) {
+  if (!enabled) {
+    return (
+      <div className="rounded-2xl bg-white/50 px-4 py-3">
+        <label className="flex items-center gap-2 text-xs text-ink-500">
+          <input type="checkbox" checked={false} onChange={() => onEnable(true)} />
+          This Mac has the TD downloader — show a “Download from TD” button here
+        </label>
+      </div>
+    )
+  }
+
+  const progress = watch.progress
+  const done = progress?.accounts.filter((a) => a.state === 'downloaded').length ?? 0
+  const total = progress?.accounts.length ?? 0
+
+  return (
+    <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+      <p className="text-sm font-medium text-ink-900">Download from TD</p>
+      <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+        Opens the bank Chrome window through the “Tidewater TD Download” Shortcut. Log in by hand,
+        click Continue, and the download runs in Terminal. Each account ticks off here as its
+        file arrives.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button onClick={watch.start} disabled={watch.running} className="btn-primary text-xs disabled:opacity-50">
+          {watch.running ? 'Downloading…' : 'Download from TD'}
+        </button>
+        {watch.running && (
+          <button onClick={watch.stop} className="btn-ghost text-xs">
+            Stop watching
+          </button>
+        )}
+        <button onClick={() => onEnable(false)} className="btn-quiet text-xs">
+          Hide on this Mac
+        </button>
+      </div>
+      {watch.notice && <p className="mt-3 text-sm text-shell-500">{watch.notice}</p>}
+      {watch.timedOut && (
+        <p className="mt-3 text-sm text-shell-500">
+          Stopped watching after 30 minutes. Terminal has the run’s own report.
+        </p>
+      )}
+      {progress && (
+        <div className="mt-3 space-y-1">
+          <p className="text-xs text-ink-400">
+            {done} of {total} accounts downloaded
+          </p>
+          <ul className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+            {progress.accounts.map(({ account, state }) => (
+              <li key={account.id} className="flex items-center gap-2 text-sm">
+                <span className={state === 'downloaded' ? 'text-tide-700' : 'text-ink-300'}>
+                  {state === 'downloaded' ? '✓' : '○'}
+                </span>
+                <span className={state === 'downloaded' ? 'text-ink-900' : 'text-ink-400'}>
+                  {account.nickname}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {progress.combined && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-ink-900">
+                Combined file ready: {progress.combined}
+              </span>
+              <button onClick={onRead} className="btn-primary text-xs">
+                Read it now
+              </button>
+            </div>
+          )}
+          {(progress.combined || watch.timedOut) && done < total && (
+            <p className="text-xs text-shell-500">
+              Not downloaded:{' '}
+              {progress.accounts
+                .filter((a) => a.state === 'waiting')
+                .map((a) => a.account.nickname)
+                .join(', ')}
+              . Terminal’s report says why; their balances can be entered by hand below.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }

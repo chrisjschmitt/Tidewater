@@ -5,6 +5,7 @@ import { today } from '../../lib/etm/period'
 import { lastFullMonth, refreshSnapshotActuals, snapshotsEqual } from '../../lib/forecast/snapshot'
 import { DEFAULT_FORECAST_CONFIG, type ForecastConfig, type ForecastSnapshot } from '../../lib/forecast/types'
 import type { ImportPlan } from '../../lib/etm/importer'
+import { ledgerView } from '../../lib/etm/ledger'
 import {
   addManualTransaction,
   commitImport,
@@ -40,7 +41,10 @@ import {
 export interface EtmData {
   loading: boolean
   accounts: Account[]
+  /** The ledger: rows that count (see ledger.ts), split rows replaced by their parts. */
   transactions: Transaction[]
+  /** Every stored row from every feed, shadow included — for dedup and comparison. */
+  allRows: Transaction[]
   batches: ImportBatch[]
   balances: BalanceSnapshot[]
   reconciliations: ReconciliationRecord[]
@@ -73,7 +77,7 @@ export interface EtmData {
  */
 export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [allRows, setAllRows] = useState<Transaction[]>([])
   const [batches, setBatches] = useState<ImportBatch[]>([])
   const [balances, setBalances] = useState<BalanceSnapshot[]>([])
   const [reconciliations, setReconciliations] = useState<ReconciliationRecord[]>([])
@@ -82,6 +86,10 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const [currentSnapshot, setCurrentSnapshot] = useState<ForecastSnapshot | undefined>()
   const [lastMonthSnapshot, setLastMonthSnapshot] = useState<ForecastSnapshot | undefined>()
   const [loading, setLoading] = useState(true)
+  const transactions = useMemo(
+    () => ledgerView(allRows, config.tdCutover, config.categoryGroups),
+    [allRows, config.tdCutover, config.categoryGroups],
+  )
   const [notice, setNotice] = useState('')
 
   const reload = useCallback(async () => {
@@ -109,7 +117,7 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
       loadForecastSnapshot(unlockedKey, priorMonth),
     ])
     setAccounts(nextAccounts)
-    setTransactions(nextTransactions)
+    setAllRows(nextTransactions)
     setBatches(nextBatches)
     setConfig(nextConfig)
     setForecastConfig(nextForecast)
@@ -293,6 +301,7 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     loading,
     accounts,
     transactions,
+    allRows,
     batches,
     balances,
     reconciliations,

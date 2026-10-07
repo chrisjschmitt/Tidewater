@@ -26,32 +26,86 @@ cp accounts.example.json accounts.json     # first time only, then fill it in
 npm run download
 ```
 
-Progress prints per account as it goes, and the run ends with a status table
-and a one-line `n ok / n failed / n skipped` summary.
+Progress prints one line per account as each file is saved
+(`✓ 3/9 Expense Account (…1001): 34 rows saved`, or `✗ … failed: <reason>`).
+The run ends with a status table, a one-line `n ok / n failed / n skipped`
+summary, and the line that matters most:
+
+```
+Combined file ready: TD-transactions-2026-10-07.csv (212 rows, 9 of 9 accounts) — import it in Tidewater
+```
+
+On a Mac the same line also arrives as a notification, so you see it even when
+Terminal is behind Tidewater.
 
 You do **not** need `npx playwright install`. Playwright's bundled browsers are
 never used — the tool only ever attaches to your real Chrome over CDP, and it
 will never launch a browser itself.
 
+## Starting it from Tidewater (Mac only)
+
+Tidewater's **Download from TD** button opens a macOS Shortcut named
+**Tidewater TD Download**. The Shortcut does the same two steps as above, with
+your login in between:
+
+1. Open the Shortcuts app → **+** → name it `Tidewater TD Download`.
+2. Add **Run Shell Script** with:
+   `/path/to/TideWater/td-downloader/run-from-tidewater.sh start-chrome`
+   (it opens the bank Chrome window, or does nothing if it is already open).
+3. Add **Show Alert**: "Log in to EasyWeb in the Chrome window, then click
+   Continue." Leave "Show Cancel Button" on: Cancel ends the Shortcut there.
+4. Add **Run Shell Script** with:
+   `/path/to/TideWater/td-downloader/run-from-tidewater.sh download`
+   (it opens Terminal and runs `npm run download`, so you watch the progress
+   and Ctrl+C still works).
+
+The first time, Chrome asks whether Tidewater may open Shortcuts; tick
+"Always allow". The login is still yours alone: nothing in the Shortcut or the
+script sees or types a password.
+
 ## Where the files land
 
 `outputDir` in `accounts.json`, `~/TD-Statements` by default. Names follow a
-fixed contract, because another part of Tidewater reads these files by name:
+fixed contract, because Tidewater reads these files by name:
 
 ```
-TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv
+TD-transactions-<YYYY-MM-DD>.csv                    ← every account in one file; import this
+raw/TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv     ← each account's export, kept for checking
 
-TD-expense-account-6016-2026-09-18.csv
-TD-td-aeroplan-visa-infinite-5689-2026-09-18.csv
+TD-transactions-2026-10-07.csv
+raw/TD-expense-account-1001-2026-10-07.csv
+raw/TD-td-aeroplan-visa-infinite-2002-2026-10-07.csv
 ```
+
+The combined file has a header row:
+
+```
+Account,Last four,Date,Description,Debit,Credit,Balance
+```
+
+One block per account, in `accounts.json` order. Dates are ISO for every
+account (TD's card exports write MM/DD/YYYY); everything else is copied as TD
+wrote it, so the description still matches Monarch's "Original Statement".
+Accounts that failed or had nothing to export are left out and listed after
+the "Combined file ready" line.
 
 `label-slug` is the account's `label` lowercased, with runs of non-alphanumeric
-characters collapsed to single dashes. The date is today's local date. Downloads
-are written under a temp name and renamed on completion, so an interrupted run
-never leaves a partial file under a real name.
+characters collapsed to single dashes. The date is today's local date. Each
+export is saved next to the combined file, folded in, then moved to `raw/`.
+Everything is written under a temp name and renamed on completion, so an
+interrupted run never leaves a partial file under a real name.
 
-A re-run on the same day overwrites its own files. Files from other days are
-never touched.
+A re-run on the same day overwrites its own files and rebuilds the combined
+file from everything downloaded that day (including files already in `raw/`).
+Files from other days are never touched.
+
+To rebuild the combined file by hand, for example after saving one account's
+export yourself under its per-account name:
+
+```bash
+npm run combine            # today
+npm run combine 2026-10-07 # a given day
+```
 
 ## Looking human
 

@@ -1,4 +1,7 @@
+import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
+
+import type { CombineResult } from './combine.js'
 
 import type { AccountResult } from './types.js'
 
@@ -47,4 +50,26 @@ export function formatSummary(results: readonly AccountResult[]): string {
 function note(result: AccountResult): string {
   if (result.file) return basename(result.file)
   return result.error ?? ''
+}
+
+/** The last thing the run prints: whether there is a file to import, and what it holds. */
+export function formatCombined(combined: CombineResult | undefined, accountCount: number): string {
+  if (!combined?.file) return 'No combined file: no account was downloaded today.'
+  const head = `Combined file ready: ${basename(combined.file)} (${combined.rows} rows, ${combined.included.length} of ${accountCount} accounts) — import it in Tidewater`
+  if (combined.missing.length === 0) return head
+  return `${head}\n  missing: ${combined.missing.map((account) => `${account.label} (…${account.lastFour})`).join(', ')}`
+}
+
+/**
+ * A macOS notification, so the end of the run is seen even when Terminal is
+ * behind Tidewater. Best effort: anywhere but a Mac, or if notifications are
+ * off, it quietly does nothing.
+ */
+export function notifyMac(title: string, message: string): Promise<void> {
+  if (process.platform !== 'darwin') return Promise.resolve()
+  const quote = (text: string) => `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ')}"`
+  const script = `display notification ${quote(message)} with title ${quote(title)}`
+  return new Promise((resolve) => {
+    execFile('osascript', ['-e', script], () => resolve())
+  })
 }

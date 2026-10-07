@@ -1,3 +1,4 @@
+import type { GroupId } from '../types'
 import { asFingerprint, type ExportFingerprint } from './watchFolder'
 
 /**
@@ -47,6 +48,23 @@ export interface EtmConfig {
    * browser does not give a disk path, and a directory handle is not stored.
    */
   watchFolderName?: string
+  /**
+   * When the TD feed takes over from Monarch. Before the date, Monarch rows
+   * count and TD rows are a shadow; from it, the reverse. Per account, with
+   * a global default. Unset everywhere until the parallel run is done.
+   */
+  tdCutover?: TdCutover
+  /**
+   * Category → expense group, for names the keyword mapping in categories.ts
+   * places badly (“Travel phone & data” reads as a phone bill). Kept here,
+   * encrypted, so personal category names never enter the shared code.
+   */
+  categoryGroups?: Record<string, GroupId>
+}
+
+export interface TdCutover {
+  global?: string
+  perAccount: Record<string, string>
 }
 
 export const DEFAULT_CONFIG: EtmConfig = {
@@ -73,7 +91,23 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   annualEvents: stored?.annualEvents ?? [],
   lastExport: asFingerprint(stored?.lastExport),
   watchFolderName: stored?.watchFolderName?.trim() || undefined,
+  tdCutover: asCutover(stored?.tdCutover),
+  categoryGroups: stored?.categoryGroups && typeof stored.categoryGroups === 'object' ? stored.categoryGroups : undefined,
 })
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+function asCutover(value: unknown): TdCutover | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Partial<TdCutover>
+  const perAccount: Record<string, string> = {}
+  for (const [id, date] of Object.entries(raw.perAccount ?? {})) {
+    if (typeof date === 'string' && ISO_DAY.test(date)) perAccount[id] = date
+  }
+  const global = typeof raw.global === 'string' && ISO_DAY.test(raw.global) ? raw.global : undefined
+  if (!global && Object.keys(perAccount).length === 0) return undefined
+  return { ...(global ? { global } : {}), perAccount }
+}
 
 const key = (label: string) => label.trim().toLowerCase()
 
