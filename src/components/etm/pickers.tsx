@@ -87,9 +87,9 @@ export function TagPicker({
   }
 
   return (
-    <span className="flex flex-wrap items-center gap-1">
+    <span className="flex items-center gap-1">
       {value.map((tag) => (
-        <span key={tag} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs text-ink-700 ring-1 ring-sand-200">
+        <span key={tag} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-xs text-ink-700 ring-1 ring-sand-200">
           {tag}
           <button
             type="button"
@@ -125,7 +125,7 @@ export function TagPicker({
         />
       ) : (
         <select
-          className="field w-36 py-0.5 text-xs"
+          className="field w-28 py-0.5 text-xs"
           value=""
           onChange={(e) => {
             if (e.target.value === NEW) setTyping(true)

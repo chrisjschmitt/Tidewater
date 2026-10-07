@@ -140,33 +140,32 @@ export default function TransactionEditor({
         </div>
       )}
       {lines.map((line, index) => (
-        <div key={index} className="space-y-1 rounded-xl bg-white/60 p-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1">
-              <input
-                className="field w-24 py-1 text-right text-sm tabular-nums"
-                inputMode="decimal"
-                aria-label={mode === 'amount' ? 'Amount' : 'Percent'}
-                value={line.value}
-                onChange={(e) => setLine(index, { value: e.target.value })}
-              />
-              <span className="text-xs text-ink-400">{mode === 'percent' ? `% = ${amounts[index]!.toFixed(2)}` : ''}</span>
-            </span>
-            <CategorySelect value={line.category} options={categories} onChange={(category) => setLine(index, { category })} />
-            {lines.length > 1 && (
-              <button className="btn-quiet text-xs" onClick={() => setLines(lines.filter((_, i) => i !== index))}>
-                Remove
-              </button>
-            )}
-          </div>
+        <div key={index} className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1">
+            <input
+              className="field w-20 py-1 text-right text-sm tabular-nums"
+              inputMode="decimal"
+              aria-label={mode === 'amount' ? 'Amount' : 'Percent'}
+              value={line.value}
+              onChange={(e) => setLine(index, { value: e.target.value })}
+            />
+            {mode === 'percent' && <span className="text-xs text-ink-400">% = {amounts[index]!.toFixed(2)}</span>}
+          </span>
+          <CategorySelect className="field w-48 py-1 text-sm" value={line.category} options={categories} onChange={(category) => setLine(index, { category })} />
           <TagPicker value={line.tags} options={knownTags} onChange={(tags) => setLine(index, { tags })} />
           {lines.length > 1 && (
             <input
-              className="field w-full py-1 text-xs"
-              placeholder="Comment for this part (optional)"
+              className="field w-40 py-1 text-xs"
+              placeholder="Comment"
+              aria-label="Comment for this part"
               value={line.notes}
               onChange={(e) => setLine(index, { notes: e.target.value })}
             />
+          )}
+          {lines.length > 1 && (
+            <button className="btn-quiet text-xs" onClick={() => setLines(lines.filter((_, i) => i !== index))}>
+              Remove
+            </button>
           )}
         </div>
       ))}

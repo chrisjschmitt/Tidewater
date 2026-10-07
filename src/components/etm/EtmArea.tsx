@@ -333,7 +333,7 @@ export default function EtmArea({
         <Modal
           open
           onClose={() => setEditingId(null)}
-          width="max-w-3xl"
+          width="max-w-5xl"
           title={`Edit ${editingRow.merchant || 'transaction'}`}
           subtitle={`${editingRow.date} · ${editingRow.originalStatement || 'entered by hand'} · ${editingRow.amount.toFixed(2)}`}
         >

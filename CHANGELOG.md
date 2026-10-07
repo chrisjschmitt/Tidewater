@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.3 — 2026-10-07
+
+### Changed
+- Each part of a split is back on one line in the editor — amount, category, tags and a short comment — in a wider Edit window.
+
 ## 0.13.2 — 2026-10-07
 
 ### Changed
