@@ -126,7 +126,40 @@ export default function ForecastMonthCard({
         doubleCounts={doubleCounts}
         {...(isCurrent ? { actualFor: (row: VarianceRow) => actualToDateFor(row, current.remainLines) } : {})}
         {...(typicalPlanFor && onPlanChange ? { planEdit: { typicalPlanFor, onPlanChange } } : {})}
+        pinnedKeys={new Set(placements.map((future) => pinKey(future.category)))}
       />
+
+      {placements.length > 0 && (
+        <div id="forecast-pins" className="mt-4 rounded-2xl bg-sand-100/60 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-ink-400">Pinned on {monthName(point.month)}</p>
+          <ul className="mt-2 divide-y divide-sand-200/80">
+            {placements.map((future) => (
+              <li key={future.id} className="flex flex-col gap-1.5 py-2">
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 text-sm text-ink-900">
+                    {future.category}
+                    <span className="ml-2 text-[11px] uppercase tracking-wider text-ink-400">
+                      {pinAddsToForecast(future)
+                        ? future.recurrence === 'annual'
+                          ? 'each year'
+                          : 'once'
+                        : 'on the plan'}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-baseline gap-3">
+                    <span className="text-sm tabular-nums text-ink-700">{amountIn(future.amount, 'CAD')}</span>
+                    <button onClick={() => onRemove(future.id)} className="btn-quiet text-xs">
+                      Remove
+                    </button>
+                  </span>
+                </span>
+                <SavedPinComment notes={future.notes} onSave={(notes) => onNotesChange(future.id, notes)} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
 
       {isCurrent && current.remainLines.length > 0 && (
         <div className="mt-4">
@@ -197,37 +230,6 @@ export default function ForecastMonthCard({
           underPlan={displayed.forecast + 0.01 < displayed.plan}
           onPlace={onPlace}
         />
-      )}
-
-      {placements.length > 0 && point.kind !== 'future' && (
-        <div className="mt-5">
-          <p className="text-[11px] uppercase tracking-wider text-ink-400">Placed on this month</p>
-          <ul className="mt-2 divide-y divide-sand-200/80">
-            {placements.map((future) => (
-              <li key={future.id} className="flex flex-col gap-1.5 py-2">
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 text-sm text-ink-900">
-                    {future.category}
-                    <span className="ml-2 text-[11px] uppercase tracking-wider text-ink-400">
-                      {pinAddsToForecast(future)
-                        ? future.recurrence === 'annual'
-                          ? 'each year'
-                          : 'once'
-                        : 'on the plan'}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-baseline gap-3">
-                    <span className="text-sm tabular-nums text-ink-700">{amountIn(future.amount, 'CAD')}</span>
-                    <button onClick={() => onRemove(future.id)} className="btn-quiet text-xs">
-                      Remove
-                    </button>
-                  </span>
-                </span>
-                <SavedPinComment notes={future.notes} onSave={(notes) => onNotesChange(future.id, notes)} />
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
 
       {doubleCounts.length > 0 && (
@@ -332,6 +334,7 @@ function PlanVsForecastList({
   doubleCounts,
   actualFor,
   planEdit,
+  pinnedKeys,
 }: {
   rows: VarianceRow[]
   toMonthEnd: boolean
@@ -343,6 +346,8 @@ function PlanVsForecastList({
   /** The current month only: what each category has spent so far. */
   actualFor?: (row: VarianceRow) => number
   planEdit?: PlanEdit
+  /** Categories with a pin on this month, badged in their row. */
+  pinnedKeys: Set<string>
 }) {
   const ignored = new Set(ignoredKeys)
   const active = rows.filter((row) => !ignored.has(row.key))
@@ -408,6 +413,7 @@ function PlanVsForecastList({
                 onPlace={onPlace}
                 {...(actualFor ? { actual: actualFor(row) } : {})}
                 {...(planEdit ? { planEdit } : {})}
+                pinned={pinnedKeys.has(row.key)}
               />
             ))}
           </tbody>
@@ -456,6 +462,7 @@ function PlanVsForecastList({
                   onPlace={onPlace}
                   {...(actualFor ? { actual: actualFor(row) } : {})}
                   {...(planEdit ? { planEdit } : {})}
+                  pinned={pinnedKeys.has(row.key)}
                 />
               ))}
             </tbody>
@@ -485,6 +492,7 @@ function CompareRow({
   onPlace,
   actual,
   planEdit,
+  pinned,
 }: {
   row: VarianceRow
   running?: number
@@ -496,6 +504,7 @@ function CompareRow({
   onPlace: (item: PinRequest) => void
   actual?: number
   planEdit?: PlanEdit
+  pinned?: boolean
 }) {
   const pinDefault = pinAmountFor(row)
   const [open, setOpen] = useState(false)
@@ -521,7 +530,18 @@ function CompareRow({
             onChange={(event) => onIgnore(row.key, event.target.checked)}
           />
         </td>
-        <td className={`max-w-[10rem] truncate py-1.5 pr-3 sm:max-w-none ${muted}`}>{row.label}</td>
+        <td className={`max-w-[10rem] truncate py-1.5 pr-3 sm:max-w-none ${muted}`}>
+          {row.label}
+          {pinned && (
+            <a
+              href="#forecast-pins"
+              className="ml-2 rounded-full bg-tide-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-tide-700 no-underline"
+              title="Pinned on this month — see the list under the table"
+            >
+              Pinned
+            </a>
+          )}
+        </td>
         <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">
           {planEdit ? <PlanCell row={row} month={month} edit={planEdit} /> : amountIn(row.plan, 'CAD')}
         </td>
@@ -843,3 +863,5 @@ function PlanCell({ row, month, edit }: { row: VarianceRow; month: string; edit:
     </button>
   )
 }
+
+const pinKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ')

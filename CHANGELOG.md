@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.7 — 2026-10-07
+
+### Changed
+- Forecast shows a month's pins right under "Plan vs forecast by category", as "Pinned on <month>" with Remove and notes, instead of further down the card — for future months too. A pinned category carries a "Pinned" badge in its row that jumps to the list.
+
 ## 0.10.6 — 2026-10-07
 
 ### Added
