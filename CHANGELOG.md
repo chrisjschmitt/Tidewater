@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.5 — 2026-10-07
+
+### Changed
+- "Download from TD" and reading the TD file moved to the Import tab, as a "TD statements" box above the Monarch import. One read brings in the TD rows and records the closing balances for the month you pick there (this month by default, or last month). Month end's Closing balances step still shows every account's balance for the month, with Record for a figure entered by hand, and points to Import for the file.
+
 ## 0.10.4 — 2026-10-07
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { planTdImport, type ImportPlan, type TdCategorizer } from '../../lib/etm/importer'
 import { parseStatementCsv, StatementFormatError } from '../../lib/etm/statement'
 import { newestCombined, parseTdCombinedCsv, pseudoFileName, TdFileError, type TdAccountBlock } from '../../lib/etm/td'
@@ -119,8 +119,14 @@ export function useStatementFolder(
    * multi-select picker dialog on an iPad. Returns how many files matched so
    * the caller can word its own "nothing here" notice.
    */
+  // The last files read, so choosing another month re-reads them for it.
+  const lastListed = useRef<Array<{ name: string; text: () => Promise<string> }> | null>(null)
+  const readMonth = useRef(month)
+
   const buildReview = useCallback(
     async (listed: Array<{ name: string; text: () => Promise<string> }>) => {
+      lastListed.current = listed
+      readMonth.current = month
       // The downloader's combined file, when present, stands in for the
       // per-account files: each account's block is read exactly as its own
       // export would have been, and its rows become the TD feed.
@@ -195,6 +201,13 @@ export function useStatementFolder(
     },
     [accounts, balances, month, feedOptions],
   )
+
+  // A different month asked for while a review is open: the same files,
+  // read again for that month's balances.
+  useEffect(() => {
+    if (!review || readMonth.current === month || !lastListed.current) return
+    void buildReview(lastListed.current)
+  }, [buildReview, month, review])
 
   const scan = useCallback(
     async (folder: StatementFolderHandle) => {

@@ -3,6 +3,7 @@ import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
 import ForecastPanel from './ForecastPanel'
 import ImportPanel from './ImportPanel'
+import TdStatementsCard from './TdStatementsCard'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
@@ -183,6 +184,7 @@ export default function EtmArea({
                 budget={budget}
                 month={workMonth}
                 onMonthChange={setWorkMonth}
+                onOpenImport={() => setTab('import')}
               />
             )}
 
@@ -233,6 +235,12 @@ export default function EtmArea({
                 onAddManual={data.addManual}
                 onRemove={data.removeManual}
               />
+            )}
+
+            {tab === 'import' && (
+              <div className="mb-6">
+                <TdStatementsCard data={data} />
+              </div>
             )}
 
             {tab === 'import' && (
