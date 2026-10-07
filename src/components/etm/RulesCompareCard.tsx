@@ -17,6 +17,7 @@ import { uid } from '../../lib/format'
 export default function RulesCompareCard({ data }: { data: EtmData }) {
   const [showAll, setShowAll] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [taught, setTaught] = useState<Set<string>>(new Set())
   const td = useMemo(() => data.allRows.filter((row) => row.source === 'td'), [data.allRows])
 
   const comparison = useMemo(() => {
@@ -55,12 +56,33 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
     await data.saveSettings({ ...data.config, rules: change(data.rules.settings) })
   }
 
-  const teach = async (pair: FeedPair) => {
+  const teach = async (pair: FeedPair, exactAmount: boolean) => {
     const outcome = monarchOutcome(pair)
     const key = statementKey(pair.td.originalStatement)
-    const rule: UserRule = { id: uid('rule'), key, outcome, createdAt: new Date().toISOString() }
-    await saveRules((rules) => ({ ...rules, userRules: [...rules.userRules.filter((r) => r.key !== key || r.accountId), rule] }))
-    data.flash(`From now on, ${outcome.merchant} is filed as ${outcome.category}${outcome.split ? ' (split)' : ''}. Re-apply rules to update the rows.`)
+    const rule: UserRule = {
+      id: uid('rule'),
+      key,
+      outcome,
+      createdAt: new Date().toISOString(),
+      ...(exactAmount ? { amount: pair.td.amount } : {}),
+    }
+    const sameScope = (r: UserRule) =>
+      r.key === key && !r.accountId && (exactAmount ? r.amount === pair.td.amount : r.amount === undefined)
+    const nextSettings = { ...data.rules.settings, userRules: [...data.rules.settings.userRules.filter((r) => !sameScope(r)), rule] }
+    setBusy(true)
+    try {
+      await data.saveSettings({ ...data.config, rules: nextSettings })
+      // Re-file this merchant's unconfirmed TD rows straight away, so the
+      // effect is visible here rather than waiting for Re-apply.
+      const plan = reapplyPlan(data.allRows, data.accounts, { ...data.rules, settings: nextSettings }, data.config.categoryGroups, key)
+      if (plan.updated.length > 0) await data.applyImport(plan)
+      setTaught((current) => new Set([...current, pair.td.id]))
+      data.flash(
+        `Taught: ${outcome.merchant}${exactAmount ? ` at ${amountIn(pair.td.amount, pair.td.currency)}` : ''} is filed as ${outcome.split ? outcome.split.map((l) => l.category).join(' + ') : outcome.category}. ${plan.updated.length} TD row${plan.updated.length === 1 ? '' : 's'} updated.`,
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -130,8 +152,10 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
       {open.length > 0 && (
         <div className="overflow-x-auto">
           <p className="mb-1 text-xs text-ink-400">
-            Where they differ. “Teach” files this merchant the way Monarch did from now on; “Leave” keeps
-            Tidewater’s answer and takes the row off this list.
+            Where they differ. “Teach” files this merchant the way Monarch did from now on; “This amount”
+            does so only for this exact amount (two deposits from one payer, say); “Leave” keeps Tidewater’s
+            answer and takes the row off this list. Don’t teach merchants whose category depends on what was
+            bought or for whom — Amazon, e-transfers — those belong in review.
           </p>
           <table className="w-full min-w-[40rem] text-sm">
             <thead>
@@ -160,8 +184,22 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
                   </td>
                   <td className="py-1.5 pr-3 text-ink-700">{pair.monarchCategories.join(' + ')}</td>
                   <td className="whitespace-nowrap py-1.5 text-right">
-                    <button onClick={() => void teach(pair)} className="btn-ghost text-xs">
+                    {taught.has(pair.td.id) && <span className="mr-2 text-xs text-tide-700">Taught ✓</span>}
+                    <button
+                      disabled={busy}
+                      onClick={() => void teach(pair, false)}
+                      className="btn-ghost text-xs disabled:opacity-50"
+                      title="Always file this merchant the way Monarch filed this row"
+                    >
                       Teach
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => void teach(pair, true)}
+                      className="btn-quiet text-xs disabled:opacity-50"
+                      title="Only when this merchant charges exactly this amount (e.g. two pension deposits, one per person)"
+                    >
+                      This amount
                     </button>
                     <button
                       onClick={() => void saveRules((rules) => ({ ...rules, dismissed: [...rules.dismissed, pair.td.id] }))}

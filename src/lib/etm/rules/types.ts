@@ -39,6 +39,8 @@ export interface UserRule {
   key: string
   /** Only for this account, when set. */
   accountId?: string
+  /** Only for this exact amount, when set (signed, like the row). */
+  amount?: number
   outcome: Outcome
   createdAt: string
 }

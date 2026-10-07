@@ -86,6 +86,9 @@ const history: HistoryRow[] = [
   h('2026-08-09', 'COFFEE HOUSE', 'Restaurants & Bars', -6),
   h('2026-08-11', 'OLD CAFE', 'Restaurants & Bars', -9, { tags: ['Old tag'] }),
   h('2026-08-12', 'PARKING LOT 3', 'Parking', -4),
+  // Two pension deposits on one day, one per person: same text, told apart by amount.
+  ...['2026-04-26', '2026-05-26', '2026-06-26'].map((d) => h(d, 'PENSION  PEN', 'Pension - A', 852.13)),
+  ...['2026-07-27', '2026-08-27'].flatMap((d) => [h(d, 'PENSION  PEN', 'Pension - A', 852.13), h(d, 'PENSION  PEN', 'Pension - B', 1165.95)]),
 ]
 const settings: RuleSettings = withRuleDefaults({
   categoryMerges: { Parking: 'Parking & Tolls' },
@@ -146,6 +149,20 @@ const taught = categorize(
   { ...ctx, settings: { ...settings, userRules: [{ id: 'r', key: 'DOLLAR STORE', outcome: { merchant: 'Dollar', category: 'Gifts', tags: [] }, createdAt: '' }] } },
 )
 check('a taught rule settles what history could not', taught.layer === 'user' && taught.outcome?.category === 'Gifts')
+
+console.log('=== Filed by amount ===')
+check('first person\'s deposit by its amount', run('PENSION PEN', 852.13).outcome?.category === 'Pension - A')
+check('second person\'s deposit by its amount', run('PENSION PEN', 1165.95).outcome?.category === 'Pension - B')
+check('a known amount is not flagged as unusual', run('PENSION PEN', 1165.95).layer !== 'review')
+const amountRule = categorize(
+  { date: '2026-09-02', description: 'CONDO CORP MSP', amount: -1100, account: bank },
+  { ...ctx, settings: { ...settings, userRules: [
+    { id: 'm', key: 'CONDO CORP MSP', outcome: { merchant: 'Condo', category: 'Housing', tags: [] }, createdAt: '' },
+    { id: 'a', key: 'CONDO CORP MSP', amount: -1100, outcome: { merchant: 'Condo', category: 'Special assessment', tags: [] }, createdAt: '' },
+  ] } },
+)
+check('a taught rule outranks a learned split', amountRule.layer === 'user')
+check('a taught exact-amount rule outranks the merchant rule', amountRule.outcome?.category === 'Special assessment')
 
 console.log('=== Matching TD to Monarch ===')
 const tx = (id: string, source: Transaction['source'], date: string, statement: string, amount: number, category: string): Transaction => ({

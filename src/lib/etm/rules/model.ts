@@ -40,6 +40,11 @@ export interface RuleModel {
   templates: Map<string, SplitTemplate>
   /** The most recent split of every merchant ever split, offered in review. */
   lastSplits: Map<string, SplitTemplate>
+  /**
+   * Merchants filed by amount: the same bank text, each exact amount always the
+   * same way (two pension deposits on one day, one per person). Key → cents → outcome.
+   */
+  byAmount: Map<string, Map<number, Omit<Outcome, 'merchant'>>>
   /** Latest amount seen for keys filed as income, to notice a changed deposit. */
   lastIncome: Map<string, number>
   /** Categories that history uses, so a keyword never invents one. */
@@ -129,6 +134,7 @@ export function buildModel(
   const merchantWeights = new Map<string, Map<string, number>>()
   const occurrences = new Map<string, Array<{ date: string; split?: { signature: string; lines: Array<{ category: string; tags: string[]; amount: number }>; total: number } }>>()
   const lastIncome = new Map<string, { date: string; amount: number }>()
+  const amountSeen = new Map<string, Map<number, Map<string, { outcome: Omit<Outcome, 'merchant'>; count: number }>>>()
   const categories = new Set<string>()
   const signs = new Map<string, { positive: number; total: number }>()
 
@@ -161,6 +167,15 @@ export function buildModel(
     const labels = parts.map((row) => ({ row, label: cleanLabel(row, settings, options.reimbursableTag, ownerBuckets) }))
     if (labels.some((item) => !item.label)) continue
     for (const { row, label } of labels) {
+      const cents = Math.round(row.amount * 100)
+      const forKey = amountSeen.get(key) ?? new Map()
+      const forAmount = forKey.get(cents) ?? new Map()
+      const ok = outcomeKey(label!.category, label!.tags)
+      const seen = forAmount.get(ok) ?? { outcome: { category: label!.category, tags: label!.tags }, count: 0 }
+      seen.count++
+      forAmount.set(ok, seen)
+      forKey.set(cents, forAmount)
+      amountSeen.set(key, forKey)
       categories.add(label!.category)
       const sign = signs.get(label!.category) ?? { positive: 0, total: 0 }
       sign.total++
@@ -212,6 +227,22 @@ export function buildModel(
     lastSplits.set(key, { lines: shapeOf([lastSplit.split]) })
   }
 
+  // Amount rules only where amount explains the category: the merchant has more
+  // than one way of filing, and each repeated amount always went the same way.
+  const byAmount = new Map<string, Map<number, Omit<Outcome, 'merchant'>>>()
+  for (const [key, amounts] of amountSeen) {
+    const outcomes = new Set([...amounts.values()].flatMap((m) => [...m.keys()]))
+    if (outcomes.size < 2) continue
+    const rules = new Map<number, Omit<Outcome, 'merchant'>>()
+    for (const [cents, forAmount] of amounts) {
+      const entries = [...forAmount.values()]
+      const total = entries.reduce((sum, e) => sum + e.count, 0)
+      const best = entries.sort((a, z) => z.count - a.count)[0]!
+      if (total >= 2 && best.count / total >= 0.8) rules.set(cents, best.outcome)
+    }
+    if (rules.size > 0) byAmount.set(key, rules)
+  }
+
   const incomeCategories = new Set<string>()
   for (const [category, sign] of signs) if (sign.total >= 2 && sign.positive / sign.total >= 0.8) incomeCategories.add(category)
 
@@ -220,6 +251,7 @@ export function buildModel(
     merchants: new Map([...merchantWeights].map(([key, names]) => [key, [...names].sort((a, z) => z[1] - a[1])[0]![0]])),
     templates,
     lastSplits,
+    byAmount,
     lastIncome: new Map([...lastIncome].map(([key, value]) => [key, value.amount])),
     categories,
     incomeCategories,

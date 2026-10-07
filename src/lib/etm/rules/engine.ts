@@ -2,7 +2,7 @@ import { normalizeTag } from '../tags'
 import type { Account } from '../types'
 import { isInternal, type RuleModel } from './model'
 import { collapse, counterAccount, displayName, statementKey } from './normalize'
-import type { Outcome, RuleResult, RuleSettings, SplitShapeLine } from './types'
+import type { Outcome, RuleResult, RuleSettings, SplitShapeLine, UserRule } from './types'
 
 /**
  * One TD row in, one complete outcome out — merchant, category, tags and any
@@ -10,12 +10,13 @@ import type { Outcome, RuleResult, RuleSettings, SplitShapeLine } from './types'
  *
  * The layers, first answer wins:
  *  1. fixed      card payments; transfers to a card; dividend sources
- *  2. template   a split the row's merchant has had the same way lately
- *  3. user       a rule taught in review or the comparison
- *  4. learned    how history files this merchant, if it agrees enough
- *  5. own        a transfer to or from one of the user's own accounts
- *  6. keyword    a merchant-type word, but only into a category history uses
- *  7. review
+ *  2. user       a rule taught in review or the comparison (an exact-amount one first)
+ *  3. amount     the same text filed differently by amount, each amount consistently
+ *  4. template   a split the row's merchant has had the same way lately
+ *  5. learned    how history files this merchant, if it agrees enough
+ *  6. own        a transfer to or from one of the user's own accounts
+ *  7. keyword    a merchant-type word, but only into a category history uses
+ *  8. review
  * and then the guards, which can send any answer back to review.
  */
 
@@ -66,7 +67,7 @@ export function categorize(input: RuleInput, ctx: RuleContext): RuleResult {
   const lastSplit = ctx.model.lastSplits.get(key)
   const splitSuggestion = lastSplit ? applyShape(lastSplit.lines, input.amount) : null
   const fromHistory = learned.map((item) => ({ merchant, ...item.outcome }))
-  const suggestions = [
+  const suggestions: Outcome[] = [
     ...fromHistory.slice(0, 1),
     ...(splitSuggestion ? [splitOutcome(merchant, splitSuggestion)] : []),
     ...fromHistory.slice(1),
@@ -97,7 +98,30 @@ export function categorize(input: RuleInput, ctx: RuleContext): RuleResult {
     }
   }
 
-  // 2. Template: the same split, recently, nearly every time.
+  // 2. A rule the user taught: it outranks anything learned. One taught for
+  //    an exact amount outranks one for the whole merchant.
+  const cents = Math.round(input.amount * 100)
+  const fits = (rule: UserRule) => rule.key === key && (rule.amount === undefined || Math.round(rule.amount * 100) === cents)
+  const ranked = ctx.settings.userRules
+    .filter(fits)
+    .sort((a, z) => Number(z.amount !== undefined) - Number(a.amount !== undefined) || Number(Boolean(z.accountId)) - Number(Boolean(a.accountId)))
+  const taught = ranked.find((rule) => !rule.accountId || rule.accountId === input.account.id)
+  if (taught) {
+    const outcome = taught.outcome.split
+      ? { ...taught.outcome, split: applyShape(taught.outcome.split, input.amount) ?? undefined }
+      : taught.outcome
+    return guard({ outcome, layer: 'user', confidence: 'high', reasons: [], suggestions }, input, ctx, key)
+  }
+
+  // 3. Filed by amount: same bank text, each amount its own way.
+  const byAmount = ctx.model.byAmount.get(key)?.get(Math.round(input.amount * 100))
+  // An e-transfer of a familiar amount is a strong hint, not proof: the same
+  // $225 can be the therapist one month and a transfer the next.
+  const eTransfer = /E-TFR|E-TRANSFER/.test(upper)
+  if (byAmount && !eTransfer) return decide('learned', byAmount, 'high')
+  if (byAmount && eTransfer) suggestions.unshift({ merchant, ...byAmount })
+
+  // 4. Template: the same split, recently, nearly every time.
   const template = ctx.model.templates.get(key)
   if (template) {
     const split = applyShape(template.lines, input.amount)
@@ -108,18 +132,7 @@ export function categorize(input: RuleInput, ctx: RuleContext): RuleResult {
     return review(merchant, suggestions, ['An amount this merchant’s usual split does not fit'])
   }
 
-  // 3. A rule the user taught.
-  const taught =
-    ctx.settings.userRules.find((rule) => rule.key === key && rule.accountId === input.account.id) ??
-    ctx.settings.userRules.find((rule) => rule.key === key && !rule.accountId)
-  if (taught) {
-    const outcome = taught.outcome.split
-      ? { ...taught.outcome, split: applyShape(taught.outcome.split, input.amount) ?? undefined }
-      : taught.outcome
-    return guard({ outcome, layer: 'user', confidence: 'high', reasons: [], suggestions }, input, ctx, key)
-  }
-
-  // 4. Learned from history.
+  // 5. Learned from history.
   const total = learned.reduce((sum, item) => sum + item.weight, 0)
   const best = learned[0]
   if (best && total > 0 && best.weight / total >= ctx.settings.threshold) {
@@ -127,12 +140,12 @@ export function categorize(input: RuleInput, ctx: RuleContext): RuleResult {
     return decide('learned', best.outcome, share >= 0.9 && learned.length > 0 ? 'high' : 'medium')
   }
 
-  // 5. Own accounts: a transfer between them moves money, it does not spend it.
+  // 6. Own accounts: a transfer between them moves money, it does not spend it.
   if (counter && isOwnAccount(counter.number, ctx.accounts)) {
     return decide('own', { category: 'Transfer', tags: [] }, 'high')
   }
 
-  // 6. Keywords, never into a category history does not use.
+  // 7. Keywords, never into a category history does not use.
   if (!best) {
     for (const [pattern, names] of KEYWORDS) {
       if (!pattern.test(upper)) continue
@@ -169,7 +182,8 @@ function guard(result: RuleResult, input: RuleInput, ctx: RuleContext, key: stri
   if (input.amount < 0 && lines.some((line) => ctx.model.incomeCategories.has(line.category))) {
     reasons.push('Money out filed under an income category')
   }
-  if (ctx.model.incomeCategories.has(outcome.category) && input.amount > 0) {
+  const knownAmount = ctx.model.byAmount.get(key)?.has(Math.round(input.amount * 100)) ?? false
+  if (!knownAmount && ctx.model.incomeCategories.has(outcome.category) && input.amount > 0) {
     const last = ctx.model.lastIncome.get(key)
     // Only for sizable deposits: interest that varies by the cent is not news.
     if (last && Math.abs(last) >= 100 && Math.abs(input.amount - last) > 0.25 * Math.abs(last)) {

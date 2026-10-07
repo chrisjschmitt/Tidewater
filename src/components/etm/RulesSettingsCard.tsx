@@ -210,7 +210,11 @@ export default function RulesSettingsCard({ data }: { data: EtmData }) {
           {settings.userRules.map((rule) => (
             <li key={rule.id} className="flex items-center justify-between gap-3 text-sm">
               <span className="min-w-0 truncate">
-                <span className="text-ink-500">{rule.key}</span> →{' '}
+                <span className="text-ink-500">
+                  {rule.key}
+                  {rule.amount !== undefined && ` at ${rule.amount.toFixed(2)}`}
+                </span>{' '}
+                →{' '}
                 <span className="text-ink-900">
                   {rule.outcome.split ? rule.outcome.split.map((l) => l.category).join(' + ') : rule.outcome.category}
                 </span>

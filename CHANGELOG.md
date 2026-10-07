@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.1 — 2026-10-07
+
+### Fixed
+- Two deposits with the same bank text on the same day, filed by amount (one pension per person), are now told apart by their amounts instead of being mistaken for a split. A familiar amount is not flagged as unusual.
+- "Teach" now visibly works: a taught rule outranks anything learned, the merchant's TD rows are re-filed at once (one undoable batch), and the row shows "Taught ✓". "This amount" teaches a rule for that exact amount only.
+
+### Changed
+- An e-transfer of a familiar amount is offered as the first suggestion rather than filed automatically.
+
 ## 0.11.0 — 2026-10-07
 
 ### Added

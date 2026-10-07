@@ -6,6 +6,7 @@ import { uid } from '../../format'
 import { monthOf, type Account, type SplitLine, type Transaction } from '../types'
 import { categorize, type RuleContext } from './engine'
 import type { HistoryRow } from './model'
+import { statementKey } from './normalize'
 import type { Outcome, RuleResult } from './types'
 
 /**
@@ -85,6 +86,7 @@ export function reapplyPlan(
   accounts: Account[],
   ctx: RuleContext,
   groups?: Record<string, GroupId>,
+  onlyKey?: string,
 ): ImportPlan {
   const batchId = uid('batch')
   const byId = new Map(accounts.map((a) => [a.id, a]))
@@ -92,6 +94,7 @@ export function reapplyPlan(
   const months = new Set<string>()
   for (const row of all) {
     if (row.source !== 'td' || row.reviewed) continue
+    if (onlyKey && statementKey(row.originalStatement) !== onlyKey) continue
     const account = byId.get(row.accountId)
     if (!account) continue
     const outcome = toTdOutcome(
@@ -116,7 +119,7 @@ export function reapplyPlan(
   const dates = updated.map((u) => u.next.date).sort()
   return {
     batchId,
-    fileName: `Rules applied to ${updated.length} TD rows`,
+    fileName: onlyKey ? `Taught: ${onlyKey} (${updated.length} TD rows)` : `Rules applied to ${updated.length} TD rows`,
     rowsRead: updated.length,
     skippedRows: 0,
     added: [],
