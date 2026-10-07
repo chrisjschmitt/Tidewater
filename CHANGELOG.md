@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0 — 2026-10-07
+
+### Added
+- A rules engine categorizes TD transactions as they come in: merchant, category, tags and any recurring split, in one step. It learns afresh from the Monarch history already in Tidewater (and from TD rows you confirm), weighting recent months more, so a change of habit shows within a few months. Card payments, transfers to your own accounts and dividend accounts are recognised from the bank text; anything history is unsure of goes to review with up to three suggestions.
+- Import → "Rules vs Monarch": how the rules filed each TD row beside how Monarch filed the same purchase, by account and month, with each disagreement offering "Teach" (file this merchant the way Monarch did from now on) or "Leave". "Re-apply rules" runs the current rules over TD rows not yet confirmed, as one batch you can undo from Past imports.
+- Settings → "Rules for TD transactions": merged categories, retired tags, dividend accounts, merchants to always check, and the rules you have taught.
+
 ## 0.10.7 — 2026-10-07
 
 ### Changed

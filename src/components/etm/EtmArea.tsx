@@ -4,6 +4,8 @@ import BudgetPanel from './BudgetPanel'
 import ForecastPanel from './ForecastPanel'
 import ImportPanel from './ImportPanel'
 import TdStatementsCard from './TdStatementsCard'
+import RulesCompareCard from './RulesCompareCard'
+import RulesSettingsCard from './RulesSettingsCard'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
@@ -251,8 +253,9 @@ export default function EtmArea({
             )}
 
             {tab === 'import' && (
-              <div className="mb-6">
+              <div className="mb-6 space-y-3">
                 <TdStatementsCard data={data} />
+                <RulesCompareCard data={data} />
               </div>
             )}
 
@@ -285,6 +288,12 @@ export default function EtmArea({
                 onSave={(account) => void data.persistAccount(account)}
                 onDelete={(account) => void data.removeAccount(account)}
               />
+            )}
+
+            {tab === 'settings' && (
+              <div className="mb-6">
+                <RulesSettingsCard data={data} />
+              </div>
             )}
 
             {tab === 'settings' && (

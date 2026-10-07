@@ -12,6 +12,7 @@ import {
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import { isReadable } from '../../lib/etm/statementFolder'
+import { rulesCategorizer } from '../../lib/etm/rules/apply'
 
 /**
  * The TD statements, on the Import tab: start the downloader, follow it, and
@@ -23,7 +24,12 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
   const [month, setMonth] = useState(thisMonth)
   const months = useMemo(() => [thisMonth(), previousMonth(thisMonth())], [])
   const feedOptions = useMemo(
-    () => ({ existing: data.allRows, groups: data.config.categoryGroups, onImport: (plan: Parameters<EtmData['applyImport']>[0]) => data.applyImport(plan) }),
+    () => ({
+      existing: data.allRows,
+      groups: data.config.categoryGroups,
+      categorize: rulesCategorizer(data.rules),
+      onImport: (plan: Parameters<EtmData['applyImport']>[0]) => data.applyImport(plan),
+    }),
     [data],
   )
   const folder = useStatementFolder(data.accounts, data.balances, month, data.recordBalance, feedOptions)

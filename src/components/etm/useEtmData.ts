@@ -6,6 +6,10 @@ import { lastFullMonth, refreshSnapshotActuals, snapshotsEqual } from '../../lib
 import { DEFAULT_FORECAST_CONFIG, type ForecastConfig, type ForecastSnapshot } from '../../lib/forecast/types'
 import type { ImportPlan } from '../../lib/etm/importer'
 import { ledgerView } from '../../lib/etm/ledger'
+import { historyRows } from '../../lib/etm/rules/apply'
+import type { RuleContext } from '../../lib/etm/rules/engine'
+import { buildModel } from '../../lib/etm/rules/model'
+import { withRuleDefaults } from '../../lib/etm/rules/types'
 import {
   addManualTransaction,
   commitImport,
@@ -45,6 +49,8 @@ export interface EtmData {
   transactions: Transaction[]
   /** Every stored row from every feed, shadow included — for dedup and comparison. */
   allRows: Transaction[]
+  /** The rules engine, learned afresh from history whenever it changes. */
+  rules: RuleContext
   batches: ImportBatch[]
   balances: BalanceSnapshot[]
   reconciliations: ReconciliationRecord[]
@@ -90,6 +96,14 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     () => ledgerView(allRows, config.tdCutover, config.categoryGroups),
     [allRows, config.tdCutover, config.categoryGroups],
   )
+  const rules = useMemo<RuleContext>(() => {
+    const settings = withRuleDefaults(config.rules)
+    const model = buildModel(historyRows(allRows, accounts), settings, {
+      asOf: today(),
+      reimbursableTag: config.reimbursableTag,
+    })
+    return { model, settings, accounts, reimbursableTag: config.reimbursableTag }
+  }, [accounts, allRows, config.reimbursableTag, config.rules])
   const [notice, setNotice] = useState('')
 
   const reload = useCallback(async () => {
@@ -302,6 +316,7 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     accounts,
     transactions,
     allRows,
+    rules,
     batches,
     balances,
     reconciliations,

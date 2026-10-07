@@ -118,10 +118,12 @@ export interface SplitLine {
 
 /** How the rules arrived at a TD row's outcome, kept so the review can say why. */
 export interface Prediction {
-  layer: 'fixed' | 'template' | 'user' | 'learned' | 'trip' | 'keyword' | 'review' | 'manual'
+  layer: 'fixed' | 'template' | 'user' | 'learned' | 'own' | 'trip' | 'keyword' | 'review' | 'manual'
   ruleId?: string
   confidence: 'high' | 'medium' | 'low'
   reviewReasons: string[]
+  /** Complete outcomes to offer in review, best first. */
+  suggestions?: Array<{ merchant: string; category: string; tags: string[]; split?: SplitLine[] }>
 }
 
 /** One row of a Monarch export or the TD feed, or one manually entered cash purchase. */

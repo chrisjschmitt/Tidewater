@@ -1,4 +1,5 @@
 import type { GroupId } from '../types'
+import type { RuleSettings } from './rules/types'
 import { asFingerprint, type ExportFingerprint } from './watchFolder'
 
 /**
@@ -60,6 +61,8 @@ export interface EtmConfig {
    * encrypted, so personal category names never enter the shared code.
    */
   categoryGroups?: Record<string, GroupId>
+  /** The rules engine's settings (rules/types.ts): merges, retired tags, taught rules. */
+  rules?: Partial<RuleSettings>
 }
 
 export interface TdCutover {
@@ -93,6 +96,7 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   watchFolderName: stored?.watchFolderName?.trim() || undefined,
   tdCutover: asCutover(stored?.tdCutover),
   categoryGroups: stored?.categoryGroups && typeof stored.categoryGroups === 'object' ? stored.categoryGroups : undefined,
+  rules: stored?.rules && typeof stored.rules === 'object' ? stored.rules : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
