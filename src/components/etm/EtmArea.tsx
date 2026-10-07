@@ -7,6 +7,7 @@ import TdStatementsCard from './TdStatementsCard'
 import RulesCompareCard from './RulesCompareCard'
 import RulesSettingsCard from './RulesSettingsCard'
 import ReviewPanel from './ReviewPanel'
+import SwitchOverCard from './SwitchOverCard'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
@@ -272,6 +273,7 @@ export default function EtmArea({
                 accounts={data.accounts}
                 transactions={data.allRows}
                 groups={data.config.categoryGroups}
+                {...(earliestSwitch(data) ? { switchedFrom: earliestSwitch(data) } : {})}
                 batches={data.batches}
                 incomingFile={incomingFile}
                 onIncomingConsumed={() => setIncomingFile(null)}
@@ -295,7 +297,8 @@ export default function EtmArea({
             )}
 
             {tab === 'settings' && (
-              <div className="mb-6">
+              <div className="mb-6 space-y-6">
+                <SwitchOverCard data={data} />
                 <RulesSettingsCard data={data} />
               </div>
             )}
@@ -338,4 +341,10 @@ function lastImportPhrase(data: EtmData): string | undefined {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function earliestSwitch(data: EtmData): string | undefined {
+  const cutover = data.config.tdCutover
+  if (!cutover) return undefined
+  return [cutover.global, ...Object.values(cutover.perAccount)].filter((d): d is string => Boolean(d)).sort()[0]
 }

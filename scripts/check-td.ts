@@ -163,6 +163,24 @@ check('cutover is per account', counts({ ...monarchRow, accountId: visa.id }, cu
 check('global cutover applies where no account date is set', !counts({ ...monarchRow, accountId: visa.id }, { global: '2026-09-01', perAccount: {} }))
 check('rows before the cutover date still come from Monarch', counts({ ...monarchRow, date: '2026-08-31' }, cut))
 
+console.log('=== Switch-over edges ===')
+const base = (id: string, source: Transaction['source'], date: string, accountId = chequing.id): Transaction => ({
+  ...tdRow, id, source, date, accountId, originalStatement: 'HARDWARE STORE', amount: -42, split: undefined,
+})
+const octSwitch = { global: '2026-10-01', perAccount: {} }
+const otherBank: Transaction = { ...base('costco', 'monarch', '2026-10-03', 'acct-otherbank'), originalStatement: '' }
+const edge = [
+  base('m-early', 'monarch', '2026-09-30'),
+  base('t-late', 'td', '2026-10-01'),
+  { ...base('m-late', 'monarch', '2026-10-02'), originalStatement: 'GARDEN CENTRE', amount: -15 },
+  { ...base('t-early', 'td', '2026-09-30'), originalStatement: 'GARDEN CENTRE', amount: -15 },
+  otherBank,
+]
+const counted = new Set(ledgerView(edge, octSwitch).map((t) => t.id))
+check('a purchase dated either side by the two feeds counts once — TD side, when TD is on or after the date', counted.has('t-late') && !counted.has('m-early'))
+check('… and the Monarch side, when TD dates it before the switch-over', counted.has('m-late') && !counted.has('t-early'))
+check('an account with no TD feed stays on Monarch after a global switch-over', counted.has('costco'))
+
 console.log('=== Splits ===')
 const splitRow: Transaction = {
   ...tdRow,

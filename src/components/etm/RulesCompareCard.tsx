@@ -3,7 +3,8 @@ import type { EtmData } from './useEtmData'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import { reapplyPlan } from '../../lib/etm/rules/apply'
-import { agreementByMonth, matchFeeds, type FeedPair } from '../../lib/etm/rules/compare'
+import { agreementByMonth, type FeedPair } from '../../lib/etm/rules/compare'
+import { useFeedComparison } from './useFeedComparison'
 import { statementKey } from '../../lib/etm/rules/normalize'
 import type { Outcome, UserRule } from '../../lib/etm/rules/types'
 import { uid } from '../../lib/format'
@@ -21,23 +22,7 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
   const [showLeft, setShowLeft] = useState(false)
   const [showTdOnly, setShowTdOnly] = useState(false)
   const td = useMemo(() => data.allRows.filter((row) => row.source === 'td'), [data.allRows])
-
-  const comparison = useMemo(() => {
-    if (td.length === 0) return null
-    const dates = td.map((row) => row.date).sort()
-    const from = shiftDays(dates[0]!, -3)
-    const to = shiftDays(dates[dates.length - 1]!, 3)
-    const tdAccounts = new Set(td.map((row) => row.accountId))
-    const monarch = data.allRows.filter(
-      (row) => row.source === 'monarch' && row.date >= from && row.date <= to && tdAccounts.has(row.accountId),
-    )
-    return matchFeeds(td, monarch, {
-      accounts: data.accounts,
-      model: data.rules.model,
-      settings: data.rules.settings,
-      reimbursableTag: data.config.reimbursableTag,
-    })
-  }, [data.accounts, data.allRows, data.config.reimbursableTag, data.rules, td])
+  const comparison = useFeedComparison(data)
 
   const plan = useMemo(
     () => (td.length > 0 ? reapplyPlan(data.allRows, data.accounts, data.rules, data.config.categoryGroups) : null),
@@ -283,8 +268,4 @@ function monarchOutcome(pair: FeedPair): Outcome {
     return { merchant, category: lines[0]!.category, tags: lines[0]!.tags, split: lines }
   }
   return { merchant, category: first?.category ?? 'Uncategorized', tags: first?.tags ?? [] }
-}
-
-function shiftDays(date: string, days: number): string {
-  return new Date(Date.parse(date) + days * 86_400_000).toISOString().slice(0, 10)
 }

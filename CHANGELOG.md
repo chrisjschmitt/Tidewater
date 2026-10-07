@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0 — 2026-10-07
+
+### Added
+- Settings → "Switch-over from Monarch": one date for every account with a TD feed, or a date per account. From it, the account's totals come from its TD rows and Monarch's rows are kept for comparison only. Each TD account shows how often it agrees with Monarch and how many rows still need a look, and is marked "looks ready" at 85% agreement with nothing left to look at. Clear or change the date at any time; nothing is moved or deleted.
+
+### Changed
+- A purchase the two feeds date on opposite sides of the switch-over counts once, by TD's date.
+- Accounts with no TD feed (a card from another bank) stay on Monarch after a switch-over, until their purchases are entered by hand.
+- After the switch-over, Month end's Tidy step points to the Review tab, and the Monarch import says its later rows are for comparison only.
+
 ## 0.12.0 — 2026-10-07
 
 ### Added

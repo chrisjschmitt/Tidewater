@@ -19,12 +19,15 @@ interface Props {
   onCreateAccount: (account: Account) => Promise<void>
   onCommit: (plan: ImportPlan, fingerprint?: ExportFingerprint) => Promise<void>
   onUndo: (batch: ImportBatch) => Promise<void>
+  /** Set once any account has switched over to TD: the earliest switch-over date. */
+  switchedFrom?: string
 }
 
 export default function ImportPanel({
   accounts,
   transactions,
   groups,
+  switchedFrom,
   batches,
   incomingFile,
   onIncomingConsumed,
@@ -107,7 +110,10 @@ export default function ImportPanel({
             Bring in a Monarch export
           </h2>
           <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-            Monarch stays the record of what happened. Import as often as you like — rows already
+            {switchedFrom
+              ? `Switched over to TD from ${switchedFrom}: Monarch rows from then on are kept for comparison (Rules vs Monarch) and no longer count, except for accounts with no TD feed. `
+              : 'Monarch stays the record of what happened. '}
+            Import as often as you like — rows already
             here are recognised, and anything you re-categorized there is refreshed here. A
             watched folder only offers a newer file; nothing is written until you bring it in
             here.

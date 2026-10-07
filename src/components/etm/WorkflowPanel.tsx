@@ -97,7 +97,7 @@ export default function WorkflowPanel({ data, budget, month, onMonthChange, onOp
         title="Tidy"
         blurb="Import the latest Monarch export, then sort out anything still missing — the claims in step two are only as good as the tags underneath them."
       >
-        <Tidy untidy={untidy} tag={data.config.reimbursableTag} />
+        <Tidy untidy={untidy} tag={data.config.reimbursableTag} switched={Boolean(data.config.tdCutover)} />
       </Step>
 
       <Step
@@ -375,7 +375,7 @@ function Balances({ data, month, onOpenImport }: { data: EtmData; month: string;
   )
 }
 
-function Tidy({ untidy, tag }: { untidy: ReturnType<typeof findUntidy>; tag: string }) {
+function Tidy({ untidy, tag, switched }: { untidy: ReturnType<typeof findUntidy>; tag: string; switched: boolean }) {
   const nothing =
     untidy.uncategorized.length === 0 &&
     untidy.untaggedCandidates.length === 0 &&
@@ -399,8 +399,9 @@ function Tidy({ untidy, tag }: { untidy: ReturnType<typeof findUntidy>; tag: str
             {untidy.uncategorized.length === 1 ? 'row' : 'rows'}
           </p>
           <p className="mb-2 text-xs text-ink-400">
-            Categorize these in Monarch and import again — Monarch stays the
-            source of record, so a change here would be overwritten.
+            {switched
+              ? 'Categorize these on the Review tab — TD is now the source of record for these accounts.'
+              : 'Categorize these in Monarch and import again — Monarch stays the source of record, so a change here would be overwritten.'}
           </p>
           <TransactionTable rows={untidy.uncategorized.slice(0, 10)} empty="" />
         </div>
