@@ -7,6 +7,8 @@ import TdStatementsCard from './TdStatementsCard'
 import RulesCompareCard from './RulesCompareCard'
 import RulesSettingsCard from './RulesSettingsCard'
 import ReviewPanel from './ReviewPanel'
+import TransactionEditor from './TransactionEditor'
+import Modal from '../Modal'
 import SwitchOverCard from './SwitchOverCard'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
@@ -63,6 +65,8 @@ export default function EtmArea({
   onExpensesChange,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const editingRow = editingId ? data.allRows.find((row) => row.id === editingId) : undefined
   const [incomingFile, setIncomingFile] = useState<File | null>(null)
   const rememberWatchName = useCallback(
     (name: string | undefined) => data.saveSettings({ ...data.config, watchFolderName: name }),
@@ -249,6 +253,7 @@ export default function EtmArea({
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
                 groups={data.config.categoryGroups}
+                onEdit={(t) => setEditingId(t.id.split('#')[0]!)}
                 onCreateAccount={data.persistAccount}
                 onAddManual={data.addManual}
                 onRemove={data.removeManual}
@@ -324,6 +329,17 @@ export default function EtmArea({
           </>
         )}
       </main>
+      {editingRow && (
+        <Modal
+          open
+          onClose={() => setEditingId(null)}
+          width="max-w-3xl"
+          title={`Edit ${editingRow.merchant || 'transaction'}`}
+          subtitle={`${editingRow.date} · ${editingRow.originalStatement || 'entered by hand'} · ${editingRow.amount.toFixed(2)}`}
+        >
+          <TransactionEditor data={data} row={editingRow} onDone={() => setEditingId(null)} />
+        </Modal>
+      )}
     </div>
   )
 }

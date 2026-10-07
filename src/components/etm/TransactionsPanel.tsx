@@ -13,6 +13,7 @@ import {
 import { reimbursableChip } from '../../lib/etm/tags'
 import { amountIn } from '../../lib/etm/format'
 import { createManualTransaction } from '../../lib/etm/manual'
+import { countsAsBudgetSpend } from '../../lib/etm/review'
 import { periodLabel, type Period } from '../../lib/etm/period'
 import type { Account, Transaction } from '../../lib/etm/types'
 import type { GroupId } from '../../lib/types'
@@ -27,6 +28,8 @@ interface Props {
   onRemove: (transaction: Transaction) => Promise<void>
   onCreateAccount: (account: Account) => Promise<void>
   groups?: Record<string, GroupId>
+  /** Opens the editor for a TD or manual row (its stored row, not a split part). */
+  onEdit?: (row: Transaction) => void
 }
 
 /** Beyond this the table is paged, so a decade of history never stalls the view. */
@@ -38,6 +41,7 @@ export default function TransactionsPanel({
   period,
   reimbursableTag,
   groups,
+  onEdit,
   onAddManual,
   onRemove,
   onCreateAccount,
@@ -53,6 +57,20 @@ export default function TransactionsPanel({
     () => filterTransactions(transactions, period, filters),
     [transactions, period, filters],
   )
+
+  // The Budget tab's “spent”, row by row: oldest first, so the newest row's
+  // figure is the period's total and can be matched against the Budget tab.
+  const budgetRunning = useMemo(() => {
+    const running = new Map<string, number>()
+    let sum = 0
+    const chronological = [...rows].sort((a, z) => a.date.localeCompare(z.date) || a.id.localeCompare(z.id))
+    for (const t of chronological) {
+      if (t.currency !== 'CAD' || !countsAsBudgetSpend(t, reimbursableTag, accounts)) continue
+      sum = Math.round((sum - t.amount) * 100) / 100
+      running.set(t.id, sum)
+    }
+    return { running, total: sum }
+  }, [rows, reimbursableTag, accounts])
 
   const totals = useMemo(() => {
     const inbound = sumOf(rows.filter((t) => t.amount > 0))
@@ -79,15 +97,20 @@ export default function TransactionsPanel({
             </p>
           </div>
           <button onClick={() => setAdding(true)} className="btn-primary text-xs">
-            Add cash spending
+            Add a transaction
           </button>
         </header>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-4">
           <Totals label="Money in" money={totals.inbound} />
           <Totals label="Money out" money={totals.outbound} />
           <Totals label="Net" money={totals.net} signed />
+          <Totals label="Budget spend (CAD)" money={{ CAD: budgetRunning.total, USD: 0 }} />
         </div>
+        <p className="mt-2 text-xs text-ink-400">
+          Budget spend counts what the Budget tab counts: no transfers or card payments, nothing held as
+          reimbursable, no income, no accounts kept out of the budget. Its running figure is the last column below.
+        </p>
       </section>
 
       <section className="card p-6">
@@ -198,6 +221,7 @@ export default function TransactionsPanel({
                     <Th>Account</Th>
                     <Th>Whose</Th>
                     <Th right>Amount</Th>
+                    <Th right>Budget so far</Th>
                     <Th />
                   </tr>
                 </thead>
@@ -212,7 +236,8 @@ export default function TransactionsPanel({
                       <td className="max-w-xs px-4 py-2.5">
                         <span className="flex items-center gap-2 truncate text-ink-900">
                           {t.merchant || t.originalStatement || t.category}
-                          {t.source === 'manual' && <Tag>Cash</Tag>}
+                          {t.source === 'manual' && <Tag>Manual</Tag>}
+                          {t.source === 'td' && <Tag>TD</Tag>}
                           {t.internal && <Tag>Internal</Tag>}
                           {heldOut && <Tag>{heldOut}</Tag>}
                         </span>
@@ -239,7 +264,19 @@ export default function TransactionsPanel({
                       >
                         {amountIn(t.amount, t.currency)}
                       </td>
-                      <td className="px-2 py-2.5 text-right">
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-xs text-ink-400">
+                        {budgetRunning.running.has(t.id) ? amountIn(budgetRunning.running.get(t.id)!, 'CAD') : '—'}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2.5 text-right">
+                        {onEdit && (t.source === 'td' || t.source === 'manual') && (
+                          <button
+                            onClick={() => onEdit(t)}
+                            className="mr-2 text-xs text-ink-500 transition hover:text-tide-700"
+                            aria-label={`Edit ${t.merchant}`}
+                          >
+                            Edit
+                          </button>
+                        )}
                         {t.source === 'manual' && (
                           <button
                             onClick={() => void onRemove(t)}

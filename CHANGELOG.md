@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.1 — 2026-10-07
+
+### Added
+- Transactions: an Edit button on every TD and manually entered row opens one form for merchant, comment, category, tags and split. Saved into the day's review session (one Undo under Past imports).
+- A comment on any TD transaction (in Edit, or Change… on the Review tab), shown under the row.
+- Transactions: a "Budget so far" running total and a "Budget spend" total that count exactly what the Budget tab counts — no transfers or card payments, nothing held as reimbursable, no income, no excluded accounts — so the newest row matches the Budget tab's spent for the same period and filters.
+
+### Changed
+- "Add cash spending" is now "Add a transaction": any account (a card no file covers, say), with a comment. Rows are marked TD or Manual in the list.
+
 ## 0.13.0 — 2026-10-07
 
 ### Added

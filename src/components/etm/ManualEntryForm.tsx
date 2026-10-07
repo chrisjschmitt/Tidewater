@@ -72,8 +72,8 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
       open
       onClose={onClose}
       width="max-w-lg"
-      title="Add cash spending"
-      subtitle="For what no export knows about. It is kept apart from imported rows and never overwritten."
+      title="Add a transaction"
+      subtitle="Cash, or an account no file covers (a card from another bank). Kept apart from imported rows and never overwritten."
       footer={
         <div className="flex items-center justify-end gap-2">
           <button onClick={onClose} className="btn-ghost">
@@ -175,7 +175,7 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
               onChange={(e) => set('category', e.target.value)}
             />
             <span className="mt-1 block text-xs text-ink-400">
-              Use the same wording as Monarch and it will group the same way.
+              Use the same wording as your other categories so it groups the same way.
             </span>
           </label>
         </div>
@@ -199,6 +199,16 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
             />
           </label>
         </div>
+
+        <label className="block">
+          <span className="label mb-1.5">Comment</span>
+          <input
+            className="field"
+            placeholder="Optional"
+            value={entry.notes}
+            onChange={(e) => set('notes', e.target.value)}
+          />
+        </label>
 
         {error && <p className="text-sm text-shell-500">{error}</p>}
       </div>

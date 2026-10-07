@@ -7,6 +7,9 @@
  * amount appears anywhere here.
  */
 import { readFileSync } from 'node:fs'
+import { aggregate } from '../src/lib/etm/aggregate.ts'
+import { monthPeriod } from '../src/lib/etm/period.ts'
+import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
 import { planTdImport } from '../src/lib/etm/importer.ts'
 import { counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
@@ -214,6 +217,29 @@ const noHistory = reviewRows(accounts, new Map(), '2026-10', { balances: [], dow
 check('missing and nothing recorded before: nothing invented', !noHistory.reading && !noHistory.carriedFrom)
 const lateMonth = reviewRows(accounts, quietRead, '2026-11', { balances: [], downloadDate: '2026-10-07' }).find((r) => r.account.id === visa.id)!
 check('a download from before the month carries nothing into it', !lateMonth.carriedFrom && lateMonth.outsideMonth === true)
+
+console.log('=== Editing and the budget running total ===')
+const mk = (id: string, amount: number, category: string, extra: Partial<Transaction> = {}): Transaction => ({
+  ...tdRow, id, date: '2026-10-03', amount, category, tags: [], internal: category === 'Transfer', split: undefined, ...extra,
+})
+const sample = [
+  mk('g', -80, 'Groceries'),
+  mk('r', 20, 'Groceries'),
+  mk('x', -500, 'Transfer'),
+  mk('i', 1500, 'Paycheck'),
+  mk('rb', -0.5, 'Financial Fees', { tags: ['Reimbursable: Sam Personal'] }),
+  mk('ex', -40, 'Dining', { accountId: 'acct-excluded' }),
+]
+const accts = [...accounts, { ...chequing, id: 'acct-excluded', excludedFromBudget: true }]
+const budgetSpend = aggregate(sample, monthPeriod('2026-10'), { excludeAccountIds: new Set(['acct-excluded']), reimbursableTag: 'Reimbursable' }).spend.CAD
+const runningSpend = sample.filter((t) => countsAsBudgetSpend(t, 'Reimbursable', accts)).reduce((s, t) => s - t.amount, 0)
+check('running total counts exactly what the Budget tab counts', Math.round(runningSpend * 100) === Math.round(budgetSpend * 100), `${runningSpend} vs ${budgetSpend}`)
+const tagged = settleRow(mk('fee', -0.5, 'Financial Fees'), { merchant: 'TD', notes: 'paid for Sam', lines: [{ amount: -0.5, category: 'Financial Fees', tags: ['Reimbursable: Sam Personal'] }] })
+check('editing a row sets tags, comment and confirms it', tagged.tags[0] === 'Reimbursable: Sam Personal' && tagged.notes === 'paid for Sam' && tagged.reviewed && tagged.prediction?.layer === 'manual')
+const splitEdit = settleRow(mk('sp', -100, 'Uncategorized'), { merchant: 'Store', lines: [{ amount: -70, category: 'Groceries', tags: [] }, { amount: -30, category: 'Gifts', tags: [] }] })
+check('a split edit names the row by its largest part', splitEdit.category === 'Groceries' && splitEdit.split?.length === 2)
+const unsplit = settleRow(splitEdit, { merchant: 'Store', lines: [{ amount: -100, category: 'Groceries', tags: [] }] })
+check('one line clears the split', !unsplit.split)
 
 console.log('=== Download progress ===')
 const day = '2026-10-07'

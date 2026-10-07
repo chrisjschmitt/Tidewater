@@ -1,13 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { EtmData } from './useEtmData'
-import { isInternalCategory } from '../../lib/categories'
+import TransactionEditor from './TransactionEditor'
+import { settleRow } from '../../lib/etm/review'
 import { amountIn } from '../../lib/etm/format'
-import { etmGroupFor } from '../../lib/etm/groups'
 import { monthName } from '../../lib/etm/period'
-import { statementKey } from '../../lib/etm/rules/normalize'
 import type { UserRule } from '../../lib/etm/rules/types'
 import type { SplitLine, Transaction } from '../../lib/etm/types'
-import { uid } from '../../lib/format'
 
 /**
  * The TD rows the rules could not settle, and the ones they did, for the user
@@ -19,11 +17,6 @@ import { uid } from '../../lib/format'
 
 type Show = 'needs' | 'unconfirmed' | 'confirmed' | 'all'
 
-interface Draft {
-  merchant: string
-  lines: Array<{ amount: string; category: string; tags: string }>
-  remember: 'none' | 'merchant' | 'amount'
-}
 
 const needsLook = (row: Transaction) =>
   !row.reviewed &&
@@ -35,7 +28,6 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
   const [month, setMonth] = useState<string>('')
   const [show, setShow] = useState<Show>('needs')
   const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Draft | null>(null)
   const [limit, setLimit] = useState(40)
   const [busy, setBusy] = useState(false)
   const activeMonth = month || months[0] || ''
@@ -52,36 +44,10 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
     )
     .sort((a, z) => z.date.localeCompare(a.date) || a.originalStatement.localeCompare(z.originalStatement))
 
-  const categories = useMemo(() => {
-    const names = new Set<string>(data.rules.model.categories)
-    for (const row of data.allRows) if (row.category && row.category !== 'Uncategorized') names.add(row.category)
-    return [...names].sort((a, z) => a.localeCompare(z))
-  }, [data.allRows, data.rules.model.categories])
-  const knownTags = useMemo(() => [...new Set(data.allRows.flatMap((row) => row.tags))].sort(), [data.allRows])
   const accountName = (id: string) => data.accounts.find((a) => a.id === id)?.nickname ?? ''
 
-  /** The row as the user settled it: confirmed, with its category, tags and split recomputed together. */
-  const settle = (row: Transaction, merchant: string, lines: SplitLine[]): Transaction => {
-    const main = [...lines].sort((a, z) => Math.abs(z.amount) - Math.abs(a.amount))[0]!
-    const next: Transaction = {
-      ...row,
-      merchant,
-      category: main.category,
-      groupId: etmGroupFor(main.category, data.config.categoryGroups),
-      internal: isInternalCategory(main.category),
-      tags: main.tags,
-      reviewed: true,
-      prediction: {
-        layer: 'manual',
-        confidence: 'high',
-        reviewReasons: [],
-        ...(row.prediction?.suggestions ? { suggestions: row.prediction.suggestions } : {}),
-      },
-    }
-    if (lines.length > 1) next.split = lines
-    else delete next.split
-    return next
-  }
+  const settle = (row: Transaction, merchant: string, lines: SplitLine[]) =>
+    settleRow(row, { merchant, lines }, data.config.categoryGroups)
 
   const save = async (rows: Transaction[], rule?: UserRule) => {
     setBusy(true)
@@ -98,48 +64,6 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
     } finally {
       setBusy(false)
     }
-  }
-
-  const openEditor = (row: Transaction) => {
-    setEditing(row.id)
-    const lines = row.split ?? [{ amount: row.amount, category: row.category === 'Uncategorized' ? '' : row.category, tags: row.tags }]
-    setDraft({
-      merchant: row.merchant,
-      lines: lines.map((line) => ({ amount: Math.abs(line.amount).toFixed(2), category: line.category, tags: line.tags.join(', ') })),
-      remember: 'none',
-    })
-  }
-
-  const saveDraft = async (row: Transaction) => {
-    if (!draft) return
-    const sign = row.amount < 0 ? -1 : 1
-    const lines: SplitLine[] = draft.lines.map((line) => ({
-      amount: Math.round(sign * Number(line.amount || 0) * 100) / 100,
-      category: line.category.trim(),
-      tags: line.tags.split(',').map((t) => t.trim()).filter(Boolean),
-    }))
-    const next = settle(row, draft.merchant.trim() || row.merchant, lines)
-    let rule: UserRule | undefined
-    if (draft.remember !== 'none') {
-      const total = lines.reduce((s, l) => s + l.amount, 0)
-      rule = {
-        id: uid('rule'),
-        key: statementKey(row.originalStatement),
-        outcome: {
-          merchant: next.merchant,
-          category: next.category,
-          tags: next.tags,
-          ...(lines.length > 1
-            ? { split: lines.map((l) => ({ category: l.category, tags: l.tags, share: total === 0 ? 0 : l.amount / total })) }
-            : {}),
-        },
-        createdAt: new Date().toISOString(),
-        ...(draft.remember === 'amount' ? { amount: row.amount } : {}),
-      }
-    }
-    await save([next], rule)
-    setEditing(null)
-    setDraft(null)
   }
 
   if (td.length === 0) {
@@ -225,6 +149,7 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
                   {lines.map((l) => `${l.category}${lines.length > 1 ? ` ${amountIn(l.amount, row.currency)}` : ''}`).join(' + ')}
                 </span>
                 {row.tags.length > 0 && <span className="text-xs text-ink-400">{row.tags.join(', ')}</span>}
+                {row.notes && <span className="text-xs italic text-ink-500">{row.notes}</span>}
                 {row.reviewed && <span className="rounded-full bg-tide-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-tide-700">Confirmed</span>}
                 {!row.reviewed && row.prediction?.layer && (
                   <span className="text-[10px] uppercase tracking-wider text-ink-400">{row.prediction.layer}</span>
@@ -265,26 +190,16 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
                       Confirm
                     </button>
                   )}
-                  <button className="btn-quiet text-xs" onClick={() => openEditor(row)}>
+                  <button className="btn-quiet text-xs" onClick={() => setEditing(row.id)}>
                     Change…
                   </button>
                 </div>
               )}
 
-              {editing === row.id && draft && (
-                <Editor
-                  row={row}
-                  draft={draft}
-                  categories={categories}
-                  tags={knownTags}
-                  busy={busy}
-                  onChange={setDraft}
-                  onCancel={() => {
-                    setEditing(null)
-                    setDraft(null)
-                  }}
-                  onSave={() => void saveDraft(row)}
-                />
+              {editing === row.id && (
+                <div className="mt-3">
+                  <TransactionEditor data={data} row={row} onDone={() => setEditing(null)} />
+                </div>
               )}
             </li>
           )
@@ -296,122 +211,6 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
           Show more ({listed.length - limit} left)
         </button>
       )}
-      <datalist id="review-categories">
-        {categories.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
     </section>
-  )
-}
-
-function Editor({
-  row,
-  draft,
-  categories,
-  tags,
-  busy,
-  onChange,
-  onCancel,
-  onSave,
-}: {
-  row: Transaction
-  draft: Draft
-  categories: string[]
-  tags: string[]
-  busy: boolean
-  onChange: (draft: Draft) => void
-  onCancel: () => void
-  onSave: () => void
-}) {
-  void categories
-  const total = Math.abs(row.amount)
-  const used = draft.lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
-  const remainder = Math.round((total - used) * 100) / 100
-  const valid = remainder === 0 && draft.lines.every((line) => line.category.trim() && Number(line.amount) > 0)
-  const setLine = (index: number, patch: Partial<Draft['lines'][number]>) =>
-    onChange({ ...draft, lines: draft.lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) })
-
-  return (
-    <div className="mt-3 space-y-2 rounded-2xl bg-sand-100/60 p-3">
-      <label className="flex items-center gap-2 text-xs text-ink-500">
-        Merchant
-        <input className="field flex-1 py-1 text-sm" value={draft.merchant} onChange={(e) => onChange({ ...draft, merchant: e.target.value })} />
-      </label>
-      {draft.lines.map((line, index) => (
-        <div key={index} className="flex flex-wrap items-center gap-2">
-          <input
-            className="field w-24 py-1 text-right text-sm tabular-nums"
-            inputMode="decimal"
-            aria-label="Amount"
-            value={line.amount}
-            onChange={(e) => setLine(index, { amount: e.target.value })}
-          />
-          <input
-            className="field w-56 py-1 text-sm"
-            list="review-categories"
-            placeholder="Category"
-            value={line.category}
-            onChange={(e) => setLine(index, { category: e.target.value })}
-          />
-          <input
-            className="field w-64 py-1 text-sm"
-            list={`review-tags-${row.id}`}
-            placeholder="Tags, comma separated"
-            value={line.tags}
-            onChange={(e) => setLine(index, { tags: e.target.value })}
-          />
-          {draft.lines.length > 1 && (
-            <button className="btn-quiet text-xs" onClick={() => onChange({ ...draft, lines: draft.lines.filter((_, i) => i !== index) })}>
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
-      <datalist id={`review-tags-${row.id}`}>
-        {tags.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <button
-          className="btn-quiet text-xs"
-          onClick={() =>
-            onChange({
-              ...draft,
-              lines: [...draft.lines, { amount: remainder > 0 ? remainder.toFixed(2) : '', category: '', tags: '' }],
-            })
-          }
-        >
-          + Split off a part
-        </button>
-        <span className={remainder === 0 ? 'text-ink-400' : 'text-shell-500'}>
-          {remainder === 0 ? 'Adds up to the row' : `${remainder > 0 ? 'Still to place' : 'Over by'} ${Math.abs(remainder).toFixed(2)}`}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 text-xs text-ink-500">
-        Remember for next time:
-        {(
-          [
-            ['none', 'No, just this one'],
-            ['merchant', 'This merchant'],
-            ['amount', 'This merchant at this amount'],
-          ] as Array<[Draft['remember'], string]>
-        ).map(([id, label]) => (
-          <label key={id} className="flex items-center gap-1">
-            <input type="radio" checked={draft.remember === id} onChange={() => onChange({ ...draft, remember: id })} />
-            {label}
-          </label>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <button disabled={busy || !valid} className="btn-primary text-xs disabled:opacity-50" onClick={onSave}>
-          Save and confirm
-        </button>
-        <button className="btn-ghost text-xs" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </div>
   )
 }
