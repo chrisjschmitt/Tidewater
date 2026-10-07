@@ -98,6 +98,12 @@ check('newest-first card, several rows on the last day: the first of them closes
 const sameDayBank = parseStatementCsv(['2026-10-04,A,1,,100', '2026-10-05,B,2,,98', '2026-10-05,C,3,,95'].join('\n'))
 check('oldest-first bank, several rows on the last day: the last of them closes', sameDayBank.balance === 95, `${sameDayBank.balance}`)
 check('trailing empty column on card lines is not taken as the balance', sameDay.rows === 4)
+const oneDayCard = parseStatementCsv(
+  ['10/05/2026,SHOP A,62.15,,472.32,', '10/05/2026,SHOP B,68.75,,410.17,', '10/05/2026,PAYMENT,,3051.33,341.42,'].join('\n'),
+)
+check('every row on one day: the running balances decide the order', oneDayCard.balance === 472.32, `${oneDayCard.balance}`)
+const oneDayBank = parseStatementCsv(['2026-10-05,A,1,,99', '2026-10-05,B,,10,109', '2026-10-05,C,4,,105'].join('\n'))
+check('every row on one day, oldest first: the last row closes', oneDayBank.balance === 105, `${oneDayBank.balance}`)
 
 console.log('=== TD import plan and dedup ===')
 const plan1 = await planTdImport(first, {

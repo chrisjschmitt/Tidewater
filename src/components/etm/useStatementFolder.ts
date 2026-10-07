@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { planTdImport, type ImportPlan, type TdCategorizer } from '../../lib/etm/importer'
 import { parseStatementCsv, StatementFormatError } from '../../lib/etm/statement'
-import { newestCombined, parseTdCombinedCsv, pseudoFileName, TdFileError } from '../../lib/etm/td'
+import { newestCombined, parseTdCombinedCsv, pseudoFileName, TdFileError, type TdAccountBlock } from '../../lib/etm/td'
 import type { GroupId } from '../../lib/types'
 import {
   balanceAnchors,
@@ -32,6 +32,11 @@ export interface StatementFolderReview {
   rows: StatementReviewRow[]
   /** Files in the folder that belong to no account on this step. */
   unmatched: StatementFileName[]
+  /**
+   * Accounts in the downloader's combined file that match no account in the
+   * registry at all — almost always a missing “last four” on the Accounts tab.
+   */
+  unknownInFile?: string[]
   skipped: string[]
   /** Account ids the user is willing to record. Partial is allowed. */
   checked: Set<string>
@@ -121,10 +126,12 @@ export function useStatementFolder(
       // export would have been, and its rows become the TD feed.
       let files = listed
       let feed: StatementFolderReview['feed']
+      const blockNames = new Map<string, TdAccountBlock>()
       const combined = newestCombined(listed.map((file) => file.name))
       if (combined) {
         const source = listed.find((file) => file.name === combined.name)!
         const blocks = parseTdCombinedCsv(await source.text())
+        for (const block of blocks) blockNames.set(pseudoFileName(block, combined.date), block)
         files = blocks.map((block) => ({
           name: pseudoFileName(block, combined.date),
           text: async () => block.asStatementText,
@@ -163,6 +170,17 @@ export function useStatementFolder(
         // A combined file's blocks for accounts this step does not ask about
         // (Chris's own account, say) are expected, not worth flagging.
         unmatched: combined ? [] : match.unmatched,
+        ...(combined
+          ? {
+              unknownInFile: matchStatementFiles(
+                accounts,
+                files.map((file) => file.name),
+              ).unmatched.map((file) => {
+                const block = blockNames.get(file.name)
+                return block ? `${block.account} (…${block.lastFour})` : file.name
+              }),
+            }
+          : {}),
         skipped: match.skipped,
         // Everything readable starts checked: the common case is that the
         // whole folder is right, and the point of the step is not to retype it.

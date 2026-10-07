@@ -73,3 +73,11 @@ export function notifyMac(title: string, message: string): Promise<void> {
     execFile('osascript', ['-e', script], () => resolve())
   })
 }
+
+/** Opens Finder with the file selected, so it can be dragged straight into Tidewater. Mac only, best effort. */
+export function revealInFinder(path: string): Promise<void> {
+  if (process.platform !== 'darwin') return Promise.resolve()
+  return new Promise((resolve) => {
+    execFile('open', ['-R', path], () => resolve())
+  })
+}

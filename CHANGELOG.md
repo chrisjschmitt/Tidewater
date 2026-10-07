@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.3 — 2026-10-07
+
+### Added
+- The Closing balances box takes a dropped file: drag the TD-transactions file from Finder onto it instead of steering a file dialog to the right folder. The downloader (0.2.1) now opens Finder with that file selected when a run finishes.
+
+### Fixed
+- Reading the combined TD file now says when an account was not recorded because no account here has its last four digits — both on the account's own row and as a list of what in the file went unmatched.
+- A card statement whose rows all fall on one day now closes on the right row too: the running balances, not just the dates, decide which way the file runs.
+
 ## 0.10.2 — 2026-10-07
 
 ### Fixed

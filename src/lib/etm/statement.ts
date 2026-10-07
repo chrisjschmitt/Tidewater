@@ -41,7 +41,7 @@ export function parseStatementCsv(text: string): StatementReading {
   // A statement that happens to carry headings is common enough to survive.
   const body = looksLikeHeading(rows[0]!) ? rows.slice(1) : rows
 
-  const readings: Array<{ date: string; balance: number }> = []
+  const readings: Array<{ date: string; balance: number; change: number }> = []
   for (const row of body) {
     const date = parseStatementDate(row[0] ?? '')
     // The running balance is the last filled cell: card exports end each line
@@ -51,7 +51,10 @@ export function parseStatementCsv(text: string): StatementReading {
     while (last > 1 && cells[last] === '') last--
     const balance = parseNumber(cells[last] ?? '')
     if (!date || balance === null) continue
-    readings.push({ date, balance })
+    // Debit minus credit; its sign against the balance differs between bank
+    // and card files, which fileRunsNewestFirst tries both ways.
+    const change = (last > 2 ? (parseNumber(cells[2] ?? '') ?? 0) - (parseNumber(cells[3] ?? '') ?? 0) : 0)
+    readings.push({ date, balance, change })
   }
 
   if (readings.length === 0) {
@@ -66,7 +69,7 @@ export function parseStatementCsv(text: string): StatementReading {
   // newest-first file the closing row is the first of them, not the last.
   const sorted = [...readings].sort((a, z) => a.date.localeCompare(z.date))
   const latest = sorted[sorted.length - 1]!.date
-  const newestFirst = readings[0]!.date > readings[readings.length - 1]!.date
+  const newestFirst = fileRunsNewestFirst(readings)
   const onLatest = readings.filter((reading) => reading.date === latest)
   const closing = newestFirst ? onLatest[0]! : onLatest[onLatest.length - 1]!
 
@@ -116,4 +119,24 @@ export function parseNumber(raw: string): number | null {
   const parsed = Number.parseFloat(cleaned)
   if (!Number.isFinite(parsed)) return null
   return negated ? -parsed : parsed
+}
+
+/**
+ * Which way a statement runs. The running balance says it most reliably: in
+ * file order, each balance either follows from the one above it (oldest
+ * first) or leads to it (newest first). Dates decide only when the balances
+ * cannot — every row on one day is common enough on a card.
+ */
+function fileRunsNewestFirst(readings: Array<{ date: string; balance: number; change: number }>): boolean {
+  const close = (a: number, b: number) => Math.abs(a - b) < 0.005
+  let ascending = 0
+  let descending = 0
+  for (let i = 1; i < readings.length; i++) {
+    const before = readings[i - 1]!
+    const here = readings[i]!
+    if (close(here.balance, before.balance + here.change) || close(here.balance, before.balance - here.change)) ascending++
+    if (close(before.balance, here.balance + before.change) || close(before.balance, here.balance - before.change)) descending++
+  }
+  if (ascending !== descending) return descending > ascending
+  return readings[0]!.date > readings[readings.length - 1]!.date
 }

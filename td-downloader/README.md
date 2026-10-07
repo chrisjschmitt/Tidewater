@@ -36,7 +36,8 @@ Combined file ready: TD-transactions-2026-10-07.csv (212 rows, 9 of 9 accounts) 
 ```
 
 On a Mac the same line also arrives as a notification, so you see it even when
-Terminal is behind Tidewater.
+Terminal is behind Tidewater, and Finder opens with the combined file selected —
+drag it onto Tidewater's Closing balances box to read it.
 
 You do **not** need `npx playwright install`. Playwright's bundled browsers are
 never used — the tool only ever attaches to your real Chrome over CDP, and it

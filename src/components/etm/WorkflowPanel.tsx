@@ -310,6 +310,7 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
   const download = useDownloadProgress(folder.handle, data.accounts)
   const [downloaderHere, setDownloaderHere] = useState(readDownloaderHere)
   const canDownload = downloaderAvailableHere()
+  const [dragging, setDragging] = useState(false)
   // The picker-dialog path for browsers that cannot hold a folder handle —
   // the iPad above all. One multi-select in Files beats nine single reads.
   const filePicker = useRef<HTMLInputElement>(null)
@@ -336,7 +337,22 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
           onRead={() => void folder.readFolder()}
         />
       )}
-      <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+      <div
+        className={`rounded-2xl px-4 py-3.5 transition-colors ${dragging ? 'bg-tide-50 ring-2 ring-tide-300' : 'bg-white/70'}`}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes('Files')) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'copy'
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragging(false)
+          const files = Array.from(event.dataTransfer.files).filter((file) => /\.csv$/i.test(file.name))
+          if (files.length > 0) void folder.readFiles(files)
+        }}
+      >
         <p className="text-sm font-medium text-ink-900">
           {folder.supported ? 'Read a folder of statements' : 'Read the statement files together'}
         </p>
@@ -394,6 +410,7 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
               >
                 {folder.busy ? 'Reading…' : 'Choose the statement files'}
               </button>
+              <span className="text-xs text-ink-400">or drag the TD-transactions file onto this box</span>
             </>
           )}
         </div>
@@ -531,13 +548,23 @@ function StatementFolderReviewTable({
                     ? `${amountIn(row.balance, row.account.currency)} as of ${row.reading.date} · ${row.reading.rows.toLocaleString()} rows · ${row.file.name}`
                     : row.error
                       ? `${row.file?.name ?? 'That file'} — ${row.error}`
-                      : 'No file for this account in that folder'}
+                      : !row.account.lastFour?.trim()
+                        ? 'Not recorded: this account has no last four digits, so nothing in the file could be matched to it. Add them on the Accounts tab, then read the file again.'
+                        : `Nothing in the file for …${row.account.lastFour}. TD skips an account with no transactions in the period; enter its balance by hand if so.`}
                 </span>
               </span>
             </label>
           )
         })}
       </div>
+
+      {review.unknownInFile && review.unknownInFile.length > 0 && (
+        <p className="rounded-xl bg-sand-100 px-3 py-2 text-sm text-shell-500">
+          In the file but not matched to any account, so not recorded:{' '}
+          {review.unknownInFile.join(', ')}. Add those last four digits to the right account on the
+          Accounts tab, then read the file again.
+        </p>
+      )}
 
       {review.unmatched.length > 0 && (
         <p className="text-xs text-ink-400">

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { ConfigError, loadConfig } from './config.js'
 import { RunAbort, runDownloads } from './engine.js'
 import { RUNS_DIR_NAME } from './manifest.js'
-import { formatCombined, formatReport, formatSummary, notifyMac } from './report.js'
+import { formatCombined, formatReport, formatSummary, notifyMac, revealInFinder } from './report.js'
 import { REAUTH_MESSAGE } from './session-guard.js'
 import type { PacingRange } from './types.js'
 
@@ -47,6 +47,9 @@ async function main(): Promise<void> {
   const combinedLine = formatCombined(outcome.combined, config.accounts.length)
   console.log(combinedLine)
   await notifyMac('TD download finished', combinedLine)
+  // Finder opens on the file, selected, ready to drag onto Tidewater's
+  // Closing balances step — no file dialog to steer to the right folder.
+  if (outcome.combined?.file) await revealInFinder(outcome.combined.file)
 
   if (outcome.sessionBlocked) {
     console.log('')
