@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.4 — 2026-10-07
+
+### Fixed
+- "Remember for next time" now keeps the comment too — the transaction's and each split part's — and writes it on matching TD rows from then on (never over a comment already there).
+
+### Changed
+- Taught rules in Settings read as a sentence: which bank text (and amount) they match, the merchant name, the category or the split with its percentages or amounts, tags and comments.
+
 ## 0.13.3 — 2026-10-07
 
 ### Changed

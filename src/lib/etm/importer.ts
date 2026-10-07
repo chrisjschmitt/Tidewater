@@ -180,6 +180,7 @@ export interface TdOutcome {
   tags: string[]
   split?: SplitLine[]
   prediction: Prediction
+  notes?: string
 }
 
 export type TdCategorizer = (row: TdFeedRow, account: Account) => TdOutcome
@@ -266,7 +267,7 @@ export async function planTdImport(
         date: row.date,
         merchant: outcome.merchant,
         originalStatement: row.description,
-        notes: '',
+        notes: outcome.notes ?? '',
         amount: row.amount,
         currency: account.currency,
         accountId: account.id,

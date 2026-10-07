@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { EtmData } from './useEtmData'
 import { normalizeTag } from '../../lib/etm/tags'
 import { statementKey } from '../../lib/etm/rules/normalize'
-import type { RuleSettings } from '../../lib/etm/rules/types'
+import type { Outcome, RuleSettings } from '../../lib/etm/rules/types'
 
 /**
  * The rules engine's settings, on the Settings tab. Most of what the rules know
@@ -345,20 +345,22 @@ export default function RulesSettingsCard({ data }: { data: EtmData }) {
       ) : (
         <ul className="mt-2 space-y-1">
           {settings.userRules.map((rule) => (
-            <li key={rule.id} className="flex items-center justify-between gap-3 text-sm">
-              <span className="min-w-0 truncate">
-                <span className="text-ink-500">
-                  {rule.key}
-                  {rule.amount !== undefined && ` at ${rule.amount.toFixed(2)}`}
-                </span>{' '}
-                →{' '}
-                <span className="text-ink-900">
-                  {rule.outcome.split ? rule.outcome.split.map((l) => l.category).join(' + ') : rule.outcome.category}
-                </span>
-                {rule.outcome.tags.length > 0 && <span className="text-ink-400"> · {rule.outcome.tags.join(', ')}</span>}
+            <li key={rule.id} className="flex items-start justify-between gap-3 border-b border-sand-200/70 py-1.5 text-sm last:border-0">
+              <span className="min-w-0 text-ink-700">
+                When the bank text is <span className="font-medium text-ink-900">{rule.key}</span>
+                {rule.amount !== undefined ? ` and the amount is exactly ${Math.abs(rule.amount).toFixed(2)}` : ' (any amount)'}
+                {rule.accountId && ` on ${data.accounts.find((a) => a.id === rule.accountId)?.nickname ?? 'one account'}`}:{' '}
+                name it <span className="text-ink-900">{rule.outcome.merchant}</span>, and file it{' '}
+                {describeOutcome(rule.outcome)}
+                {rule.outcome.notes && (
+                  <>
+                    , with the comment <span className="italic">“{rule.outcome.notes}”</span>
+                  </>
+                )}
+                .
               </span>
               <button
-                className="btn-quiet text-xs"
+                className="btn-quiet shrink-0 text-xs"
                 onClick={() => void save((rules) => ({ ...rules, userRules: rules.userRules.filter((r) => r.id !== rule.id) }))}
               >
                 Remove
@@ -368,5 +370,36 @@ export default function RulesSettingsCard({ data }: { data: EtmData }) {
         </ul>
       )}
     </section>
+  )
+}
+
+/** “under Groceries (tag …)” or, for a split, “as 60% Groceries + 40% Gifts (tag …, “comment”)”. */
+function describeOutcome(outcome: Outcome) {
+  const extras = (tags: string[], notes?: string) => {
+    const bits = [...(tags.length > 0 ? [`tag ${tags.join(', ')}`] : []), ...(notes ? [`“${notes}”`] : [])]
+    return bits.length > 0 ? ` (${bits.join(', ')})` : ''
+  }
+  if (!outcome.split || outcome.split.length < 2) {
+    return (
+      <>
+        under <span className="text-ink-900">{outcome.category}</span>
+        {extras(outcome.tags)}
+      </>
+    )
+  }
+  return (
+    <>
+      as{' '}
+      {outcome.split.map((line, index) => (
+        <span key={index}>
+          {index > 0 && ' + '}
+          <span className="text-ink-900">
+            {line.amount !== undefined ? `$${line.amount.toFixed(2)}` : `${Math.round(Math.abs(line.share ?? 0) * 1000) / 10}%`}{' '}
+            {line.category}
+          </span>
+          {extras(line.tags, line.notes)}
+        </span>
+      ))}
+    </>
   )
 }

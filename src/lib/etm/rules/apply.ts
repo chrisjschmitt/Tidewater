@@ -37,7 +37,7 @@ export function historyRows(all: Transaction[], accounts: Account[]): HistoryRow
 }
 
 const toLines = (outcome: Outcome): SplitLine[] | undefined =>
-  outcome.split?.map((line) => ({ amount: line.amount ?? 0, category: line.category, tags: line.tags }))
+  outcome.split?.map((line) => ({ amount: line.amount ?? 0, category: line.category, tags: line.tags, ...(line.notes ? { notes: line.notes } : {}) }))
 
 const suggestionOf = (outcome: Outcome) => ({
   merchant: outcome.merchant,
@@ -67,6 +67,7 @@ export function toTdOutcome(result: RuleResult, fallbackMerchant: string): TdOut
     category: result.outcome.category,
     tags: result.outcome.tags,
     ...(split ? { split } : {}),
+    ...(result.outcome.notes ? { notes: result.outcome.notes } : {}),
     prediction,
   }
 }
@@ -108,6 +109,8 @@ export function reapplyPlan(
       groupId: etmGroupFor(outcome.category, groups),
       internal: isInternalCategory(outcome.category),
       tags: outcome.tags,
+      // A rule's comment fills an empty one; it never overwrites what was written.
+      notes: row.notes || outcome.notes || '',
       prediction: outcome.prediction,
       split: outcome.split,
     }
@@ -138,6 +141,7 @@ function sameOutcome(a: Transaction, z: Transaction): boolean {
     a.category === z.category &&
     a.merchant === z.merchant &&
     a.tags.join('\u0000') === z.tags.join('\u0000') &&
+    a.notes === z.notes &&
     JSON.stringify(a.split ?? null) === JSON.stringify(z.split ?? null) &&
     JSON.stringify(a.prediction?.reviewReasons ?? []) === JSON.stringify(z.prediction?.reviewReasons ?? [])
   )

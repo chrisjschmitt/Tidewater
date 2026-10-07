@@ -5,7 +5,7 @@
  *
  * Every account, merchant and amount here is invented.
  */
-import { reapplyPlan } from '../src/lib/etm/rules/apply.ts'
+import { reapplyPlan, rulesCategorizer } from '../src/lib/etm/rules/apply.ts'
 import { matchFeeds } from '../src/lib/etm/rules/compare.ts'
 import { applyShape, categorize, type RuleContext } from '../src/lib/etm/rules/engine.ts'
 import { buildModel, type HistoryRow } from '../src/lib/etm/rules/model.ts'
@@ -229,6 +229,31 @@ const plan = reapplyPlan(stored, accounts, ctx)
 check('unconfirmed TD rows are re-categorized', plan.updated.length === 1 && plan.updated[0]!.next.category === 'Groceries')
 check('confirmed rows are never touched', !plan.updated.some((u) => u.next.id === 'u2'))
 check('the previous version is kept for undo', plan.updated[0]!.previous.category === 'Uncategorized')
+
+console.log('=== Taught comments ===')
+const commentCtx: RuleContext = {
+  ...ctx,
+  settings: {
+    ...settings,
+    userRules: [
+      { id: 'c1', key: 'DOLLAR STORE', createdAt: '', outcome: { merchant: 'Dollar', category: 'Gifts', tags: [], notes: 'Party favours' } },
+      {
+        id: 'c2', key: 'GROCER', createdAt: '',
+        outcome: { merchant: 'Grocer', category: 'Groceries', tags: [], split: [
+          { category: 'Groceries', tags: [], share: 0.6 },
+          { category: 'Gifts', tags: ['Reimbursable: Other'], share: 0.4, notes: 'For the neighbours' },
+        ] },
+      },
+    ],
+  },
+}
+const categorizeRow = rulesCategorizer(commentCtx)
+const withComment = categorizeRow({ account: 'card', lastFour: '3333', date: '2026-10-02', description: 'DOLLAR STORE', amount: -9 }, card)
+check('a taught rule writes its comment', withComment.notes === 'Party favours')
+const splitComment = categorizeRow({ account: 'bank', lastFour: '1111', date: '2026-10-02', description: 'GROCER 15', amount: -100 }, bank)
+check('a taught split writes each part’s comment', splitComment.split?.find((l) => l.category === 'Gifts')?.notes === 'For the neighbours' && splitComment.split?.[0]?.amount === -60)
+const written = reapplyPlan([{ ...tx('w1', 'td', '2026-10-02', 'DOLLAR STORE', -9, 'Uncategorized'), accountId: 'card', notes: 'mine' }], accounts, commentCtx)
+check('a rule’s comment never overwrites one already written', written.updated[0]?.next.notes === 'mine')
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)

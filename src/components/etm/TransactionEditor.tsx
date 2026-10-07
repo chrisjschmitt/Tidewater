@@ -94,8 +94,16 @@ export default function TransactionEditor({
             merchant: next.merchant,
             category: next.category,
             tags: next.tags,
+            ...(next.notes ? { notes: next.notes } : {}),
             ...(parts.length > 1
-              ? { split: parts.map((l) => ({ category: l.category, tags: l.tags, share: sum === 0 ? 0 : l.amount / sum })) }
+              ? {
+                  split: parts.map((l) => ({
+                    category: l.category,
+                    tags: l.tags,
+                    share: sum === 0 ? 0 : l.amount / sum,
+                    ...(l.notes ? { notes: l.notes } : {}),
+                  })),
+                }
               : {}),
           },
           createdAt: new Date().toISOString(),

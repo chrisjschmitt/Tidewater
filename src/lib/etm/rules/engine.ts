@@ -219,13 +219,13 @@ export function applyShape(lines: SplitShapeLine[], amount: number): SplitShapeL
   if (lines.every((line) => typeof line.amount === 'number')) {
     const sum = round(lines.reduce((s, line) => s + (line.amount ?? 0), 0))
     if (Math.abs(sum - total) > 0.01) return null
-    return lines.map((line) => ({ category: line.category, tags: line.tags, amount: round(sign * (line.amount ?? 0)) }))
+    return lines.map((line) => ({ category: line.category, tags: line.tags, amount: round(sign * (line.amount ?? 0)), ...(line.notes ? { notes: line.notes } : {}) }))
   }
   let placed = 0
   return lines.map((line, index) => {
     const part = index === lines.length - 1 ? round(total - placed) : round(total * Math.abs(line.share ?? 0))
     placed = round(placed + part)
-    return { category: line.category, tags: line.tags, amount: round(sign * part) }
+    return { category: line.category, tags: line.tags, amount: round(sign * part), ...(line.notes ? { notes: line.notes } : {}) }
   })
 }
 

@@ -10,6 +10,8 @@ export interface Outcome {
   category: string
   tags: string[]
   split?: SplitShapeLine[]
+  /** A comment the rule writes on the row (taught rules only). */
+  notes?: string
 }
 
 /** One line of a learned split. A fixed amount when the split always used the same figures, else a share. */
@@ -18,6 +20,7 @@ export interface SplitShapeLine {
   tags: string[]
   amount?: number
   share?: number
+  notes?: string
 }
 
 export type RuleLayer = 'fixed' | 'template' | 'user' | 'learned' | 'own' | 'keyword' | 'review'
