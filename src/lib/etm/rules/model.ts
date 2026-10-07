@@ -47,6 +47,8 @@ export interface RuleModel {
   byAmount: Map<string, Map<number, Omit<Outcome, 'merchant'>>>
   /** Latest amount seen for keys filed as income, to notice a changed deposit. */
   lastIncome: Map<string, number>
+  /** How many separate times each merchant appears in history — regulars are not trip spending. */
+  seen: Map<string, number>
   /** Categories that history uses, so a keyword never invents one. */
   categories: Set<string>
   /** Categories whose rows are overwhelmingly money in. */
@@ -252,6 +254,7 @@ export function buildModel(
     templates,
     lastSplits,
     byAmount,
+    seen: new Map([...occurrences].map(([key, list]) => [key, list.length])),
     lastIncome: new Map([...lastIncome].map(([key, value]) => [key, value.amount])),
     categories,
     incomeCategories,

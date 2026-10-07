@@ -164,6 +164,25 @@ const amountRule = categorize(
 check('a taught rule outranks a learned split', amountRule.layer === 'user')
 check('a taught exact-amount rule outranks the merchant rule', amountRule.outcome?.category === 'Special assessment')
 
+console.log('=== Trips ===')
+const tripSettings: RuleSettings = {
+  ...settings,
+  trips: [{ id: 't', label: 'Spring trip', start: '2026-09-01', end: '2026-09-10' }],
+  familyAccountIds: ['card'],
+  tripTag: 'Reimbursable: Vacation',
+  tripSkipCategories: ['Restaurants & Bars', 'Groceries'],
+  tripRecategorize: { 'Parking & Tolls': 'Transportation' },
+}
+const onTrip = (description: string, amount: number, acct: Account = card, date = '2026-09-05') =>
+  categorize({ date, description, amount, account: acct }, { ...ctx, settings: tripSettings })
+check('trip: a new merchant gets the trip tag on review suggestions', onTrip('MUSEUM OF THINGS', -20).layer === 'review' && onTrip('MUSEUM OF THINGS', -20).reasons.some((r) => r.includes('Spring trip')))
+check('trip: restaurants are not tagged', !(onTrip('NEW BISTRO', -40).outcome?.tags ?? []).includes('Reimbursable: Vacation'))
+check('trip: re-filed category gets the tag', onTrip('PARKING LOT 9', -6).outcome?.category === 'Transportation' && onTrip('PARKING LOT 9', -6).outcome!.tags.includes('Reimbursable: Vacation'))
+check('trip: a regular merchant is not trip spending', !(onTrip('BOOKSHOP', -20).outcome?.tags ?? []).includes('Reimbursable: Vacation'))
+check('trip: an account outside the family is left alone', onTrip('PARKING LOT 9', -6, bank).outcome?.category === 'Parking & Tolls')
+check('trip: outside the dates nothing changes', onTrip('PARKING LOT 9', -6, card, '2026-09-20').outcome?.category === 'Parking & Tolls')
+check('trip: card payments untouched', onTrip('PAYMENT - THANK YOU', 300).outcome?.tags.length === 0)
+
 console.log('=== Matching TD to Monarch ===')
 const tx = (id: string, source: Transaction['source'], date: string, statement: string, amount: number, category: string): Transaction => ({
   id,

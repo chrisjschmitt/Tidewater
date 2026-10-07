@@ -6,6 +6,7 @@ import ImportPanel from './ImportPanel'
 import TdStatementsCard from './TdStatementsCard'
 import RulesCompareCard from './RulesCompareCard'
 import RulesSettingsCard from './RulesSettingsCard'
+import ReviewPanel from './ReviewPanel'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
@@ -31,7 +32,7 @@ interface Props {
   onExpensesChange?: (expenses: Budget['expenses']) => void
 }
 
-type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'import' | 'accounts' | 'settings'
+type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'review' | 'import' | 'accounts' | 'settings'
 
 const TABS: Array<[Tab, string]> = [
   ['month', 'Month end'],
@@ -39,6 +40,7 @@ const TABS: Array<[Tab, string]> = [
   ['forecast', 'Forecast'],
   ['reimbursable', 'Reimbursable'],
   ['transactions', 'Transactions'],
+  ['review', 'Review'],
   ['import', 'Import'],
   ['accounts', 'Accounts'],
   ['settings', 'Settings'],
@@ -251,6 +253,8 @@ export default function EtmArea({
                 onRemove={data.removeManual}
               />
             )}
+
+            {tab === 'review' && <ReviewPanel data={data} />}
 
             {tab === 'import' && (
               <div className="mb-6 space-y-3">

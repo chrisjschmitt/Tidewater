@@ -18,6 +18,8 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
   const [showAll, setShowAll] = useState(false)
   const [busy, setBusy] = useState(false)
   const [taught, setTaught] = useState<Set<string>>(new Set())
+  const [showLeft, setShowLeft] = useState(false)
+  const [showTdOnly, setShowTdOnly] = useState(false)
   const td = useMemo(() => data.allRows.filter((row) => row.source === 'td'), [data.allRows])
 
   const comparison = useMemo(() => {
@@ -46,7 +48,8 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
 
   const dismissed = new Set(data.rules.settings.dismissed)
   const agree = comparison.pairs.filter((pair) => pair.agrees).length
-  const open = comparison.pairs.filter((pair) => !pair.agrees && !dismissed.has(pair.td.id))
+  const left = comparison.pairs.filter((pair) => !pair.agrees && dismissed.has(pair.td.id))
+  const open = comparison.pairs.filter((pair) => !pair.agrees && (showLeft || !dismissed.has(pair.td.id)))
   const listed = showAll ? open : open.slice(0, 15)
   const byMonth = [...agreementByMonth(comparison.pairs)]
   const months = [...new Set(byMonth.map(([key]) => key.split('|')[1]!))].sort().slice(-3)
@@ -94,7 +97,12 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
             {comparison.pairs.length > 0
               ? `${agree} of ${comparison.pairs.length} TD rows were filed the way Monarch filed them (${Math.round((agree / comparison.pairs.length) * 100)}%).`
               : 'No TD row has a Monarch row to compare with yet.'}{' '}
-            {comparison.tdOnly.length > 0 && `${comparison.tdOnly.length} TD rows have nothing in Monarch. `}
+            {comparison.tdOnly.length > 0 && (
+              <button className="underline decoration-dotted underline-offset-4" onClick={() => setShowTdOnly(!showTdOnly)}>
+                {comparison.tdOnly.length} TD rows have nothing in Monarch
+              </button>
+            )}
+            {comparison.tdOnly.length > 0 && '. '}
             Until the switch-over, Monarch’s rows still count; this is the practice run.
           </p>
         </div>
@@ -149,6 +157,35 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
         </div>
       )}
 
+      {showTdOnly && comparison.tdOnly.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs text-ink-400">
+            In the TD file but not in Monarch — usually days after Monarch's export ends, or a purchase Monarch missed.
+          </p>
+          <ul className="divide-y divide-sand-200/80 text-sm">
+            {comparison.tdOnly
+              .slice()
+              .sort((a, z) => z.date.localeCompare(a.date))
+              .map((row) => (
+                <li key={row.id} className="flex justify-between gap-3 py-1">
+                  <span className="min-w-0 truncate">
+                    <span className="tabular-nums text-ink-500">{row.date}</span> · {accountName(row.accountId)} ·{' '}
+                    {row.originalStatement}
+                  </span>
+                  <span className="tabular-nums text-ink-700">{amountIn(row.amount, row.currency)}</span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
+      {left.length > 0 && (
+        <label className="flex items-center gap-2 text-xs text-ink-500">
+          <input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} />
+          Show the {left.length} row{left.length === 1 ? '' : 's'} I left
+        </label>
+      )}
+
       {open.length > 0 && (
         <div className="overflow-x-auto">
           <p className="mb-1 text-xs text-ink-400">
@@ -201,12 +238,22 @@ export default function RulesCompareCard({ data }: { data: EtmData }) {
                     >
                       This amount
                     </button>
-                    <button
-                      onClick={() => void saveRules((rules) => ({ ...rules, dismissed: [...rules.dismissed, pair.td.id] }))}
-                      className="btn-quiet text-xs"
-                    >
-                      Leave
-                    </button>
+                    {dismissed.has(pair.td.id) ? (
+                      <button
+                        onClick={() => void saveRules((rules) => ({ ...rules, dismissed: rules.dismissed.filter((id) => id !== pair.td.id) }))}
+                        className="btn-quiet text-xs"
+                        title="Put it back on the list"
+                      >
+                        Un-leave
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => void saveRules((rules) => ({ ...rules, dismissed: [...rules.dismissed, pair.td.id] }))}
+                        className="btn-quiet text-xs"
+                      >
+                        Leave
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 — 2026-10-07
+
+### Added
+- A Review tab for TD transactions, by month: what needs a look, what the rules settled, and what you have confirmed. Accept a suggestion in one click, or change a row's category, tags and split amounts together in one form (the split must add up), optionally remembering it for that merchant or that exact amount. "Confirm the settled rows" accepts everything the rules were sure of. Confirmed rows are never touched by the rules again and teach them like Monarch rows; a day's changes are one Undo under Past imports.
+- Family trips in Settings → Rules: a date range, the family accounts, and the trip tag. Spending in the range gets the tag — except the categories you list (restaurants and groceries by default), merchants you use regularly, and anything already in a reimbursable bucket — and chosen categories can be re-filed during a trip (fuel for a rental car, say).
+- Rules vs Monarch lists the TD rows Monarch has nothing for, and can show (and un-leave) the rows you left.
+
+### Fixed
+- A merchant Tidewater has never seen is named in plain case rather than in the bank's capitals.
+
 ## 0.11.1 — 2026-10-07
 
 ### Fixed

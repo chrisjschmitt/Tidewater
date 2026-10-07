@@ -6,7 +6,7 @@ import { uid } from '../../format'
 import { monthOf, type Account, type SplitLine, type Transaction } from '../types'
 import { categorize, type RuleContext } from './engine'
 import type { HistoryRow } from './model'
-import { statementKey } from './normalize'
+import { displayName, statementKey } from './normalize'
 import type { Outcome, RuleResult } from './types'
 
 /**
@@ -74,7 +74,7 @@ export function toTdOutcome(result: RuleResult, fallbackMerchant: string): TdOut
 /** The importer's hook: each TD row through the engine. */
 export function rulesCategorizer(ctx: RuleContext): TdCategorizer {
   return (row, account) =>
-    toTdOutcome(categorize({ date: row.date, description: row.description, amount: row.amount, account }, ctx), row.description)
+    toTdOutcome(categorize({ date: row.date, description: row.description, amount: row.amount, account }, ctx), displayName(row.description))
 }
 
 /**
@@ -99,7 +99,7 @@ export function reapplyPlan(
     if (!account) continue
     const outcome = toTdOutcome(
       categorize({ date: row.date, description: row.originalStatement, amount: row.amount, account }, ctx),
-      row.merchant,
+      row.merchant === row.originalStatement ? displayName(row.originalStatement) : row.merchant,
     )
     const next: Transaction = {
       ...row,

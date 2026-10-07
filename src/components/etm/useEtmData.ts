@@ -25,6 +25,7 @@ import {
   loadReconciliations,
   loadTransactions,
   removeTransaction,
+  saveReviewedRows,
   saveAccount,
   saveBalance,
   saveConfig,
@@ -75,6 +76,8 @@ export interface EtmData {
   revertBatch: (batch: ImportBatch) => Promise<void>
   addManual: (transaction: Transaction) => Promise<void>
   removeManual: (transaction: Transaction) => Promise<void>
+  /** Saves reviewed rows into today's review batch (one Undo for the session). */
+  saveRows: (rows: Transaction[]) => Promise<void>
 }
 
 /**
@@ -303,6 +306,15 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     [flash, reload, unlockedKey],
   )
 
+  const saveRows = useCallback(
+    async (rows: Transaction[]) => {
+      if (rows.length === 0) return
+      await saveReviewedRows(unlockedKey, rows, today())
+      await reload()
+    },
+    [reload, unlockedKey],
+  )
+
   const removeManual = useCallback(
     async (transaction: Transaction) => {
       await removeTransaction(unlockedKey, transaction)
@@ -340,5 +352,6 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     revertBatch,
     addManual,
     removeManual,
+    saveRows,
   }
 }

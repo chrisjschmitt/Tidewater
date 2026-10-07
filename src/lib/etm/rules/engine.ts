@@ -59,6 +59,10 @@ const KEYWORDS: Array<[RegExp, string[]]> = [
 ]
 
 export function categorize(input: RuleInput, ctx: RuleContext): RuleResult {
+  return onTrip(categorizeAtHome(input, ctx), input, ctx)
+}
+
+function categorizeAtHome(input: RuleInput, ctx: RuleContext): RuleResult {
   const key = statementKey(input.description)
   const merchant = ctx.model.merchants.get(key) ?? displayName(input.description)
   const card = input.account.kind === 'credit'
@@ -238,4 +242,41 @@ function isOwnAccount(number: string, accounts: Account[]): boolean {
 function splitOutcome(merchant: string, split: SplitShapeLine[]): Outcome {
   const main = [...split].sort((a, z) => Math.abs(z.amount ?? 0) - Math.abs(a.amount ?? 0))[0]!
   return { merchant, category: main.category, tags: main.tags, split }
+}
+
+/**
+ * A family trip changes a few things about spending in its date range, on the
+ * family accounts: fuel and the like can become travel categories, and the
+ * trip tag is added — but not to meals or groceries (everyday life goes on),
+ * not to regulars (a subscription is not trip spending), and not to anything
+ * that already belongs to a reimbursable bucket. Settled transfers and card
+ * payments are left alone.
+ */
+function onTrip(result: RuleResult, input: RuleInput, ctx: RuleContext): RuleResult {
+  const { settings } = ctx
+  const trip = settings.trips.find((t) => input.date >= t.start && input.date <= t.end)
+  if (!trip || !settings.familyAccountIds.includes(input.account.id)) return result
+  if (result.layer === 'fixed' || result.layer === 'own') return result
+  const key = statementKey(input.description)
+  const regular = (ctx.model.seen.get(key) ?? 0) >= 3
+  const prefix = normalizeTag(ctx.reimbursableTag)
+  const adjust = (outcome: Outcome): Outcome => {
+    if (isInternal(outcome.category)) return outcome
+    const recat = (category: string) => settings.tripRecategorize[category] ?? category
+    const tag = (category: string, tags: string[]) => {
+      if (!settings.tripTag || regular) return tags
+      if (settings.tripSkipCategories.some((c) => c.toLowerCase() === category.toLowerCase())) return tags
+      if (tags.some((t) => normalizeTag(t).startsWith(prefix))) return tags
+      return [...tags, settings.tripTag]
+    }
+    const split = outcome.split?.map((line) => ({ ...line, category: recat(line.category), tags: tag(recat(line.category), line.tags) }))
+    const category = recat(outcome.category)
+    return { ...outcome, category, tags: tag(category, outcome.tags), ...(split ? { split } : {}) }
+  }
+  return {
+    ...result,
+    ...(result.outcome ? { outcome: adjust(result.outcome) } : {}),
+    suggestions: result.suggestions.map(adjust),
+    reasons: result.outcome ? result.reasons : [...result.reasons, `During ${trip.label}`],
+  }
 }

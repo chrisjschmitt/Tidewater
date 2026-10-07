@@ -17,6 +17,9 @@ export default function RulesSettingsCard({ data }: { data: EtmData }) {
   const [mergeTo, setMergeTo] = useState('')
   const [dividend, setDividend] = useState({ number: '', minAmount: '5000', multiple: '1000', category: 'Dividend' })
   const [review, setReview] = useState('')
+  const [trip, setTrip] = useState({ label: '', start: '', end: '' })
+  const [recatFrom, setRecatFrom] = useState('')
+  const [recatTo, setRecatTo] = useState('')
 
   const categories = useMemo(
     () => [...new Set(data.allRows.filter((r) => r.source === 'monarch').map((r) => r.category))].sort(),
@@ -169,6 +172,140 @@ export default function RulesSettingsCard({ data }: { data: EtmData }) {
         >
           Add
         </button>
+      </div>
+
+      <h3 className="mt-5 text-sm font-semibold text-ink-900">Family trips</h3>
+      <p className="text-xs text-ink-400">
+        Spending during a trip, on the accounts ticked below, gets the trip tag — except the categories listed
+        under “never tagged”, merchants you use regularly, and anything already in a reimbursable bucket.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {settings.trips
+          .slice()
+          .sort((a, z) => z.start.localeCompare(a.start))
+          .map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-3 text-sm text-ink-700">
+              <span>
+                <span className="text-ink-900">{t.label}</span> · {t.start} to {t.end}
+              </span>
+              <button
+                className="btn-quiet text-xs"
+                onClick={() => void save((rules) => ({ ...rules, trips: rules.trips.filter((x) => x.id !== t.id) }))}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+      </ul>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <input className="field w-40 py-1.5" placeholder="Trip, e.g. UK spring" value={trip.label} onChange={(e) => setTrip({ ...trip, label: e.target.value })} />
+        <input className="field py-1.5" type="date" aria-label="First day" value={trip.start} onChange={(e) => setTrip({ ...trip, start: e.target.value })} />
+        <input className="field py-1.5" type="date" aria-label="Last day" value={trip.end} onChange={(e) => setTrip({ ...trip, end: e.target.value })} />
+        <button
+          className="btn-ghost text-xs"
+          disabled={!trip.label.trim() || !trip.start || !trip.end || trip.end < trip.start}
+          onClick={() => {
+            void save((rules) => ({
+              ...rules,
+              trips: [...rules.trips, { id: `trip-${Date.now()}`, label: trip.label.trim(), start: trip.start, end: trip.end }],
+            }))
+            setTrip({ label: '', start: '', end: '' })
+          }}
+        >
+          Add trip
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-500">
+        Family accounts:
+        {data.accounts.map((account) => (
+          <label key={account.id} className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={settings.familyAccountIds.includes(account.id)}
+              onChange={(e) =>
+                void save((rules) => ({
+                  ...rules,
+                  familyAccountIds: e.target.checked
+                    ? [...rules.familyAccountIds, account.id]
+                    : rules.familyAccountIds.filter((id) => id !== account.id),
+                }))
+              }
+            />
+            {account.nickname}
+          </label>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-500">
+        Trip tag:
+        <select
+          className="field py-1 text-sm"
+          value={settings.tripTag}
+          onChange={(e) => void save((rules) => ({ ...rules, tripTag: e.target.value }))}
+        >
+          <option value="">None</option>
+          {tags.map(([tag]) => (
+            <option key={tag} value={tag}>
+              {tag}
+            </option>
+          ))}
+        </select>
+        <span className="ml-3">Never tagged:</span>
+        <input
+          className="field w-72 py-1 text-sm"
+          defaultValue={settings.tripSkipCategories.join(', ')}
+          onBlur={(e) =>
+            void save((rules) => ({
+              ...rules,
+              tripSkipCategories: e.target.value.split(',').map((c) => c.trim()).filter(Boolean),
+            }))
+          }
+          aria-label="Categories never given the trip tag, comma separated"
+        />
+      </div>
+      <div className="mt-2 text-xs text-ink-500">
+        On a trip, re-file:
+        <ul className="mt-1 space-y-1">
+          {Object.entries(settings.tripRecategorize).map(([from, to]) => (
+            <li key={from} className="flex items-center justify-between gap-3 text-sm text-ink-700">
+              <span>
+                {from} → {to}
+              </span>
+              <button
+                className="btn-quiet text-xs"
+                onClick={() =>
+                  void save((rules) => {
+                    const next = { ...rules.tripRecategorize }
+                    delete next[from]
+                    return { ...rules, tripRecategorize: next }
+                  })
+                }
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <select className="field py-1 text-sm" value={recatFrom} onChange={(e) => setRecatFrom(e.target.value)}>
+            <option value="">Category…</option>
+            {categories.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+          <span>becomes</span>
+          <input className="field py-1 text-sm" list="rules-categories" value={recatTo} onChange={(e) => setRecatTo(e.target.value)} placeholder="Category" />
+          <button
+            className="btn-ghost text-xs"
+            disabled={!recatFrom || !recatTo.trim()}
+            onClick={() => {
+              void save((rules) => ({ ...rules, tripRecategorize: { ...rules.tripRecategorize, [recatFrom]: recatTo.trim() } }))
+              setRecatFrom('')
+              setRecatTo('')
+            }}
+          >
+            Add
+          </button>
+        </div>
       </div>
 
       <h3 className="mt-5 text-sm font-semibold text-ink-900">Always check</h3>

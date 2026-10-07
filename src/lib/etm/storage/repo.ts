@@ -188,6 +188,52 @@ export function commitImport(key: CryptoKey, plan: ImportPlan): Promise<ImportBa
   })
 }
 
+/**
+ * Saves edited rows (a review: category, tags, split, confirmed) into the
+ * day's review batch, so a whole session of edits is one Undo under Past
+ * imports. The first version of each row seen today is what Undo restores.
+ */
+export function saveReviewedRows(key: CryptoKey, rows: Transaction[], day: string): Promise<void> {
+  return withDb(async (db) => {
+    const batchId = `review-${day}`
+    const existing = await getSealed<ImportBatch>(db, 'batches', key, batchId)
+    const replaced = new Map((existing?.replaced ?? []).map((t) => [t.id, t]))
+    const months = new Set(existing?.months ?? [])
+
+    const byMonth = new Map<string, Transaction[]>()
+    for (const row of rows) {
+      const month = monthOf(row.date)
+      byMonth.set(month, [...(byMonth.get(month) ?? []), row])
+    }
+    for (const [month, changed] of byMonth) {
+      const current = (await getSealed<Transaction[]>(db, 'transactions', key, month)) ?? []
+      const merged = new Map(current.map((t) => [t.id, t]))
+      for (const row of changed) {
+        const previous = merged.get(row.id)
+        if (previous && !replaced.has(row.id)) replaced.set(row.id, previous)
+        merged.set(row.id, row)
+      }
+      await putSealed(db, 'transactions', key, month, [...merged.values()].sort(byDateDescending))
+      months.add(month)
+    }
+
+    const all = [...replaced.values()].map((t) => t.date).sort()
+    const batch: ImportBatch = {
+      id: batchId,
+      fileName: `Review session ${day}`,
+      importedAt: new Date().toISOString(),
+      firstDate: all[0] ?? day,
+      lastDate: all[all.length - 1] ?? day,
+      months: [...months].sort(),
+      addedIds: [],
+      replaced: [...replaced.values()],
+      rowsRead: replaced.size,
+      unchanged: 0,
+    }
+    await putSealed(db, 'batches', key, batchId, batch)
+  })
+}
+
 export function loadBatches(key: CryptoKey): Promise<ImportBatch[]> {
   return withDb(async (db) => {
     const batches = await allSealed<ImportBatch>(db, 'batches', key)

@@ -69,6 +69,23 @@ export interface RuleSettings {
   halfLifeMonths: number
   /** TD row ids whose disagreement with Monarch was looked at and left as it is. */
   dismissed: string[]
+  /** Family trips: spending in the range, on the family accounts, gets the trip tag. */
+  trips: Trip[]
+  familyAccountIds: string[]
+  /** The tag a trip adds, e.g. the vacation fund's reimbursable tag. Empty: trips add none. */
+  tripTag: string
+  /** Categories that never get the trip tag automatically (meals and groceries are part of everyday life). */
+  tripSkipCategories: string[]
+  /** On a trip, these categories become another (fuel for a rental car → travel, a phone bill → travel data). */
+  tripRecategorize: Record<string, string>
+}
+
+export interface Trip {
+  id: string
+  label: string
+  /** First and last day, inclusive, YYYY-MM-DD. */
+  start: string
+  end: string
 }
 
 export const DEFAULT_RULE_SETTINGS: RuleSettings = {
@@ -80,6 +97,11 @@ export const DEFAULT_RULE_SETTINGS: RuleSettings = {
   threshold: 0.6,
   halfLifeMonths: 6,
   dismissed: [],
+  trips: [],
+  familyAccountIds: [],
+  tripTag: '',
+  tripSkipCategories: ['Restaurants & Bars', 'Groceries'],
+  tripRecategorize: {},
 }
 
 export function withRuleDefaults(stored: Partial<RuleSettings> | undefined): RuleSettings {
@@ -98,5 +120,13 @@ export function withRuleDefaults(stored: Partial<RuleSettings> | undefined): Rul
         ? stored.halfLifeMonths
         : DEFAULT_RULE_SETTINGS.halfLifeMonths,
     dismissed: Array.isArray(stored?.dismissed) ? stored.dismissed : [],
+    trips: Array.isArray(stored?.trips) ? stored.trips : [],
+    familyAccountIds: Array.isArray(stored?.familyAccountIds) ? stored.familyAccountIds : [],
+    tripTag: typeof stored?.tripTag === 'string' ? stored.tripTag : '',
+    tripSkipCategories: Array.isArray(stored?.tripSkipCategories)
+      ? stored.tripSkipCategories
+      : DEFAULT_RULE_SETTINGS.tripSkipCategories,
+    tripRecategorize:
+      stored?.tripRecategorize && typeof stored.tripRecategorize === 'object' ? stored.tripRecategorize : {},
   }
 }
