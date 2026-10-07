@@ -21,9 +21,13 @@ export function downloaderAvailableHere(): boolean {
   if (typeof navigator === 'undefined') return false
   const mac = /Mac/i.test(navigator.platform || navigator.userAgent)
   // A Mac-looking iPad passes the platform test; the touch check in
-  // canWatchExportFolder is what keeps it out.
-  return mac && canWatchExportFolder() && statementFolderSupported()
+  // canWatchExportFolder is what keeps it out. Folder access is not needed to
+  // start the download — only to follow it here — so Safari qualifies too.
+  return mac && canWatchExportFolder()
 }
+
+/** Whether this browser can follow the run by watching the folder (Chrome, Edge — not Safari). */
+export const canFollowDownload = (): boolean => statementFolderSupported()
 
 export function readDownloaderHere(): boolean {
   try {
@@ -76,10 +80,12 @@ export function useDownloadProgress(
     setNotice(
       handle
         ? undefined
-        : 'Choose the statement folder below to follow the download here; Terminal shows it either way.',
+        : statementFolderSupported()
+          ? 'Choose the statement folder below to follow the download here; Terminal shows it either way.'
+          : 'Follow the run in Terminal. When it says “Combined file ready”, use Choose the statement files below and pick that one TD-transactions file.',
     )
     startedAt.current = Date.now()
-    setRunning(true)
+    setRunning(Boolean(handle))
     window.location.href = SHORTCUT_URL
   }, [handle])
 

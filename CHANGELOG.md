@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 — 2026-10-07
+
+### Fixed
+- "Download from TD" now shows on a Mac in Safari too, not only in Chrome. Safari cannot watch the statement folder, so the run is followed in Terminal; when it says "Combined file ready", choose that one TD-transactions file with "Choose the statement files". Chrome still ticks each account off as it arrives.
+
 ## 0.10.0 — 2026-10-07
 
 ### Added

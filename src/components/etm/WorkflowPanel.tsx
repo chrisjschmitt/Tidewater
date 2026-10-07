@@ -4,6 +4,7 @@ import TransactionTable from './TransactionTable'
 import type { EtmData } from './useEtmData'
 import { useStatementFolder, type StatementFolderReview } from './useStatementFolder'
 import {
+  canFollowDownload,
   downloaderAvailableHere,
   readDownloaderHere,
   useDownloadProgress,
@@ -344,7 +345,7 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
             ? folder.folderName
               ? `Statements are read from “${folder.folderName}”. Every account below is listed with what its file says, and nothing is recorded until you confirm it.`
               : 'If the statements are downloaded into one folder, pick it once and every account’s closing balance can be read in a single pass. Nothing is recorded until you confirm it.'
-            : 'This browser cannot hold on to a folder, but the statement files can be chosen together — select them all in one pass. Nothing is recorded until you confirm it.'}
+            : 'This browser cannot hold on to a folder, so choose the downloader’s TD-transactions-<date>.csv file (or, for older downloads, select every account’s file together). Nothing is recorded until you confirm it.'}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {folder.supported ? (
@@ -997,8 +998,10 @@ function DownloadFromTd({
       <p className="text-sm font-medium text-ink-900">Download from TD</p>
       <p className="mt-0.5 max-w-prose text-sm text-ink-500">
         Opens the bank Chrome window through the “Tidewater TD Download” Shortcut. Log in by hand,
-        click Continue, and the download runs in Terminal. Each account ticks off here as its
-        file arrives.
+        click Continue, and the download runs in Terminal.{' '}
+        {canFollowDownload()
+          ? 'Each account ticks off here as its file arrives.'
+          : 'This browser cannot watch the folder, so follow the run in Terminal, then choose the TD-transactions file below.'}
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button onClick={watch.start} disabled={watch.running} className="btn-primary text-xs disabled:opacity-50">
