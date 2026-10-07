@@ -36,6 +36,10 @@ interface Props {
   onNotesChange: (id: string, notes: string) => void
   ignoredKeys: string[]
   onIgnore: (key: string, ignored: boolean) => void
+  /** The category's typical-month plan for this month, without pins. */
+  typicalPlanFor?: (key: string) => number
+  /** Changes the category's plan from this month on; earlier months keep theirs. */
+  onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
 }
 
 export default function ForecastMonthCard({
@@ -51,6 +55,8 @@ export default function ForecastMonthCard({
   onNotesChange,
   ignoredKeys,
   onIgnore,
+  typicalPlanFor,
+  onPlanChange,
 }: Props) {
   const isCurrent = point.kind === 'current'
   const actual = isCurrent ? current.actualToDate : point.kind === 'past' ? point.actual : 0
@@ -110,8 +116,6 @@ export default function ForecastMonthCard({
         </div>
       )}
 
-      {isCurrent && <WhatThisForecastIs rows={compare} remainLines={current.remainLines} />}
-
       <PlanVsForecastList
         rows={compare}
         toMonthEnd={isCurrent}
@@ -120,6 +124,8 @@ export default function ForecastMonthCard({
         onIgnore={onIgnore}
         onPlace={onPlace}
         doubleCounts={doubleCounts}
+        {...(isCurrent ? { actualFor: (row: VarianceRow) => actualToDateFor(row, current.remainLines) } : {})}
+        {...(typicalPlanFor && onPlanChange ? { planEdit: { typicalPlanFor, onPlanChange } } : {})}
       />
 
       {isCurrent && current.remainLines.length > 0 && (
@@ -312,74 +318,6 @@ function actualToDateFor(row: VarianceRow, remainLines: RemainLine[]): number {
   return row.forecast
 }
 
-function WhatThisForecastIs({
-  rows,
-  remainLines,
-}: {
-  rows: VarianceRow[]
-  remainLines: RemainLine[]
-}) {
-  const listed = [...rows]
-    .map((row) => ({
-      row,
-      actual: actualToDateFor(row, remainLines),
-    }))
-    .filter((item) => item.actual !== 0 || item.row.forecast !== 0)
-    .sort(
-      (a, z) =>
-        z.row.forecast - a.row.forecast || z.actual - a.actual || a.row.label.localeCompare(z.row.label),
-    )
-  const actualTotal = Math.round(listed.reduce((sum, item) => sum + item.actual, 0) * 100) / 100
-  const forecastTotal = Math.round(listed.reduce((sum, item) => sum + item.row.forecast, 0) * 100) / 100
-
-  return (
-    <div id="forecast-this-month" className="mt-6 scroll-mt-28">
-      <h3 className="text-sm font-semibold tracking-tight text-ink-900">What this forecast is</h3>
-      <p className="mt-1 text-sm text-ink-500">
-        Month-to-date spend beside forecast to month-end. Largest forecast first. Forecast is actual
-        plus what typically still lands; Risk is not in this list.
-      </p>
-      {listed.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-500">No household spend or forecast this month yet.</p>
-      ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[28rem] text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-ink-400">
-                <th className="pb-2 pr-3 font-medium">Category</th>
-                <th className="pb-2 pr-3 text-right font-medium">Actual to today</th>
-                <th className="pb-2 text-right font-medium">Forecast</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-sand-200/80">
-              {listed.map(({ row, actual }) => (
-                <tr key={row.key}>
-                  <td className="max-w-[10rem] truncate py-1.5 pr-3 text-ink-900 sm:max-w-none">{row.label}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">{amountIn(actual, 'CAD')}</td>
-                  <td className="py-1.5 text-right tabular-nums text-ink-700">
-                    {amountIn(row.forecast, 'CAD')}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-sand-200">
-                <td className="pt-2 pr-3 text-sm font-medium text-ink-900">Total</td>
-                <td className="pt-2 pr-3 text-right text-sm font-medium tabular-nums text-ink-900">
-                  {amountIn(actualTotal, 'CAD')}
-                </td>
-                <td className="pt-2 text-right text-sm font-medium tabular-nums text-ink-900">
-                  {amountIn(forecastTotal, 'CAD')}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function signedCad(amount: number): string {
   return `${amount > 0 ? '+' : ''}${amountIn(amount, 'CAD')}`
 }
@@ -392,6 +330,8 @@ function PlanVsForecastList({
   onIgnore,
   onPlace,
   doubleCounts,
+  actualFor,
+  planEdit,
 }: {
   rows: VarianceRow[]
   toMonthEnd: boolean
@@ -400,6 +340,9 @@ function PlanVsForecastList({
   onIgnore: (key: string, ignored: boolean) => void
   onPlace: (row: PinRequest) => void
   doubleCounts: Array<{ category: string; month: string }>
+  /** The current month only: what each category has spent so far. */
+  actualFor?: (row: VarianceRow) => number
+  planEdit?: PlanEdit
 }) {
   const ignored = new Set(ignoredKeys)
   const active = rows.filter((row) => !ignored.has(row.key))
@@ -413,6 +356,8 @@ function PlanVsForecastList({
   const total = runningRows.at(-1)?.running ?? 0
   const planTotal = Math.round(active.reduce((sum, row) => sum + row.plan, 0) * 100) / 100
   const forecastTotal = Math.round(active.reduce((sum, row) => sum + row.forecast, 0) * 100) / 100
+  const actualTotal = actualFor ? Math.round(active.reduce((sum, row) => sum + actualFor(row), 0) * 100) / 100 : 0
+  const columns = actualFor ? 8 : 7
   const placeLabel = `Pin in ${monthName(month)}`
 
   return (
@@ -422,6 +367,7 @@ function PlanVsForecastList({
         {toMonthEnd
           ? 'Typical-month plan (plus any pin on this month) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'
           : 'Typical-month plan (plus any pin on this month) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'}{' '}
+        {planEdit && `Click a Plan figure to change that category's plan from ${monthName(month)} on; earlier months keep theirs. `}
         Ignore a line if you expect to hit Plan there anyway — that gap leaves
         Forecast; Plan does not change. Pin adds the amount to Plan; the trend
         is already in Forecast. Skipping a category for a month is a plan
@@ -439,6 +385,7 @@ function PlanVsForecastList({
               </th>
               <th className="pb-2 pr-3 font-medium">Category</th>
               <th className="pb-2 pr-3 text-right font-medium">Plan</th>
+              {actualFor && <th className="pb-2 pr-3 text-right font-medium">Actual to today</th>}
               <th className="pb-2 pr-3 text-right font-medium">Forecast</th>
               <th className="pb-2 pr-3 text-right font-medium">Difference</th>
               <th className="pb-2 pr-3 text-right font-medium">Running total</th>
@@ -459,6 +406,8 @@ function PlanVsForecastList({
                 warned={doubleCounts.some((warning) => warning.category === row.label)}
                 onIgnore={onIgnore}
                 onPlace={onPlace}
+                {...(actualFor ? { actual: actualFor(row) } : {})}
+                {...(planEdit ? { planEdit } : {})}
               />
             ))}
           </tbody>
@@ -471,6 +420,11 @@ function PlanVsForecastList({
               <td className="pt-2 pr-3 text-right text-sm font-medium tabular-nums text-ink-900">
                 {amountIn(planTotal, 'CAD')}
               </td>
+              {actualFor && (
+                <td className="pt-2 pr-3 text-right text-sm font-medium tabular-nums text-ink-900">
+                  {amountIn(actualTotal, 'CAD')}
+                </td>
+              )}
               <td className="pt-2 pr-3 text-right text-sm font-medium tabular-nums text-ink-900">
                 {amountIn(forecastTotal, 'CAD')}
               </td>
@@ -486,7 +440,7 @@ function PlanVsForecastList({
           {tucked.length > 0 && (
             <tbody className="divide-y divide-sand-200/80">
               <tr>
-                <td colSpan={7} className="border-t border-sand-300 pt-3 pb-1 text-[11px] uppercase tracking-wider text-ink-400">
+                <td colSpan={columns} className="border-t border-sand-300 pt-3 pb-1 text-[11px] uppercase tracking-wider text-ink-400">
                   Ignored
                 </td>
               </tr>
@@ -500,6 +454,8 @@ function PlanVsForecastList({
                   warned={doubleCounts.some((warning) => warning.category === row.label)}
                   onIgnore={onIgnore}
                   onPlace={onPlace}
+                  {...(actualFor ? { actual: actualFor(row) } : {})}
+                  {...(planEdit ? { planEdit } : {})}
                 />
               ))}
             </tbody>
@@ -527,6 +483,8 @@ function CompareRow({
   warned,
   onIgnore,
   onPlace,
+  actual,
+  planEdit,
 }: {
   row: VarianceRow
   running?: number
@@ -536,6 +494,8 @@ function CompareRow({
   warned: boolean
   onIgnore: (key: string, ignored: boolean) => void
   onPlace: (item: PinRequest) => void
+  actual?: number
+  planEdit?: PlanEdit
 }) {
   const pinDefault = pinAmountFor(row)
   const [open, setOpen] = useState(false)
@@ -562,7 +522,12 @@ function CompareRow({
           />
         </td>
         <td className={`max-w-[10rem] truncate py-1.5 pr-3 sm:max-w-none ${muted}`}>{row.label}</td>
-        <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">{amountIn(row.plan, 'CAD')}</td>
+        <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">
+          {planEdit ? <PlanCell row={row} month={month} edit={planEdit} /> : amountIn(row.plan, 'CAD')}
+        </td>
+        {actual !== undefined && (
+          <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">{amountIn(actual, 'CAD')}</td>
+        )}
         <td className={`py-1.5 pr-3 text-right tabular-nums ${ignored ? 'text-ink-400' : 'text-ink-700'}`}>
           {amountIn(row.forecast, 'CAD')}
         </td>
@@ -581,7 +546,7 @@ function CompareRow({
       {open && (
         <tr className={ignored ? 'bg-sand-50/60' : undefined}>
           <td />
-          <td colSpan={6} className="pb-3 pr-3">
+          <td colSpan={actual !== undefined ? 7 : 6} className="pb-3 pr-3">
             {warned && <p className="mb-2 text-sm text-ink-500">{doubleCountCopy(row.label, monthName(month))}</p>}
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -816,5 +781,65 @@ function Figure({
       </p>
       {hint && <p className="mt-0.5 text-[11px] text-ink-400">{hint}</p>}
     </div>
+  )
+}
+
+interface PlanEdit {
+  typicalPlanFor: (key: string) => number
+  onPlanChange: (change: { key: string; label: string; month: string; amount: number }) => void
+}
+
+/**
+ * The Plan figure, editable in place. What is edited is the category's
+ * typical-month plan; a pin on this month still adds on top and is shown
+ * beside it rather than folded into the number being changed.
+ */
+function PlanCell({ row, month, edit }: { row: VarianceRow; month: string; edit: PlanEdit }) {
+  const typical = edit.typicalPlanFor(row.key)
+  const pinned = Math.round((row.plan - typical) * 100) / 100
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const save = () => {
+    setEditing(false)
+    const value = Number.parseFloat(draft.replace(/[$,\s]/g, ''))
+    if (!Number.isFinite(value) || value < 0) return
+    const amount = Math.round(value * 100) / 100
+    if (amount === typical) return
+    edit.onPlanChange({ key: row.key, label: row.label, month, amount })
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        onFocus={(event) => event.currentTarget.select()}
+        className="field w-24 py-1 text-right text-sm tabular-nums"
+        inputMode="decimal"
+        aria-label={`Plan for ${row.label} from ${monthName(month)} on`}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') save()
+          if (event.key === 'Escape') setEditing(false)
+        }}
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(String(typical))
+        setEditing(true)
+      }}
+      className="rounded px-1 tabular-nums underline decoration-dotted decoration-ink-300 underline-offset-4 hover:bg-sand-100 hover:text-ink-900"
+      title={`Change the plan for ${row.label} from ${monthName(month)} on`}
+    >
+      {amountIn(row.plan, 'CAD')}
+      {pinned !== 0 && <span className="block text-[10px] text-ink-400">incl. pin {amountIn(pinned, 'CAD')}</span>}
+    </button>
   )
 }

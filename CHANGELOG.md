@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.6 — 2026-10-07
+
+### Added
+- In Forecast's "Plan vs forecast by category", click a Plan figure to change that category's plan from that month on. Earlier months keep the plan they had — on the Forecast, Budget and Month end tabs — and the budget (dashboard and sliders) carries the new amount going forward. A pin on the month still adds on top and is shown beside the figure.
+
+### Changed
+- Forecast no longer shows "What this forecast is": its one extra figure, each category's spend so far, is now an "Actual to today" column in "Plan vs forecast by category" for the current month. "This month" in the Forecast menu goes to that table.
+- The Import tab labels its second section "Monarch export", beside "TD statements".
+
 ## 0.10.5 — 2026-10-07
 
 ### Changed

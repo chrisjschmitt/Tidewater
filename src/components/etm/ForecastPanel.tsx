@@ -16,6 +16,7 @@ import type { ForecastConfig, ForecastSnapshot, PinRequest } from '../../lib/for
 import { taggingGaps, withCategoryTypicalMonths, withCategoryTypeOverride, withIgnoredCompare } from '../../lib/forecast/universe'
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
+import { planAmountAt } from '../../lib/forecast/planHistory'
 
 interface Props {
   transactions: Transaction[]
@@ -28,6 +29,8 @@ interface Props {
   onOpenTidy: () => void
   onNotice?: (message: string) => void
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
+  /** Changes a category's plan from a month on (planHistory.ts). */
+  onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
 }
 
 export default function ForecastPanel({
@@ -41,6 +44,7 @@ export default function ForecastPanel({
   onOpenTidy,
   onNotice,
   onApplyHouseholdContribution,
+  onPlanChange,
 }: Props) {
   const asOf = today()
   const currentMonth = asOf.slice(0, 7)
@@ -146,7 +150,7 @@ export default function ForecastPanel({
 
   const showCurrentMonth = () => {
     setFocusedMonth(currentMonth)
-    jumpTo('forecast-this-month')
+    jumpTo('forecast-compare')
   }
 
   return (
@@ -210,6 +214,12 @@ export default function ForecastPanel({
               placements={placements}
               overlayBreakdown={household.overlay}
               doubleCounts={monthWarnings}
+              {...(onPlanChange
+                ? {
+                    onPlanChange,
+                    typicalPlanFor: (key: string) => planAmountAt(budget, config.planHistory, key, focused.month),
+                  }
+                : {})}
               onPlace={(row) => placeKnownFuture(row)}
               onRemove={removeKnownFuture}
               onNotesChange={updateKnownFutureNotes}
@@ -224,7 +234,13 @@ export default function ForecastPanel({
               <ForecastMonthEnd
                 variance={lastVariance}
                 placeMonth={focused.month}
-                onPlace={(row) => placeKnownFuture(row)}
+                {...(onPlanChange
+                ? {
+                    onPlanChange,
+                    typicalPlanFor: (key: string) => planAmountAt(budget, config.planHistory, key, focused.month),
+                  }
+                : {})}
+              onPlace={(row) => placeKnownFuture(row)}
               />
             </div>
           )}

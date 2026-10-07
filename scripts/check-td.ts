@@ -19,6 +19,8 @@ import {
   pseudoFileName,
 } from '../src/lib/etm/td.ts'
 import type { Account, Transaction } from '../src/lib/etm/types.ts'
+import { budgetAt, budgetOver, planAmountAt, withPlanChange } from '../src/lib/forecast/planHistory.ts'
+import type { Budget } from '../src/lib/types.ts'
 
 let failures = 0
 function check(label: string, passed: boolean, detail = '') {
@@ -207,6 +209,31 @@ const p2 = downloadProgress(
   day,
 )
 check('files moved to raw/ still count, combined file ends the run', p2.accounts.every((a) => a.state === 'downloaded') && p2.combined === 'TD-transactions-2026-10-07.csv')
+
+console.log('=== Plan from a month on ===')
+const plan0: Budget = {
+  income: [],
+  expenses: [
+    { id: 'e1', name: 'Groceries', groupId: 'food', amount: 800, essential: true },
+    { id: 'e2', name: 'Dining', groupId: 'joy', amount: 200, essential: false },
+  ],
+  goals: [],
+} as unknown as Budget
+const oct = withPlanChange(plan0, undefined, { key: 'groceries', label: 'Groceries', month: '2026-10', amount: 900 })
+check('the budget carries the new plan going forward', oct.budget.expenses[0]!.amount === 900)
+check('months before keep the old plan', planAmountAt(oct.budget, oct.history, 'groceries', '2026-09') === 800)
+check('the month itself and after use the new plan', planAmountAt(oct.budget, oct.history, 'groceries', '2026-10') === 900 && planAmountAt(oct.budget, oct.history, 'groceries', '2027-03') === 900)
+check('other categories untouched', planAmountAt(oct.budget, oct.history, 'dining', '2026-09') === 200)
+const dec = withPlanChange(oct.budget, oct.history, { key: 'groceries', label: 'Groceries', month: '2026-12', amount: 1000 })
+check('a later change keeps every earlier month', planAmountAt(dec.budget, dec.history, 'groceries', '2026-09') === 800 && planAmountAt(dec.budget, dec.history, 'groceries', '2026-11') === 900 && planAmountAt(dec.budget, dec.history, 'groceries', '2026-12') === 1000)
+const nov = withPlanChange(dec.budget, dec.history, { key: 'groceries', label: 'Groceries', month: '2026-11', amount: 850 })
+check('an earlier change replaces what was set after it', planAmountAt(nov.budget, nov.history, 'groceries', '2026-10') === 900 && planAmountAt(nov.budget, nov.history, 'groceries', '2026-11') === 850 && planAmountAt(nov.budget, nov.history, 'groceries', '2027-01') === 850)
+check('budgetAt rebuilds an earlier month', budgetAt(nov.budget, nov.history, '2026-09').expenses[0]!.amount === 800)
+check('budgetOver averages a span so months × plan is the sum', budgetOver(oct.budget, oct.history, ['2026-09', '2026-10']).expenses[0]!.amount === 850)
+const added = withPlanChange(plan0, undefined, { key: 'pet food', label: 'Pet food', month: '2026-10', amount: 50 })
+check('a category with no plan line gets one, zero before', added.budget.expenses.length === 3 && planAmountAt(added.budget, added.history, 'pet food', '2026-09') === 0)
+const same = withPlanChange(plan0, undefined, { key: 'dining', label: 'Dining', month: '2026-10', amount: 200 })
+check('setting the same amount records nothing', Object.keys(same.history).length === 0)
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)

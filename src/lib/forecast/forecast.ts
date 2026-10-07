@@ -1,4 +1,5 @@
 import { totalExpenses, totalGoalContributions, totalIncome } from '../budget'
+import { budgetAt } from './planHistory'
 import type { Budget } from '../types'
 import type { Currency, Transaction } from '../etm/types'
 import {
@@ -699,7 +700,6 @@ function calendarPoint(args: {
     series,
     lookback,
     actuals,
-    budget,
     config,
     asOf,
     overlay,
@@ -709,6 +709,7 @@ function calendarPoint(args: {
     parentTag,
     bucketMix,
   } = args
+  const budget = budgetAt(args.budget, config.planHistory, month)
   const byKey = new Map(series.map((item) => [item.key, item]))
   const monthsAhead = monthDiff(asOf.slice(0, 7), month)
   const byCategory: MonthCategoryAmount[] = []
@@ -811,8 +812,10 @@ function currentMonthView(args: {
   config: ForecastConfig
   overlay: number
 }): CurrentMonthView {
-  const { asOf, categories, series, lookback, actuals, budget, config, overlay } = args
+  const { asOf, categories, series, lookback, actuals, config, overlay } = args
   const month = asOf.slice(0, 7)
+  // The plan this month had: a change made for a later month leaves it alone.
+  const budget = budgetAt(args.budget, config.planHistory, month)
   const mm = Number(month.slice(5, 7))
   const byKey = new Map(series.map((item) => [item.key, item]))
   const actualToDate = totalInMonth(actuals, month)

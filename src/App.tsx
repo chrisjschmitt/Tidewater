@@ -438,6 +438,7 @@ export default function App() {
                   flash('Expense tracking data was erased. Your budget is untouched.')
                 }}
                 onGoalsChange={setGoals}
+                onExpensesChange={(expenses) => commit({ ...budget, expenses })}
               />
             </Suspense>
           </OptionalFeatureBoundary>

@@ -1,3 +1,4 @@
+import type { PlanHistory } from './planHistory'
 import type { Currency } from '../etm/types'
 
 export type ForecastWindow = 12 | 24 | 'all'
@@ -70,6 +71,8 @@ export interface ForecastConfig {
   knownFutures: KnownFuture[]
   /** Category keys dropped below the Plan vs forecast line, by YYYY-MM. */
   ignoredCompare: Record<string, string[]>
+  /** Earlier plan amounts, kept when a category's plan changes from a month on (planHistory.ts). */
+  planHistory?: PlanHistory
 }
 
 export interface ForecastSnapshot {
@@ -142,6 +145,9 @@ export function withForecastDefaults(stored?: Partial<ForecastConfig>): Forecast
       !Array.isArray(stored.ignoredCompare)
         ? stored.ignoredCompare
         : {},
+    ...(stored?.planHistory && typeof stored.planHistory === 'object' && !Array.isArray(stored.planHistory)
+      ? { planHistory: stored.planHistory }
+      : {}),
   }
 }
 

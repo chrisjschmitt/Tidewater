@@ -39,6 +39,8 @@ interface Props {
   onClose: () => void
   onOpenChat: () => void
   onGoalsChange?: (goals: Goal[]) => void
+  /** Plan edits from the Forecast tab: the budget's expense lines going forward. */
+  onExpensesChange?: (expenses: Budget['expenses']) => void
 }
 
 /**
@@ -94,6 +96,7 @@ function Unlocked({
   onClose,
   onOpenChat,
   onGoalsChange,
+  onExpensesChange,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
   const [period, setPeriod] = useState<Period>(() => defaultPeriod([]))
@@ -208,6 +211,7 @@ function Unlocked({
             void wipeVault()
             onWiped()
           }}
+          {...(onExpensesChange ? { onExpensesChange } : {})}
           onApplyHouseholdContribution={
             onGoalsChange
               ? (monthly, vacationGoalId) =>

@@ -11,7 +11,8 @@ import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
 import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
-import type { Period } from '../../lib/etm/period'
+import { monthKeys, type Period } from '../../lib/etm/period'
+import { budgetAt, budgetOver, withPlanChange } from '../../lib/forecast/planHistory'
 import type { Budget } from '../../lib/types'
 
 interface Props {
@@ -24,6 +25,8 @@ interface Props {
   onWipe: () => void
   onOpenChat: () => void
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
+  /** Replaces the budget's expense lines — the plan going forward. */
+  onExpensesChange?: (expenses: Budget['expenses']) => void
 }
 
 type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'import' | 'accounts' | 'settings'
@@ -52,6 +55,7 @@ export default function EtmArea({
   onWipe,
   onOpenChat,
   onApplyHouseholdContribution,
+  onExpensesChange,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
   const [incomingFile, setIncomingFile] = useState<File | null>(null)
@@ -181,7 +185,7 @@ export default function EtmArea({
             {tab === 'month' && (
               <WorkflowPanel
                 data={data}
-                budget={budget}
+                budget={budgetAt(budget, data.forecastConfig.planHistory, workMonth)}
                 month={workMonth}
                 onMonthChange={setWorkMonth}
                 onOpenImport={() => setTab('import')}
@@ -190,7 +194,7 @@ export default function EtmArea({
 
             {tab === 'budget' && (
               <BudgetPanel
-                budget={budget}
+                budget={budgetOver(budget, data.forecastConfig.planHistory, monthKeys(period))}
                 accounts={data.accounts}
                 transactions={data.transactions}
                 reconciliations={data.reconciliations}
@@ -211,6 +215,15 @@ export default function EtmArea({
                 onNotice={data.flash}
                 onOpenTidy={() => setTab('month')}
                 onApplyHouseholdContribution={onApplyHouseholdContribution}
+                {...(onExpensesChange
+                  ? {
+                      onPlanChange: async (change: { key: string; label: string; month: string; amount: number }) => {
+                        const next = withPlanChange(budget, data.forecastConfig.planHistory, change)
+                        await data.saveForecastSettings({ ...data.forecastConfig, planHistory: next.history })
+                        onExpensesChange(next.budget.expenses)
+                      },
+                    }
+                  : {})}
               />
             )}
 
@@ -241,6 +254,10 @@ export default function EtmArea({
               <div className="mb-6">
                 <TdStatementsCard data={data} />
               </div>
+            )}
+
+            {tab === 'import' && (
+              <h3 className="mb-2 px-1 text-sm font-semibold text-ink-900">Monarch export</h3>
             )}
 
             {tab === 'import' && (
