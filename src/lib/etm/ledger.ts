@@ -30,6 +30,24 @@ export function cutoverFor(cutover: TdCutover | undefined, accountId: string): s
 export interface LedgerOptions {
   tdAccounts?: Set<string>
   decided?: Map<string, boolean>
+  /** Month → last day counted in it (EtmConfig.monthCutoffs). */
+  cutoffs?: Record<string, string>
+}
+
+/**
+ * The day a row counts on in the budget: its own budgetDate if set; else, if
+ * its month was closed early and the row falls after the close, the first of
+ * the next month; else the bank's date.
+ */
+export function budgetDateOf(row: Pick<Transaction, 'date' | 'budgetDate'>, cutoffs?: Record<string, string>): string {
+  if (row.budgetDate) return row.budgetDate
+  const month = row.date.slice(0, 7)
+  const cutoff = cutoffs?.[month]
+  if (cutoff && cutoff.slice(0, 7) === month && row.date > cutoff) {
+    const [y, m] = month.split('-').map(Number)
+    return m === 12 ? `${y! + 1}-01-01` : `${y}-${String(m! + 1).padStart(2, '0')}-01`
+  }
+  return row.date
 }
 
 export function counts(row: Transaction, cutover: TdCutover | undefined, options: LedgerOptions = {}): boolean {
@@ -115,13 +133,16 @@ export function ledgerView(
   groups?: Record<string, GroupId>,
   options?: LedgerOptions,
 ): Transaction[] {
-  const settled: LedgerOptions = options ?? {
-    tdAccounts: tdAccountIds(all),
-    decided: straddleDecisions(all, cutover),
+  const settled: LedgerOptions = {
+    tdAccounts: options?.tdAccounts ?? tdAccountIds(all),
+    decided: options?.decided ?? straddleDecisions(all, cutover),
+    ...(options?.cutoffs ? { cutoffs: options.cutoffs } : {}),
   }
   const out: Transaction[] = []
-  for (const row of all) {
-    if (!counts(row, cutover, settled)) continue
+  for (const original of all) {
+    if (!counts(original, cutover, settled)) continue
+    const effective = budgetDateOf(original, settled.cutoffs)
+    const row = effective === original.date ? original : { ...original, date: effective, bankDate: original.date }
     if (!row.split || row.split.length === 0) {
       out.push(row)
       continue

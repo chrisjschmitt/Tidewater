@@ -27,6 +27,7 @@ export default function TransactionEditor({
   const total = Math.abs(row.amount)
   const [merchant, setMerchant] = useState(row.merchant)
   const [notes, setNotes] = useState(row.notes)
+  const [countIn, setCountIn] = useState(row.budgetDate ?? row.date)
   const [mode, setMode] = useState<'amount' | 'percent'>('amount')
   const [lines, setLines] = useState(
     start.map((line) => ({
@@ -82,7 +83,10 @@ export default function TransactionEditor({
       tags: line.tags,
       ...(lines.length > 1 && line.notes.trim() ? { notes: line.notes.trim() } : {}),
     }))
-    const next = settleRow(row, { merchant: merchant.trim() || row.merchant, notes: notes.trim(), lines: parts }, data.config.categoryGroups)
+    const settled = settleRow(row, { merchant: merchant.trim() || row.merchant, notes: notes.trim(), lines: parts }, data.config.categoryGroups)
+    const next = { ...settled }
+    if (countIn && countIn !== row.date) next.budgetDate = countIn
+    else delete next.budgetDate
     setBusy(true)
     try {
       if (remember !== 'none' && row.source === 'td') {
@@ -122,10 +126,15 @@ export default function TransactionEditor({
 
   return (
     <div className="space-y-2 rounded-2xl bg-sand-100/60 p-3">
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-3">
         <label className="flex items-center gap-2 text-xs text-ink-500">
           Merchant
           <input className="field flex-1 py-1 text-sm" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-ink-500" title="The day it counts on in the budget. The bank's date stays as it is.">
+          Count in
+          <input type="date" className="field py-1 text-sm" value={countIn} onChange={(e) => setCountIn(e.target.value)} />
+          {countIn !== row.date && <span className="text-ink-400">bank date {row.date}</span>}
         </label>
         <label className="flex items-center gap-2 text-xs text-ink-500">
           Comment

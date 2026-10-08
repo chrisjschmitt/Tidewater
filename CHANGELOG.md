@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.6 — 2026-10-08
+
+### Added
+- Month end: "When this month was closed". If a month was closed before its last day (a weekend), transactions dated after the close count from the first of the next month — for every account, automatically.
+- Edit: a "Count in" date for a single transaction that belongs to another month; it wins over the month's close.
+- Bank dates are never changed (they are how a row is recognised across downloads); Transactions shows "bank date …" under any row counted on another day.
+
 ## 0.13.5 — 2026-10-07
 
 ### Added

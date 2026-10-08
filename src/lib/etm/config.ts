@@ -63,6 +63,12 @@ export interface EtmConfig {
   categoryGroups?: Record<string, GroupId>
   /** The rules engine's settings (rules/types.ts): merges, retired tags, taught rules. */
   rules?: Partial<RuleSettings>
+  /**
+   * Month → the last day counted in it, when the month was closed early
+   * (September closed on the 29th). Anything dated after it counts from the
+   * first of the next month.
+   */
+  monthCutoffs?: Record<string, string>
 }
 
 export interface TdCutover {
@@ -97,6 +103,7 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   tdCutover: asCutover(stored?.tdCutover),
   categoryGroups: stored?.categoryGroups && typeof stored.categoryGroups === 'object' ? stored.categoryGroups : undefined,
   rules: stored?.rules && typeof stored.rules === 'object' ? stored.rules : undefined,
+  monthCutoffs: stored?.monthCutoffs && typeof stored.monthCutoffs === 'object' ? stored.monthCutoffs : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/

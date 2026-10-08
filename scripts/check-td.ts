@@ -12,7 +12,7 @@ import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
 import { planTdImport } from '../src/lib/etm/importer.ts'
-import { counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
+import { budgetDateOf, counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
 import { downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
 import {
@@ -244,6 +244,16 @@ const splitEdit = settleRow(mk('sp', -100, 'Uncategorized'), { merchant: 'Store'
 check('a split edit names the row by its largest part', splitEdit.category === 'Groceries' && splitEdit.split?.length === 2)
 const unsplit = settleRow(splitEdit, { merchant: 'Store', lines: [{ amount: -100, category: 'Groceries', tags: [] }] })
 check('one line clears the split', !unsplit.split)
+
+console.log('=== Month cut-off and count-in dates ===')
+const cutoffs = { '2026-09': '2026-09-29' }
+check('after an early close, the 30th counts from the 1st of next month', budgetDateOf({ date: '2026-09-30' }, cutoffs) === '2026-10-01')
+check('on or before the close it stays put', budgetDateOf({ date: '2026-09-29' }, cutoffs) === '2026-09-29')
+check('a December close rolls into January', budgetDateOf({ date: '2026-12-31' }, { '2026-12': '2026-12-30' }) === '2027-01-01')
+check('a row’s own count-in date wins over the cut-off', budgetDateOf({ date: '2026-09-30', budgetDate: '2026-09-30' }, cutoffs) === '2026-09-30')
+const moved = ledgerView([{ ...tdRow, id: 'late', source: 'manual', date: '2026-09-30', split: undefined }], undefined, undefined, { cutoffs })
+check('the ledger counts it on the new date and keeps the bank date', moved[0]!.date === '2026-10-01' && moved[0]!.bankDate === '2026-09-30')
+check('September loses it, October gains it', aggregate(moved, monthPeriod('2026-09')).spend.CAD === 0 && aggregate(moved, monthPeriod('2026-10')).spend.CAD > 0)
 
 console.log('=== Possible duplicates ===')
 const dupe = (id: string, date: string, amount: number, feedFile: string): Transaction => ({

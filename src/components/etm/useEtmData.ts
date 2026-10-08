@@ -96,8 +96,11 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const [lastMonthSnapshot, setLastMonthSnapshot] = useState<ForecastSnapshot | undefined>()
   const [loading, setLoading] = useState(true)
   const transactions = useMemo(
-    () => ledgerView(allRows, config.tdCutover, config.categoryGroups),
-    [allRows, config.tdCutover, config.categoryGroups],
+    () =>
+      ledgerView(allRows, config.tdCutover, config.categoryGroups, {
+        ...(config.monthCutoffs ? { cutoffs: config.monthCutoffs } : {}),
+      }),
+    [allRows, config.tdCutover, config.categoryGroups, config.monthCutoffs],
   )
   const rules = useMemo<RuleContext>(() => {
     const settings = withRuleDefaults(config.rules)

@@ -305,8 +305,38 @@ function Balances({ data, month, onOpenImport }: { data: EtmData; month: string;
     )
   }
 
+  const cutoff = data.config.monthCutoffs?.[month] ?? ''
+  const lastDay = endOf(month)
   return (
     <div className="space-y-2">
+      <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+        <p className="text-sm font-medium text-ink-900">When this month was closed</p>
+        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+          If the month was closed before its last day (a weekend), transactions dated after the close count from the
+          first of next month. The bank's dates are not changed.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-ink-700">Closed on</span>
+          <input
+            type="date"
+            className="field py-1.5"
+            min={`${month}-01`}
+            max={lastDay}
+            value={cutoff || lastDay}
+            onChange={(e) => {
+              const next = { ...(data.config.monthCutoffs ?? {}) }
+              if (!e.target.value || e.target.value >= lastDay) delete next[month]
+              else next[month] = e.target.value
+              void data.saveSettings({ ...data.config, monthCutoffs: Object.keys(next).length > 0 ? next : undefined })
+            }}
+          />
+          {cutoff && (
+            <span className="text-xs text-ink-500">
+              Anything dated after {cutoff} counts in {monthName(nextMonthOf(month))}.
+            </span>
+          )}
+        </div>
+      </div>
       <div className="rounded-2xl bg-white/70 px-4 py-3.5">
         <p className="text-sm font-medium text-ink-900">Read the TD statements on the Import tab</p>
         <p className="mt-0.5 max-w-prose text-sm text-ink-500">
@@ -737,4 +767,9 @@ const Tag = ({ children, tone }: { children: React.ReactNode; tone?: 'warn' }) =
 function endOf(month: string): string {
   const [y, m] = month.split('-').map(Number)
   return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10)
+}
+
+function nextMonthOf(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return m === 12 ? `${y! + 1}-01` : `${y}-${String(m! + 1).padStart(2, '0')}`
 }

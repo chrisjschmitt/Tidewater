@@ -232,6 +232,11 @@ export default function TransactionsPanel({
                     <tr key={t.id} className="transition hover:bg-sand-100/50">
                       <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-xs text-ink-500">
                         {t.date}
+                        {t.bankDate && (
+                          <span className="block text-[10px] text-ink-400" title="Counted in the budget on the date above">
+                            bank date {t.bankDate}
+                          </span>
+                        )}
                       </td>
                       <td className="max-w-xs px-4 py-2.5">
                         <span className="flex items-center gap-2 truncate text-ink-900">

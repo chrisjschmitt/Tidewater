@@ -168,6 +168,14 @@ export interface Transaction {
   prediction?: Prediction
   /** TD rows: the combined file the row arrived in. */
   feedFile?: string
+  /**
+   * The day this row counts on in the budget, when it differs from the bank's
+   * date (a weekend charge that belongs to the next month). The bank's date is
+   * kept as is: it is part of how a row is recognised across downloads.
+   */
+  budgetDate?: string
+  /** Set on ledger rows whose date was moved by a cut-off or budgetDate: the bank's own date (never stored). */
+  bankDate?: string
   /** Set when the user judged this TD row a duplicate of another (that row's id): it no longer counts. */
   duplicateOf?: string
   /** Set on the ledger's parts of a split row (never stored): which part, of how many, of which row. */
