@@ -11,6 +11,8 @@ import DuplicatesCard from './DuplicatesCard'
 import TransactionEditor from './TransactionEditor'
 import Modal from '../Modal'
 import SwitchOverCard from './SwitchOverCard'
+import BackupCard from './BackupCard'
+import { BACKUP_NUDGE_DAYS, useSafeguards } from './useSafeguards'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
@@ -67,6 +69,7 @@ export default function EtmArea({
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const safeguards = useSafeguards(budget)
   const editingRow = editingId ? data.allRows.find((row) => row.id === editingId) : undefined
   const [incomingFile, setIncomingFile] = useState<File | null>(null)
   const rememberWatchName = useCallback(
@@ -144,6 +147,26 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
+            {tab !== 'settings' && (safeguards.ageDays === undefined || safeguards.ageDays >= BACKUP_NUDGE_DAYS) && (
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3">
+                <p className="text-sm text-ink-700">
+                  {safeguards.ageDays === undefined
+                    ? 'No backup of your expenses yet on this device.'
+                    : `Last backup ${safeguards.ageDays} days ago.`}{' '}
+                  <span className="text-ink-500">Everything lives only in this browser.</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  {safeguards.savedTo && <span className="text-xs text-ink-500">Saved to {safeguards.savedTo}</span>}
+                  <button
+                    disabled={safeguards.busy}
+                    onClick={() => void safeguards.backUp()}
+                    className="btn-primary text-xs disabled:opacity-50"
+                  >
+                    {safeguards.busy ? 'Backing up…' : 'Back up now'}
+                  </button>
+                </div>
+              </div>
+            )}
             {watch.supported && (
               <input
                 id={WATCH_FOLDER_INPUT_ID}
@@ -309,6 +332,7 @@ export default function EtmArea({
 
             {tab === 'settings' && (
               <div className="mb-6 space-y-6">
+                <BackupCard safeguards={safeguards} />
                 <SwitchOverCard data={data} />
                 <RulesSettingsCard data={data} />
               </div>

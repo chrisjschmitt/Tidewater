@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.7 — 2026-10-08
+
+### Added
+- Expense tracking asks the browser to keep its storage permanently, so it is not cleared to free up space; Settings → Backups shows whether the browser agreed.
+- Settings → Backups: when the last backup was made, and "Back up now" — the same file as Your data → Download JSON (the plan plus the encrypted expense vault). In Chrome, with the TD statement folder chosen, it is written into that folder's "Tidewater backups" subfolder; otherwise it downloads.
+- A reminder strip across expense tracking when there is no backup yet, or the last one is a week old, with its own "Back up now".
+
 ## 0.13.6 — 2026-10-08
 
 ### Added
