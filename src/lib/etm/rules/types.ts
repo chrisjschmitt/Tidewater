@@ -81,6 +81,8 @@ export interface RuleSettings {
   tripSkipCategories: string[]
   /** On a trip, these categories become another (fuel for a rental car → travel, a phone bill → travel data). */
   tripRecategorize: Record<string, string>
+  /** Pairs of TD row ids (sorted, joined by '|') the user said are not duplicates. */
+  notDuplicates: string[]
 }
 
 export interface Trip {
@@ -105,6 +107,7 @@ export const DEFAULT_RULE_SETTINGS: RuleSettings = {
   tripTag: '',
   tripSkipCategories: ['Restaurants & Bars', 'Groceries'],
   tripRecategorize: {},
+  notDuplicates: [],
 }
 
 export function withRuleDefaults(stored: Partial<RuleSettings> | undefined): RuleSettings {
@@ -131,5 +134,6 @@ export function withRuleDefaults(stored: Partial<RuleSettings> | undefined): Rul
       : DEFAULT_RULE_SETTINGS.tripSkipCategories,
     tripRecategorize:
       stored?.tripRecategorize && typeof stored.tripRecategorize === 'object' ? stored.tripRecategorize : {},
+    notDuplicates: Array.isArray(stored?.notDuplicates) ? stored.notDuplicates : [],
   }
 }

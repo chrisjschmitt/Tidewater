@@ -33,6 +33,7 @@ export interface LedgerOptions {
 }
 
 export function counts(row: Transaction, cutover: TdCutover | undefined, options: LedgerOptions = {}): boolean {
+  if (row.duplicateOf) return false
   if (row.source === 'manual') return true
   const decided = options.decided?.get(row.id)
   if (decided !== undefined) return decided

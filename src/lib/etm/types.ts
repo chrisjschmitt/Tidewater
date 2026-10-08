@@ -168,6 +168,8 @@ export interface Transaction {
   prediction?: Prediction
   /** TD rows: the combined file the row arrived in. */
   feedFile?: string
+  /** Set when the user judged this TD row a duplicate of another (that row's id): it no longer counts. */
+  duplicateOf?: string
   /** Set on the ledger's parts of a split row (never stored): which part, of how many, of which row. */
   splitOf?: { part: number; parts: number; parentId: string }
 }

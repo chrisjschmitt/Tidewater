@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.5 — 2026-10-07
+
+### Added
+- Review tab: "Possible duplicates" — TD rows with the same bank text on the same account, within three days and a quarter of each other's amount, from two different downloads (a card charge whose date or amount changed when it posted). "Keep this one" marks the other as a duplicate: it stops counting and drops out of review and the comparison, but stays stored so re-reading a file cannot bring it back, and the day's Review session can undo it. "Not a duplicate" is remembered. Identical charges within one download are never flagged.
+
 ## 0.13.4 — 2026-10-07
 
 ### Fixed

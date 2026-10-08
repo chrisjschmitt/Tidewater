@@ -7,7 +7,7 @@ const shiftDays = (date: string, days: number) => new Date(Date.parse(date) + da
 /** TD rows beside the Monarch rows for the same purchases, over the span the TD feed covers. */
 export function useFeedComparison(data: EtmData): FeedComparison | null {
   return useMemo(() => {
-    const td = data.allRows.filter((row) => row.source === 'td')
+    const td = data.allRows.filter((row) => row.source === 'td' && !row.duplicateOf)
     if (td.length === 0) return null
     const dates = td.map((row) => row.date).sort()
     const from = shiftDays(dates[0]!, -3)

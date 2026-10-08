@@ -32,7 +32,7 @@ export default function SwitchOverCard({ data }: { data: EtmData }) {
   const readiness = (accountId: string) => {
     const pairs = comparison?.pairs.filter((p) => p.td.accountId === accountId) ?? []
     const agree = pairs.filter((p) => p.agrees).length
-    const rows = data.allRows.filter((r) => r.source === 'td' && r.accountId === accountId)
+    const rows = data.allRows.filter((r) => r.source === 'td' && !r.duplicateOf && r.accountId === accountId)
     const needs = rows.filter(
       (r) => !r.reviewed && (r.category === 'Uncategorized' || (r.prediction?.reviewReasons.length ?? 0) > 0),
     ).length

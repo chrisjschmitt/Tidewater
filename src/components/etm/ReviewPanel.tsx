@@ -23,7 +23,7 @@ const needsLook = (row: Transaction) =>
   (row.category === 'Uncategorized' || row.prediction?.layer === 'review' || (row.prediction?.reviewReasons.length ?? 0) > 0)
 
 export default function ReviewPanel({ data }: { data: EtmData }) {
-  const td = useMemo(() => data.allRows.filter((row) => row.source === 'td'), [data.allRows])
+  const td = useMemo(() => data.allRows.filter((row) => row.source === 'td' && !row.duplicateOf), [data.allRows])
   const months = useMemo(() => [...new Set(td.map((row) => row.date.slice(0, 7)))].sort().reverse(), [td])
   const [month, setMonth] = useState<string>('')
   const [show, setShow] = useState<Show>('needs')

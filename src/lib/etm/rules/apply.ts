@@ -22,7 +22,7 @@ import type { Outcome, RuleResult } from './types'
 export function historyRows(all: Transaction[], accounts: Account[]): HistoryRow[] {
   const cards = new Set(accounts.filter((a) => a.kind === 'credit').map((a) => a.id))
   return all
-    .filter((row) => row.originalStatement && (row.source === 'monarch' || (row.source === 'td' && row.reviewed)))
+    .filter((row) => row.originalStatement && !row.duplicateOf && (row.source === 'monarch' || (row.source === 'td' && row.reviewed)))
     .map((row) => ({
       date: row.date,
       accountId: row.accountId,
@@ -94,7 +94,7 @@ export function reapplyPlan(
   const updated: ImportPlan['updated'] = []
   const months = new Set<string>()
   for (const row of all) {
-    if (row.source !== 'td' || row.reviewed) continue
+    if (row.source !== 'td' || row.reviewed || row.duplicateOf) continue
     if (onlyKey && statementKey(row.originalStatement) !== onlyKey) continue
     const account = byId.get(row.accountId)
     if (!account) continue

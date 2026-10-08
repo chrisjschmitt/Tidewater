@@ -7,6 +7,7 @@ import TdStatementsCard from './TdStatementsCard'
 import RulesCompareCard from './RulesCompareCard'
 import RulesSettingsCard from './RulesSettingsCard'
 import ReviewPanel from './ReviewPanel'
+import DuplicatesCard from './DuplicatesCard'
 import TransactionEditor from './TransactionEditor'
 import Modal from '../Modal'
 import SwitchOverCard from './SwitchOverCard'
@@ -260,7 +261,12 @@ export default function EtmArea({
               />
             )}
 
-            {tab === 'review' && <ReviewPanel data={data} />}
+            {tab === 'review' && (
+              <>
+                <DuplicatesCard data={data} />
+                <ReviewPanel data={data} />
+              </>
+            )}
 
             {tab === 'import' && (
               <div className="mb-6 space-y-3">

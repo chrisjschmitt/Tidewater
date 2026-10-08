@@ -7,6 +7,7 @@
  * amount appears anywhere here.
  */
 import { readFileSync } from 'node:fs'
+import { findPossibleDuplicates, pairKey } from '../src/lib/etm/duplicates.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
@@ -243,6 +244,22 @@ const splitEdit = settleRow(mk('sp', -100, 'Uncategorized'), { merchant: 'Store'
 check('a split edit names the row by its largest part', splitEdit.category === 'Groceries' && splitEdit.split?.length === 2)
 const unsplit = settleRow(splitEdit, { merchant: 'Store', lines: [{ amount: -100, category: 'Groceries', tags: [] }] })
 check('one line clears the split', !unsplit.split)
+
+console.log('=== Possible duplicates ===')
+const dupe = (id: string, date: string, amount: number, feedFile: string): Transaction => ({
+  ...tdRow, id, date, amount, feedFile, originalStatement: 'BISTRO 21', split: undefined, duplicateOf: undefined,
+})
+const redated = [dupe('d1', '2026-10-03', -45, 'TD-transactions-2026-10-04.csv'), dupe('d2', '2026-10-05', -45, 'TD-transactions-2026-10-10.csv')]
+check('same charge re-dated in a later download is flagged', findPossibleDuplicates(redated).length === 1)
+check('two identical charges in one download are not', findPossibleDuplicates([dupe('s1', '2026-10-03', -5, 'f1'), dupe('s2', '2026-10-03', -5, 'f1')]).length === 0)
+const tipped = findPossibleDuplicates([dupe('t1', '2026-10-03', -45, 'f1'), dupe('t2', '2026-10-04', -54, 'f2')])
+check('a tip added when it posted is flagged as an amount change', tipped.length === 1 && !tipped[0]!.sameAmount)
+check('a very different amount is not', findPossibleDuplicates([dupe('v1', '2026-10-03', -45, 'f1'), dupe('v2', '2026-10-04', -120, 'f2')]).length === 0)
+check('more than three days apart is not', findPossibleDuplicates([dupe('w1', '2026-10-01', -45, 'f1'), dupe('w2', '2026-10-06', -45, 'f2')]).length === 0)
+check('“not a duplicate” is remembered', findPossibleDuplicates(redated, [pairKey('d1', 'd2')]).length === 0)
+const kept = ledgerView([redated[0]!, { ...redated[1]!, duplicateOf: 'd1' }], { global: '2026-10-01', perAccount: {} })
+check('a row marked as a duplicate never counts', kept.length === 1 && kept[0]!.id === 'd1')
+check('and is not flagged again', findPossibleDuplicates([redated[0]!, { ...redated[1]!, duplicateOf: 'd1' }]).length === 0)
 
 console.log('=== Download progress ===')
 const day = '2026-10-07'
