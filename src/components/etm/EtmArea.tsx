@@ -248,6 +248,7 @@ export default function EtmArea({
                 onNotice={data.flash}
                 onOpenTidy={() => setTab('month')}
                 onApplyHouseholdContribution={onApplyHouseholdContribution}
+                onEdit={(t) => setEditingId(t.id.split('#')[0]!)}
                 {...(onExpensesChange
                   ? {
                       onPlanChange: async (change: { key: string; label: string; month: string; amount: number }) => {

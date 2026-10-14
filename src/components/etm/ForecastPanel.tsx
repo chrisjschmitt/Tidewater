@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import ForecastCategories from './ForecastCategories'
 import ForecastGoals from './ForecastGoals'
+import ForecastActualModal from './ForecastActualModal'
 import ForecastMonthCard from './ForecastMonthCard'
 import ForecastMonthEnd from './ForecastMonthEnd'
 import ForecastTimeline from './ForecastTimeline'
@@ -12,7 +13,7 @@ import { uid } from '../../lib/format'
 import { walkForward } from '../../lib/forecast/backtest'
 import { forecast, lookbackMonths, monthOfKnownFuture, windowLabel } from '../../lib/forecast/forecast'
 import { lastFullMonth, monthEndVariance, snapshotFromResult } from '../../lib/forecast/snapshot'
-import type { ForecastConfig, ForecastSnapshot, PinRequest } from '../../lib/forecast/types'
+import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot, type PinRequest } from '../../lib/forecast/types'
 import { taggingGaps, withCategoryTypicalMonths, withCategoryTypeOverride, withIgnoredCompare } from '../../lib/forecast/universe'
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
@@ -31,6 +32,8 @@ interface Props {
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
   /** Changes a category's plan from a month on (planHistory.ts). */
   onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
+  /** Opens the shared editor on a TD or manual row from a drill-in. */
+  onEdit?: (row: Transaction) => void
 }
 
 export default function ForecastPanel({
@@ -45,11 +48,14 @@ export default function ForecastPanel({
   onNotice,
   onApplyHouseholdContribution,
   onPlanChange,
+  onEdit,
 }: Props) {
   const asOf = today()
   const currentMonth = asOf.slice(0, 7)
   const [focusedMonth, setFocusedMonth] = useState(currentMonth)
   const [openCategory, setOpenCategory] = useState<string | null>(null)
+  const [openActual, setOpenActual] = useState<{ key: string; label: string } | null>(null)
+  const resolvedConfig = useMemo(() => withForecastDefaults(config), [config])
 
   const lookback = useMemo(
     () => lookbackMonths(asOf, config.window, transactions.length ? oldestDate(transactions) : undefined),
@@ -227,8 +233,20 @@ export default function ForecastPanel({
               onIgnore={(key, ignored) =>
                 onConfigChange(withIgnoredCompare(config, focused.month, key, ignored))
               }
+              onOpenActual={setOpenActual}
             />
           </div>
+          {openActual && (
+            <ForecastActualModal
+              category={openActual}
+              month={currentMonth}
+              transactions={transactions}
+              config={resolvedConfig}
+              reimbursableParentTag={reimbursableParentTag}
+              {...(onEdit ? { onEdit } : {})}
+              onClose={() => setOpenActual(null)}
+            />
+          )}
           {lastVariance && (
             <div id="forecast-last-month" className="scroll-mt-28">
               <ForecastMonthEnd

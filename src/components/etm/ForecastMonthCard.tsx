@@ -40,6 +40,8 @@ interface Props {
   typicalPlanFor?: (key: string) => number
   /** Changes the category's plan from this month on; earlier months keep theirs. */
   onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
+  /** Opens the transactions behind a category's Actual to today. */
+  onOpenActual?: (row: { key: string; label: string }) => void
 }
 
 export default function ForecastMonthCard({
@@ -57,6 +59,7 @@ export default function ForecastMonthCard({
   onIgnore,
   typicalPlanFor,
   onPlanChange,
+  onOpenActual,
 }: Props) {
   const isCurrent = point.kind === 'current'
   const actual = isCurrent ? current.actualToDate : point.kind === 'past' ? point.actual : 0
@@ -127,6 +130,7 @@ export default function ForecastMonthCard({
         {...(isCurrent ? { actualFor: (row: VarianceRow) => actualToDateFor(row, current.remainLines) } : {})}
         {...(typicalPlanFor && onPlanChange ? { planEdit: { typicalPlanFor, onPlanChange } } : {})}
         pinnedKeys={new Set(placements.map((future) => pinKey(future.category)))}
+        {...(isCurrent && onOpenActual ? { onOpenActual } : {})}
       />
 
       {placements.length > 0 && (
@@ -335,6 +339,7 @@ function PlanVsForecastList({
   actualFor,
   planEdit,
   pinnedKeys,
+  onOpenActual,
 }: {
   rows: VarianceRow[]
   toMonthEnd: boolean
@@ -348,6 +353,7 @@ function PlanVsForecastList({
   planEdit?: PlanEdit
   /** Categories with a pin on this month, badged in their row. */
   pinnedKeys: Set<string>
+  onOpenActual?: (row: { key: string; label: string }) => void
 }) {
   const ignored = new Set(ignoredKeys)
   const active = rows.filter((row) => !ignored.has(row.key))
@@ -373,6 +379,7 @@ function PlanVsForecastList({
           ? 'Typical-month plan (plus any pin on this month) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'
           : 'Typical-month plan (plus any pin on this month) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'}{' '}
         {planEdit && `Click a Plan figure to change that category's plan from ${monthName(month)} on; earlier months keep theirs. `}
+        {onOpenActual && 'Click an Actual to today figure to see its transactions. '}
         Ignore a line if you expect to hit Plan there anyway — that gap leaves
         Forecast; Plan does not change. Pin adds the amount to Plan; the trend
         is already in Forecast. Skipping a category for a month is a plan
@@ -414,6 +421,7 @@ function PlanVsForecastList({
                 {...(actualFor ? { actual: actualFor(row) } : {})}
                 {...(planEdit ? { planEdit } : {})}
                 pinned={pinnedKeys.has(row.key)}
+                {...(onOpenActual ? { onOpenActual } : {})}
               />
             ))}
           </tbody>
@@ -463,6 +471,7 @@ function PlanVsForecastList({
                   {...(actualFor ? { actual: actualFor(row) } : {})}
                   {...(planEdit ? { planEdit } : {})}
                   pinned={pinnedKeys.has(row.key)}
+                  {...(onOpenActual ? { onOpenActual } : {})}
                 />
               ))}
             </tbody>
@@ -493,6 +502,7 @@ function CompareRow({
   actual,
   planEdit,
   pinned,
+  onOpenActual,
 }: {
   row: VarianceRow
   running?: number
@@ -505,6 +515,7 @@ function CompareRow({
   actual?: number
   planEdit?: PlanEdit
   pinned?: boolean
+  onOpenActual?: (row: { key: string; label: string }) => void
 }) {
   const pinDefault = pinAmountFor(row)
   const [open, setOpen] = useState(false)
@@ -546,7 +557,20 @@ function CompareRow({
           {planEdit ? <PlanCell row={row} month={month} edit={planEdit} /> : amountIn(row.plan, 'CAD')}
         </td>
         {actual !== undefined && (
-          <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">{amountIn(actual, 'CAD')}</td>
+          <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">
+            {onOpenActual ? (
+              <button
+                type="button"
+                className="tabular-nums underline decoration-sand-300 underline-offset-2 hover:text-ink-900"
+                onClick={() => onOpenActual({ key: row.key, label: row.label })}
+                aria-label={`Transactions behind ${row.label} actual to today`}
+              >
+                {amountIn(actual, 'CAD')}
+              </button>
+            ) : (
+              amountIn(actual, 'CAD')
+            )}
+          </td>
         )}
         <td className={`py-1.5 pr-3 text-right tabular-nums ${ignored ? 'text-ink-400' : 'text-ink-700'}`}>
           {amountIn(row.forecast, 'CAD')}

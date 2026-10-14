@@ -9,6 +9,13 @@ interface Props {
   empty: string
   /** Tags to leave off the row, having been said by the heading above it. */
   omitTags?: string[]
+  /**
+   * CAD spend so far by row id, added up oldest first, and its total: shown as
+   * the running column and the subtotal, so the newest row reads as the total.
+   */
+  spendSoFar?: { running: Map<string, number>; total: number }
+  /** Offers Edit on rows the editor can change (TD and manual, not Monarch). */
+  onEdit?: (row: Transaction) => void
 }
 
 /**
@@ -17,7 +24,7 @@ interface Props {
  * rows actually say, and a clipped statement sends you off to another tab to
  * find out.
  */
-export default function TransactionTable({ rows, empty, omitTags = [] }: Props) {
+export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit }: Props) {
   const totals = useMemo(() => runningTotals(rows), [rows])
   const hidden = useMemo(
     () => new Set(omitTags.map((t) => t.trim().toLowerCase())),
@@ -37,6 +44,11 @@ export default function TransactionTable({ rows, empty, omitTags = [] }: Props) 
             <th className="py-1.5 text-left font-medium">What</th>
             <th className="w-24 py-1.5 text-right font-medium">Amount</th>
             <th className="w-24 py-1.5 text-right font-medium">Running</th>
+            {onEdit && (
+              <th className="w-14 py-1.5">
+                <span className="sr-only">Edit</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-sand-200">
@@ -69,8 +81,26 @@ export default function TransactionTable({ rows, empty, omitTags = [] }: Props) 
                   {amountIn(row.amount, row.currency)}
                 </td>
                 <td className="py-2 text-right tabular-nums text-ink-400">
-                  {amountIn(totals[i]![row.currency], row.currency)}
+                  {spendSoFar
+                    ? spendSoFar.running.has(row.id)
+                      ? amountIn(spendSoFar.running.get(row.id)!, 'CAD')
+                      : '—'
+                    : amountIn(totals[i]![row.currency], row.currency)}
                 </td>
+                {onEdit && (
+                  <td className="py-2 text-right">
+                    {(row.source === 'td' || row.source === 'manual') && (
+                      <button
+                        type="button"
+                        className="btn-quiet text-xs"
+                        onClick={() => onEdit(row)}
+                        aria-label={`Edit ${row.merchant || 'transaction'}`}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             )
           })}
@@ -81,10 +111,13 @@ export default function TransactionTable({ rows, empty, omitTags = [] }: Props) 
               Subtotal
             </td>
             <td colSpan={2} className="py-2 text-right font-semibold tabular-nums text-ink-900">
-              {presentIn(totals.at(-1)!)
-                .map(([currency, value]) => amountIn(value, currency))
-                .join(' · ')}
+              {spendSoFar
+                ? amountIn(spendSoFar.total, 'CAD')
+                : presentIn(totals.at(-1)!)
+                    .map(([currency, value]) => amountIn(value, currency))
+                    .join(' · ')}
             </td>
+            {onEdit && <td />}
           </tr>
         </tfoot>
       </table>

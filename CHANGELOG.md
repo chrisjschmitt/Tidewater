@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.11 — 2026-10-14
+
+### Added
+- Forecast, "Plan vs forecast by category" (this month): click a figure in "Actual to today" to see that category's transactions for the month, newest first. The running column adds them up oldest first, so the top row shows the figure you clicked. They are the forecast's own rows (household spend, CAD, counted in the month its close date or "Count in" date puts it). TD and hand-entered rows have Edit, which opens the usual editor and saves into the day's review session.
+
 ## 0.13.10 — 2026-10-14
 
 ### Fixed

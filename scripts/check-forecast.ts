@@ -39,6 +39,7 @@ import {
   isParentOnlyReimbursable,
   isUncategorizedCategory,
   HOUSEHOLD_STACK_KEY,
+  householdRowsIn,
   nameKey,
   normalizeTag,
   splitUniverse,
@@ -189,6 +190,29 @@ const cadLookback = result.cad.household.categories.reduce((sum, c) => sum + c.w
 const usdLookback = result.usd.household.categories.reduce((sum, c) => sum + c.windowTotal, 0)
 check('CAD household lookback is 25754', near(cadLookback, 25754), `got ${cadLookback}`)
 check('USD cloud software is 360 and stays in USD', near(usdLookback, 360), `got ${usdLookback}`)
+
+console.log('\n=== Actual to today drill-in adds up ===')
+{
+  const current = result.cad.household.currentMonth
+  const resolved = withForecastDefaults(base)
+  const keys = new Set([...current.planVsForecast.map((row) => row.key), ...current.remainLines.map((line) => line.key)])
+  const mismatched = [...keys].filter((key) => {
+    const rows = householdRowsIn(transactions, resolved, key, current.month)
+    const spent = rows.reduce((sum, row) => sum - row.amount, 0)
+    const line = current.remainLines.find((item) => item.key === key)
+    const row = current.planVsForecast.find((item) => item.key === key)
+    const shown = line ? line.actual : (row?.forecast ?? 0)
+    return !near(spent, shown)
+  })
+  check('each category’s rows sum to its Actual to today', keys.size > 0 && mismatched.length === 0, mismatched.join(', '))
+  const all = [...new Set(transactions.map((row) => nameKey(row.category)))].flatMap((key) =>
+    householdRowsIn(transactions, resolved, key, current.month),
+  )
+  check(
+    'all categories’ rows sum to the month’s Actual to today',
+    near(all.reduce((sum, row) => sum - row.amount, 0), current.actualToDate),
+  )
+}
 check('USD is not folded into CAD', !result.cad.household.categories.some((c) => c.key === nameKey('Cloud Software')))
 
 console.log('\n=== Classification (24-month window) ===')

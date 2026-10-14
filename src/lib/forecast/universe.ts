@@ -79,6 +79,28 @@ export function splitUniverse(
   return split
 }
 
+/**
+ * The rows behind one category's forecast actual for a month: the household
+ * series, one currency, matched by category key and (ledger) month — exactly
+ * what the engine sums, so a drill-in adds up to the figure that was clicked.
+ */
+export function householdRowsIn(
+  transactions: Transaction[],
+  config: ForecastConfig,
+  key: string,
+  month: string,
+  parentTag: string = DEFAULT_REIMBURSABLE_PARENT,
+  currency: Transaction['currency'] = 'CAD',
+): Transaction[] {
+  return transactions.filter(
+    (transaction) =>
+      transaction.currency === currency &&
+      transaction.date.slice(0, 7) === month &&
+      nameKey(transaction.category) === key &&
+      assignSeries(transaction, config, parentTag) === 'household',
+  )
+}
+
 /** Canonical spelling for checklists: one space after the colon. */
 export const displayTag = (tag: string): string => tag.trim().replace(/\s+/g, ' ').replace(/\s*:\s*/, ': ')
 
