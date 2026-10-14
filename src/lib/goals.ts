@@ -38,9 +38,11 @@ export function projectDebt(goal: Goal, months: number): ProjectionPoint[] {
       points.push({ month: m, balance: 0, contributed })
       continue
     }
-    const interest = balance * r
-    balance = Math.max(0, balance + interest - goal.monthly)
-    contributed += goal.monthly
+    // The last payment is only what is left, so payoff interest is not overstated.
+    const owed = balance * (1 + r)
+    const payment = Math.min(goal.monthly, owed)
+    balance = owed - payment
+    contributed += payment
     points.push({ month: m, balance, contributed })
   }
   return points
@@ -78,7 +80,7 @@ export function monthsToPayoff(goal: Goal): number {
   return Infinity
 }
 
-/** Total interest earned (savings) or paid (debt) over the life of the goal. */
+/** Total interest earned (savings) or paid (debt) over the first `months` months. */
 export function interestOverHorizon(goal: Goal, months: number): number {
   const points = project(goal, months)
   const last = points[points.length - 1]

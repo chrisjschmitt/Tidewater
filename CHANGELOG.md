@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.10 — 2026-10-14
+
+### Fixed
+- Savings goals: "$X in N months · $Y of it is growth" counts growth up to the month the target is reached, not over the chart's time scale (a goal reached in 7 months showed 12 months of growth).
+- Debt goals: "Clear in N months · $Y interest" counts interest up to payoff whatever the time scale, and the last payment is only what is left, so interest is no longer overstated by the unused part of that payment.
+
 ## 0.13.9 — 2026-10-14
 
 ### Fixed

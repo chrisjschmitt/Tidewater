@@ -205,7 +205,8 @@ function GoalCard({
   const isDebt = goal.kind === 'debt'
   const horizon = goal.horizonMonths ?? DEFAULT_HORIZON
   const months = monthsToTarget(goal)
-  const interest = interestOverHorizon(goal, horizon)
+  // The sentence is about reaching the target, so count growth/interest up to then, not over the chart.
+  const interest = Number.isFinite(months) ? interestOverHorizon(goal, months) : 0
   const progress = progressToward(goal)
   const color = isDebt ? 'var(--color-shell-500)' : 'var(--color-tide-600)'
 
