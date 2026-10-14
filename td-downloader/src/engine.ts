@@ -1,4 +1,4 @@
-import { mkdir, rename, rm } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { chromium } from 'playwright'
@@ -288,6 +288,7 @@ async function runOneAccount(
     // Whatever the page does next, no half-written file is left behind under a
     // name anything downstream would read.
     await rm(partialPath, { force: true }).catch(() => undefined)
+    await rm(`${partialPath}.previous`, { force: true }).catch(() => undefined)
     return {
       label: account.label,
       lastFour: account.lastFour,
@@ -299,6 +300,7 @@ async function runOneAccount(
 
   if (outcome.kind === 'error') {
     await rm(partialPath, { force: true }).catch(() => undefined)
+    await rm(`${partialPath}.previous`, { force: true }).catch(() => undefined)
     // A session problem is the run's problem, so it is rethrown past the
     // per-account boundary.
     if (outcome.error instanceof SessionBlocked) throw outcome.error
@@ -328,8 +330,53 @@ async function downloadAccount(
   finalPath: string,
   partialPath: string,
 ): Promise<string> {
-  // Back to the summary each time. Starting every account from the same known
-  // page means one account's half-finished navigation cannot mislead the next.
+  const current = await exportOnce(page, account, account.exportSteps, config, pacer, partialPath)
+
+  if (!account.previousPeriodSteps) {
+    if (!current) throw new Error(CANCELLED_MESSAGE)
+    await rename(partialPath, finalPath)
+    return finalPath
+  }
+
+  // A card's current period resets on its statement date, so on its own it
+  // misses the days between the last download and the close — and is empty
+  // altogether the morning a new statement starts. The closed statement is
+  // fetched too and appended: both files run newest first and the periods do
+  // not overlap, so the joined file still reads newest first. Rows already
+  // brought in last week are recognised by Tidewater and not added twice.
+  const previousPartial = `${partialPath}.previous`
+  const previous = await exportOnce(page, account, account.previousPeriodSteps, config, pacer, previousPartial)
+  if (!current && !previous) throw new Error(CANCELLED_MESSAGE)
+
+  const parts = await Promise.all(
+    [current && partialPath, previous && previousPartial]
+      .filter((path): path is string => Boolean(path))
+      .map(async (path) => (await readFile(path, 'utf8')).replace(/\s+$/, '')),
+  )
+  await writeFile(partialPath, `${parts.filter(Boolean).join('\n')}\n`, 'utf8')
+  await rm(previousPartial, { force: true })
+  await rename(partialPath, finalPath)
+  return finalPath
+}
+
+const CANCELLED_MESSAGE =
+  'TD cancelled the export — usually the account has no transactions in the selected period. Record its balance by hand this month.'
+
+/**
+ * One export from the account's page: navigate, run the steps, save the file
+ * under `savePath`. False when TD started the download and then cancelled it,
+ * which it does when the chosen period holds no transactions at all.
+ */
+async function exportOnce(
+  page: Page,
+  account: AccountConfig,
+  steps: readonly ExportStep[],
+  config: RunConfig,
+  pacer: Pacer,
+  savePath: string,
+): Promise<boolean> {
+  // Back to the summary each time. Starting every export from the same known
+  // page means one half-finished navigation cannot mislead the next.
   await pacer.beforeAction()
   await page.goto(config.easywebHomeUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS })
   await guard(page)
@@ -344,10 +391,10 @@ async function downloadAccount(
   // The listener is armed before the steps run, because the download can start
   // on the very click that finishes the sequence. Its budget therefore has to
   // cover the think time still to come, or pacing would look like a timeout.
-  const thinkTimeAhead = account.exportSteps.length * config.pacing.actionDelayMs.maxMs
+  const thinkTimeAhead = steps.length * config.pacing.actionDelayMs.maxMs
   const downloadPromise = page.waitForEvent('download', { timeout: DOWNLOAD_TIMEOUT_MS + thinkTimeAhead })
 
-  for (const step of account.exportSteps) {
+  for (const step of steps) {
     await pacer.beforeAction()
     await applyStep(page, step)
   }
@@ -357,26 +404,23 @@ async function downloadAccount(
   // Temp name first, rename after: a reader watching this directory should
   // never see a partially written CSV under its final name.
   try {
-    await download.saveAs(partialPath)
+    await download.saveAs(savePath)
   } catch (error) {
-    // TD starts a download and then cancels it when the chosen period holds
-    // no transactions at all — seen live on a dormant card. Said plainly,
-    // because "saveAs: canceled" reads like the tool's fault when the account
-    // simply had nothing to say this month.
+    // Seen live on a dormant card, and on a card the morning its new
+    // statement starts. Reported plainly by the caller, because
+    // "saveAs: canceled" reads like the tool's fault.
     if (messageOf(error).includes('canceled')) {
-      throw new Error(
-        'TD cancelled the export — usually the account has no transactions in the selected period. Record its balance by hand this month.',
-      )
+      await rm(savePath, { force: true }).catch(() => undefined)
+      await guard(page)
+      return false
     }
     throw error
   }
-  await rename(partialPath, finalPath)
 
   // Checked after the export too — an export click is a common place for a
   // timed-out session to surface.
   await guard(page)
-
-  return finalPath
+  return true
 }
 
 /**

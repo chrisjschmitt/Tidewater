@@ -165,12 +165,24 @@ function parseAccount(entry: unknown, index: number): AccountConfig {
     throw new ConfigError(`${where}.exportSteps must be a non-empty array of steps.`)
   }
 
+  const previous = record['previousPeriodSteps']
+  if (previous !== undefined && (!Array.isArray(previous) || previous.length === 0)) {
+    throw new ConfigError(`${where}.previousPeriodSteps, when present, must be a non-empty array of steps.`)
+  }
+
   return {
     label,
     lastFour,
     kind: kind as AccountKind,
     accountLink,
     exportSteps: steps.map((step, stepIndex) => parseStep(step, `${where}.exportSteps[${stepIndex}]`)),
+    ...(previous
+      ? {
+          previousPeriodSteps: (previous as unknown[]).map((step, stepIndex) =>
+            parseStep(step, `${where}.previousPeriodSteps[${stepIndex}]`),
+          ),
+        }
+      : {}),
   }
 }
 
@@ -205,7 +217,7 @@ function parseStep(entry: unknown, where: string): ExportStep {
  */
 export function hasPlaceholderSelectors(account: AccountConfig): boolean {
   if (account.accountLink === SELECTOR_PLACEHOLDER) return true
-  return account.exportSteps.some(
+  return [...account.exportSteps, ...(account.previousPeriodSteps ?? [])].some(
     (step) => step.selector === SELECTOR_PLACEHOLDER || step.value === SELECTOR_PLACEHOLDER,
   )
 }

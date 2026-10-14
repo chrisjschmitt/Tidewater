@@ -25,6 +25,12 @@ export interface AccountConfig {
   /** Selector or link text that reaches this account from the EasyWeb home. */
   accountLink: string
   exportSteps: ExportStep[]
+  /**
+   * Cards only: the clicks that export the last closed statement. When set,
+   * it is downloaded after `exportSteps` and appended, so a statement closing
+   * between two runs loses no days.
+   */
+  previousPeriodSteps?: ExportStep[]
 }
 
 /** An inclusive millisecond range a delay is drawn from. */

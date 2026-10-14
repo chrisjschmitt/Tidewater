@@ -50,6 +50,7 @@ covered in `README.md` under "Looking human".
 | `kind`        | `"bank" \| "credit"`  | Only used for reporting today; bank and card exports differ enough that a downstream reader may care. |
 | `accountLink` | string                | Selector or link text that reaches the account's page from the EasyWeb home. Playwright selector syntax, so `text=Expense Account` works as well as a CSS selector. |
 | `exportSteps` | array of steps        | The clicks that trigger the CSV download, in order. The **last** step is the one expected to start the download; the tool arms its download listener around the whole sequence, so an extra confirmation click after it is fine. |
+| `previousPeriodSteps` | array of steps, optional | Cards only. The same clicks, but choosing the last closed statement (e.g. `mat-option:has-text("(Last statement")`). When set, that export is downloaded too and appended to the account's file, so a statement closing between two runs loses no days, and the morning a new statement starts no longer fails. The account fails only when both periods are empty. |
 
 ## Each export step
 
