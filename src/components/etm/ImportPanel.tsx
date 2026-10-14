@@ -4,7 +4,7 @@ import ImportProgress, { type ImportProgressState } from '../ImportProgress'
 import { AccountForm, blankAccount } from './AccountsPanel'
 import { planImport, type ImportPlan } from '../../lib/etm/importer'
 import { MonarchFormatError } from '../../lib/etm/monarch'
-import { monthLabel } from '../../lib/etm/format'
+import { amountIn, monthLabel } from '../../lib/etm/format'
 import { fingerprintOf, type ExportFingerprint } from '../../lib/etm/watchFolder'
 import type { Account, ImportBatch, Transaction } from '../../lib/etm/types'
 
@@ -38,6 +38,7 @@ export default function ImportPanel({
   const [file, setFile] = useState<{ name: string; text: string } | null>(null)
   const [source, setSource] = useState<File | null>(null)
   const [plan, setPlan] = useState<ImportPlan | null>(null)
+  const [removeStale, setRemoveStale] = useState(false)
   const [progress, setProgress] = useState<ImportProgressState | null>(null)
   const [creating, setCreating] = useState<Account | null>(null)
   const [error, setError] = useState('')
@@ -53,6 +54,9 @@ export default function ImportPanel({
       setProgress({ fileName: name, label: 'Almost ready…', percent: 100 })
       setFile({ name, text })
       setPlan(next)
+      // A handful is the pending-charge case. Many more usually means the
+      // export was filtered, so nothing is removed unless asked for.
+      setRemoveStale(likelyStale(next))
     } catch (err) {
       setFile(null)
       setPlan(null)
@@ -90,7 +94,10 @@ export default function ImportPanel({
     if (!plan) return
     setBusy(true)
     try {
-      await onCommit(plan, source ? fingerprintOf(source) : undefined)
+      await onCommit(
+        { ...plan, removed: removeStale ? (plan.stale ?? []) : [] },
+        source ? fingerprintOf(source) : undefined,
+      )
       setFile(null)
       setSource(null)
       setPlan(null)
@@ -100,7 +107,10 @@ export default function ImportPanel({
   }
 
   const blocked = (plan?.unmatched.length ?? 0) > 0
-  const nothingToDo = plan !== null && plan.added.length === 0 && plan.updated.length === 0
+  const stale = plan?.stale ?? []
+  const nothingToDo =
+    plan !== null && plan.added.length === 0 && plan.updated.length === 0 && !(removeStale && stale.length > 0)
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.nickname ?? ''
 
   return (
     <div className="space-y-6">
@@ -185,6 +195,43 @@ export default function ImportPanel({
             </p>
           )}
 
+          {stale.length > 0 && (
+            <div className="mt-5 rounded-2xl border border-sand-200 bg-sand-100/60 px-4 py-3.5">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={removeStale}
+                  onChange={(e) => setRemoveStale(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink-900">
+                    Remove {stale.length} row{stale.length === 1 ? '' : 's'} no longer in Monarch
+                  </span>
+                  <span className="block text-xs text-ink-500">
+                    Already here from an earlier import, inside this file’s dates and accounts, but gone from
+                    Monarch — usually a pending charge Monarch re-dated or re-priced when it posted, or a
+                    purchase it re-split. The new version is in this file, so keeping both counts it twice.
+                    {!likelyStale(plan) &&
+                      ' That is a lot for one export — if it was filtered (one account, one category), leave this unticked.'}{' '}
+                    Undo under Past imports puts them back.
+                  </span>
+                </span>
+              </label>
+              <ul className="mt-2 max-h-48 divide-y divide-sand-200/80 overflow-y-auto pl-7 text-xs">
+                {stale.map((row) => (
+                  <li key={row.id} className="flex justify-between gap-3 py-1">
+                    <span className="min-w-0 truncate text-ink-700">
+                      <span className="tabular-nums text-ink-400">{row.date}</span> · {row.merchant} ·{' '}
+                      {row.category} · {accountName(row.accountId)}
+                    </span>
+                    <span className="tabular-nums text-ink-700">{amountIn(row.amount, row.currency)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {blocked && (
             <div className="mt-5 rounded-2xl border border-shell-300/50 bg-shell-300/10 px-4 py-3.5">
               <p className="text-sm font-medium text-ink-900">
@@ -257,7 +304,8 @@ export default function ImportPanel({
                   <p className="mt-0.5 text-xs text-ink-500">
                     {new Date(batch.importedAt).toLocaleString()} ·{' '}
                     {batch.addedIds.length.toLocaleString()} new,{' '}
-                    {batch.replaced.length.toLocaleString()} updated
+                    {(batch.replaced.length - (batch.removedIds?.length ?? 0)).toLocaleString()} updated
+                    {(batch.removedIds?.length ?? 0) > 0 && `, ${batch.removedIds!.length.toLocaleString()} removed`}
                   </p>
                 </div>
                 <button onClick={() => void onUndo(batch)} className="btn-ghost shrink-0 text-xs">
@@ -296,4 +344,10 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'go
       </p>
     </div>
   )
+}
+
+/** Few enough, against the size of the export, to be pending charges that posted rather than a filtered export. */
+function likelyStale(plan: ImportPlan): boolean {
+  const count = plan.stale?.length ?? 0
+  return count > 0 && count <= 25 && count <= Math.max(3, plan.rowsRead * 0.05)
 }

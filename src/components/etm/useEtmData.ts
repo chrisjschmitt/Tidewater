@@ -285,7 +285,8 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
       }
       await reload()
       flash(
-        `Brought in ${plan.added.length.toLocaleString()} new and refreshed ${plan.updated.length.toLocaleString()}.`,
+        `Brought in ${plan.added.length.toLocaleString()} new and refreshed ${plan.updated.length.toLocaleString()}` +
+          ((plan.removed?.length ?? 0) > 0 ? `, removed ${plan.removed!.length.toLocaleString()} no longer in Monarch.` : '.'),
       )
     },
     [flash, reload, unlockedKey],

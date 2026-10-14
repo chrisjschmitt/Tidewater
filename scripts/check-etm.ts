@@ -309,6 +309,25 @@ check('the reviewed flag is taken', change?.next.reviewed === true)
 check('the group is re-derived', change?.next.groupId === groupForCategory('Travel'))
 check('a tag-only edit is enough to count as changed', await tagEditIsAnUpdate())
 
+console.log('\n=== Rows Monarch no longer has ===')
+
+check('a re-import of the same file finds nothing stale', (second.stale ?? []).length === 0)
+// A pending charge stored last week, re-dated by Monarch when it posted: the
+// posted version is in the file, the pending one is not.
+const posted = first.added.find((t) => t.date > first.firstDate && t.date < first.lastDate)!
+const pending = { ...posted, id: 'pending-copy', date: first.lastDate, category: 'Miscellaneous' }
+const withPending = new Map(stored).set(pending.id, pending)
+const shadow = { ...posted, id: 'td-copy', source: 'td' as const }
+const handEntered = { ...posted, id: 'manual-copy', source: 'manual' as const }
+const onFirstDay = { ...posted, id: 'first-day-copy', date: first.firstDate }
+const beforeFile = { ...posted, id: 'older-copy', date: '2000-01-01' }
+for (const row of [shadow, handEntered, onFirstDay, beforeFile]) withPending.set(row.id, row)
+const fifth = await planImport(fixture, { fileName: 'fixture.csv', accounts, existing: withPending })
+check('the pending copy is found stale', (fifth.stale ?? []).map((t) => t.id).join(',') === 'pending-copy', (fifth.stale ?? []).map((t) => t.id).join(','))
+check('TD and manual rows are never stale', !(fifth.stale ?? []).some((t) => t.source !== 'monarch'))
+check('rows on the first day or before the file are left alone', !(fifth.stale ?? []).some((t) => t.date <= first.firstDate))
+check('nothing stale is removed unless chosen', (fifth.removed ?? []).length === 0)
+
 console.log('\n=== Manual entries ===')
 
 const cash = createManualTransaction(

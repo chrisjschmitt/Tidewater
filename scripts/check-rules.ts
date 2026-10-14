@@ -77,6 +77,11 @@ const history: HistoryRow[] = [
     h(d as string, 'SATELLITE NET', 'Internet', (total as number) / 3),
     h(d as string, 'SATELLITE NET', 'Other Reimbursement', ((total as number) * 2) / 3, { tags: ['Reimbursable: Other'] }),
   ]),
+  // One basket at a drugstore, split five ways with Groceries three times; one plain visit.
+  h('2026-07-20', 'CORNER DRUGS', 'Medicine (over-the-counter)', -12, { accountId: 'card', card: true }),
+  ...([['Gifts', -20], ['Groceries', -9.55], ['Medicine (over-the-counter)', -32.26], ['Groceries', -19.48], ['Groceries', -3.1]] as const).map(
+    ([category, amount]) => h('2026-08-16', 'CORNER DRUGS', category, amount, { accountId: 'card', card: true }),
+  ),
   // Income, and an allowance transfer to an own account.
   h('2026-07-25', 'PENSION DEP', 'Pension', 900),
   h('2026-08-25', 'PENSION DEP', 'Pension', 900),
@@ -107,6 +112,14 @@ const mixed = run('DOLLAR STORE', -7, card)
 check('mixed history goes to review with suggestions', mixed.layer === 'review' && mixed.suggestions.length === 2)
 check('merged category learned under its new name', run('PARKING LOT 7', -3).outcome?.category === 'Parking & Tolls')
 check('retired tag never produced', (run('OLD CAFE', -9).outcome?.tags ?? ['x']).length === 0)
+const basket = run('CORNER DRUGS', -50, card)
+const basketSplit = basket.suggestions.find((s) => (s.split?.length ?? 0) > 1)
+check('a past split is offered on a purchase', Boolean(basketSplit), basket.suggestions.map((s) => s.category).join(' | '))
+check('alike split lines are one part', basketSplit?.split?.filter((l) => l.category === 'Groceries').length === 1, basketSplit?.split?.map((l) => l.category).join(' + '))
+const cardRefund = run('CORNER DRUGS', 6.99, card)
+check('a card refund is never offered a split', cardRefund.suggestions.every((s) => (s.split?.length ?? 0) <= 1), cardRefund.suggestions.map((s) => s.category).join(' | '))
+check('a refund is offered each category once', new Set(cardRefund.suggestions.map((s) => s.category)).size === cardRefund.suggestions.length)
+check('brasseurs reads as a restaurant', run('3 BRASSEURS SPARKS', -20.48, card).outcome?.category === 'Restaurants & Bars')
 
 console.log('=== Splits ===')
 const condo = run('CONDO CORP MSP', -1100)

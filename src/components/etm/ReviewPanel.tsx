@@ -22,6 +22,19 @@ const needsLook = (row: Transaction) =>
   !row.reviewed &&
   (row.category === 'Uncategorized' || row.prediction?.layer === 'review' || (row.prediction?.reviewReasons.length ?? 0) > 0)
 
+/** The rule layer that filed a row, in plain words. */
+const LAYER_WORDS: Record<string, string> = {
+  fixed: 'by a fixed rule',
+  user: 'by your rule',
+  learned: 'from history',
+  template: 'usual split',
+  own: 'own accounts',
+  keyword: 'by kind of merchant',
+}
+
+const outcomeKey = (lines: Array<{ category: string; tags: string[] }>) =>
+  lines.map((line) => `${line.category}|${[...line.tags].sort().join(',')}`).sort().join('+')
+
 export default function ReviewPanel({ data }: { data: EtmData }) {
   const td = useMemo(() => data.allRows.filter((row) => row.source === 'td' && !row.duplicateOf), [data.allRows])
   const months = useMemo(() => [...new Set(td.map((row) => row.date.slice(0, 7)))].sort().reverse(), [td])
@@ -132,7 +145,11 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
       <ul className="mt-4 divide-y divide-sand-200/80">
         {listed.slice(0, limit).map((row) => {
           const lines = row.split ?? [{ amount: row.amount, category: row.category, tags: row.tags }]
-          const suggestions = (row.prediction?.suggestions ?? []).slice(0, 3)
+          // A suggestion that is the filing already is not another choice.
+          const filed = outcomeKey(lines)
+          const suggestions = (row.prediction?.suggestions ?? [])
+            .filter((s) => outcomeKey(s.split ?? [{ category: s.category, tags: s.tags }]) !== filed)
+            .slice(0, 3)
           return (
             <li key={row.id} className="py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -145,11 +162,14 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
                 <span className="text-sm tabular-nums text-ink-900">{amountIn(row.amount, row.currency)}</span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-                <span className={row.category === 'Uncategorized' ? 'text-shell-500' : 'text-ink-700'}>
-                  {lines
-                    .map((l) => `${l.category}${lines.length > 1 ? ` ${amountIn(l.amount, row.currency)}` : ''}${l.notes ? ` (${l.notes})` : ''}`)
-                    .join(' + ')}
-                </span>
+                <span className="text-xs text-ink-400">{row.category === 'Uncategorized' ? 'Not filed yet' : 'Filed as:'}</span>
+                {row.category !== 'Uncategorized' && (
+                  <span className="text-ink-700">
+                    {lines
+                      .map((l) => `${l.category}${lines.length > 1 ? ` ${amountIn(l.amount, row.currency)}` : ''}${l.notes ? ` (${l.notes})` : ''}`)
+                      .join(' + ')}
+                  </span>
+                )}
                 {lines.length > 1 && (
                   <span className="rounded-full bg-sand-200 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500">
                     Split in {lines.length}
@@ -158,8 +178,10 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
                 {row.tags.length > 0 && <span className="text-xs text-ink-400">{row.tags.join(', ')}</span>}
                 {row.notes && <span className="text-xs italic text-ink-500">{row.notes}</span>}
                 {row.reviewed && <span className="rounded-full bg-tide-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-tide-700">Confirmed</span>}
-                {!row.reviewed && row.prediction?.layer && (
-                  <span className="text-[10px] uppercase tracking-wider text-ink-400">{row.prediction.layer}</span>
+                {!row.reviewed && row.prediction?.layer && row.category !== 'Uncategorized' && (
+                  <span className="text-[10px] uppercase tracking-wider text-ink-400" title="Which rule filed it">
+                    {LAYER_WORDS[row.prediction.layer] ?? row.prediction.layer}
+                  </span>
                 )}
               </div>
               {!row.reviewed && (row.prediction?.reviewReasons.length ?? 0) > 0 && (
@@ -168,6 +190,21 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
 
               {editing !== row.id && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {!row.reviewed && row.category !== 'Uncategorized' && (
+                    <button
+                      disabled={busy}
+                      className={`${needsLook(row) ? 'btn-primary' : 'btn-ghost'} text-xs disabled:opacity-50`}
+                      onClick={() => void save([{ ...row, reviewed: true }])}
+                      title="It is right as filed"
+                    >
+                      Confirm as filed
+                    </button>
+                  )}
+                  {suggestions.length > 0 && (
+                    <span className="text-xs text-ink-400">
+                      {row.category === 'Uncategorized' ? 'File as:' : 'Or file as:'}
+                    </span>
+                  )}
                   {suggestions.map((s, index) => (
                     <button
                       key={index}
@@ -184,19 +221,10 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
                       }
                       title="File it this way and confirm"
                     >
-                      {s.split && s.split.length > 1 ? s.split.map((l) => l.category).join(' + ') : s.category}
+                      {s.split && s.split.length > 1 ? [...new Set(s.split.map((l) => l.category))].join(' + ') : s.category}
                       {s.tags.length > 0 && <span className="text-ink-400"> · {s.tags.join(', ')}</span>}
                     </button>
                   ))}
-                  {!row.reviewed && row.category !== 'Uncategorized' && (
-                    <button
-                      disabled={busy}
-                      className="btn-ghost text-xs disabled:opacity-50"
-                      onClick={() => void save([{ ...row, reviewed: true }])}
-                    >
-                      Confirm
-                    </button>
-                  )}
                   <button className="btn-quiet text-xs" onClick={() => setEditing(row.id)}>
                     Change…
                   </button>

@@ -33,6 +33,15 @@ export interface ImportPlan {
   updated: Array<{ next: Transaction; previous: Transaction }>
   /** Rows already stored and identical — the ordinary case on a re-import. */
   unchanged: number
+  /**
+   * Monarch rows already stored, inside this export's dates and accounts, that
+   * the export no longer has: a pending charge Monarch re-dated or re-priced
+   * when it posted, or a split it was re-cut into. Their replacements arrive
+   * as new rows, so keeping both would count the purchase twice.
+   */
+  stale?: Transaction[]
+  /** The stale rows the user chose to remove with this import (undoable). */
+  removed?: Transaction[]
   unmatched: UnmatchedAccount[]
   internal: number
   firstDate: string
@@ -97,6 +106,8 @@ export async function planImport(
 
   const nextOccurrence = occurrenceCounter()
   const months = new Set<string>()
+  const seen = new Set<string>()
+  const seenAccounts = new Set<string>()
 
   for (const row of rows) {
     const account = known.get(normalize(row.account))
@@ -136,6 +147,8 @@ export async function planImport(
     if (!plan.firstDate || row.date < plan.firstDate) plan.firstDate = row.date
     if (!plan.lastDate || row.date > plan.lastDate) plan.lastDate = row.date
 
+    seen.add(id)
+    seenAccounts.add(account.id)
     const previous = existing.get(id)
     if (!previous) {
       plan.added.push(next)
@@ -154,8 +167,34 @@ export async function planImport(
     months.add(monthOf(row.date))
   }
 
+  plan.stale = staleRows(existing, seen, seenAccounts, plan.firstDate, plan.lastDate)
   plan.months = [...months].sort()
   return plan
+}
+
+/**
+ * Monarch rows on the export's accounts and dates that it no longer contains.
+ * The export's first day is left out: an export cut off by date may start
+ * part-way through what Monarch holds for it.
+ */
+export function staleRows(
+  existing: Map<string, Transaction>,
+  seen: Set<string>,
+  accountIds: Set<string>,
+  firstDate: string,
+  lastDate: string,
+): Transaction[] {
+  if (!firstDate || !lastDate) return []
+  return [...existing.values()]
+    .filter(
+      (row) =>
+        row.source === 'monarch' &&
+        accountIds.has(row.accountId) &&
+        row.date > firstDate &&
+        row.date <= lastDate &&
+        !seen.has(row.id),
+    )
+    .sort((a, z) => z.date.localeCompare(a.date))
 }
 
 function differs(previous: Transaction, next: Transaction): boolean {

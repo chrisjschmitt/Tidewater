@@ -40,7 +40,7 @@ const KEYWORDS: Array<[RegExp, string[]]> = [
   [/\bFEES?\b|INTEREST CHARGE|ACCT BAL REBATE/, ['Financial Fees', 'Bank Fees', 'Fees & Charges']],
   [/ATM W\/D|CASH WITHDRA|CASH ADV/, ['Cash for spending', 'Cash & ATM']],
   [
-    /RESTAURANT|\bREST\b|CAFE|COFFEE|\bPUB\b|\bBAR\b|BREW|PIZZA|SUSHI|GRILL|BISTRO|DINER|TIM HORTONS|STARBUCKS|SWISS CHALET|BRUNCH|MCDONALD|SUBWAY|BAKERY|BACKEREI|BOULANGERIE|PATISSERIE|PASTICCERIA|ICE CREAM|GELATO|TAVERN|KITCHEN|EATERY|SHAWARMA|BURGER|TACO|DELI\b|UBER \* ?EATS|DOORDASH/,
+    /RESTAURANT|\bREST\b|CAFE|COFFEE|\bPUB\b|\bBAR\b|BREW|BRASSEUR|BRASSERIE|PIZZA|SUSHI|GRILL|BISTRO|DINER|TIM HORTONS|STARBUCKS|SWISS CHALET|BRUNCH|MCDONALD|SUBWAY|BAKERY|BACKEREI|BOULANGERIE|PATISSERIE|PASTICCERIA|ICE CREAM|GELATO|TAVERN|KITCHEN|EATERY|SHAWARMA|BURGER|TACO|DELI\b|UBER \* ?EATS|DOORDASH/,
     ['Restaurants & Bars', 'Restaurants', 'Dining'],
   ],
   [
@@ -69,8 +69,17 @@ function categorizeAtHome(input: RuleInput, ctx: RuleContext): RuleResult {
   const upper = collapse(input.description).toUpperCase()
   const learned = ctx.model.learned.get(key) ?? []
   const lastSplit = ctx.model.lastSplits.get(key)
-  const splitSuggestion = lastSplit ? applyShape(lastSplit.lines, input.amount) : null
-  const fromHistory = learned.map((item) => ({ merchant, ...item.outcome }))
+  // A refund on a card returns one item: a past basket's split, scaled down to
+  // it, is never the answer. Its categories are still offered one at a time.
+  const refund = card && input.amount > 0
+  const splitSuggestion = lastSplit && !refund ? applyShape(lastSplit.lines, input.amount) : null
+  const fromHistory = dedupeOutcomes(
+    learned.flatMap((item): Outcome[] =>
+      refund && item.outcome.split && item.outcome.split.length > 1
+        ? item.outcome.split.map((line) => ({ merchant, category: line.category, tags: line.tags }))
+        : [{ merchant, ...item.outcome }],
+    ),
+  )
   const suggestions: Outcome[] = [
     ...fromHistory.slice(0, 1),
     ...(splitSuggestion ? [splitOutcome(merchant, splitSuggestion)] : []),
@@ -165,6 +174,18 @@ function categorizeAtHome(input: RuleInput, ctx: RuleContext): RuleResult {
     suggestions,
     best ? ['History files this merchant more than one way'] : ['Not seen before'],
   )
+}
+
+/** One of each: the same category and tags offered twice is one choice. */
+function dedupeOutcomes(outcomes: Outcome[]): Outcome[] {
+  const seen = new Set<string>()
+  return outcomes.filter((outcome) => {
+    const lines = outcome.split ?? [{ category: outcome.category, tags: outcome.tags }]
+    const key = lines.map((line) => `${line.category}|${[...line.tags].sort().join(',')}`).join('+')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function review(merchant: string, suggestions: Outcome[], reasons: string[]): RuleResult {

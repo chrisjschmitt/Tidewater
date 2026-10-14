@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.8 — 2026-10-14
+
+### Fixed
+- Monarch import: rows already here that Monarch no longer has — a pending charge it re-dated or re-priced when it posted, or a purchase it re-split — are listed as "No longer in Monarch" and can be removed with the import, so the purchase is not counted twice. Only Monarch rows inside the file's dates (after its first day) and accounts are considered; TD and hand-entered rows are never touched. Ticked for a few (pending charges), unticked for many (a filtered export). Undo under Past imports puts them back.
+- Review suggestions: a card refund is never offered a past split, only single categories; split parts filed exactly alike (three Groceries lines) are one part; the same choice is never offered twice.
+- Keywords: "Brasseur" and "Brasserie" read as restaurants.
+
+### Changed
+- Review tab: each row says "Filed as:" with the rule that filed it in plain words ("from history", "by kind of merchant", "by your rule"), a "Confirm as filed" button, and the suggestions under "Or file as:" — a suggestion that matches the filing is not shown.
+
 ## 0.13.7 — 2026-10-08
 
 ### Added

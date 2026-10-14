@@ -163,12 +163,21 @@ export function commitImport(key: CryptoKey, plan: ImportPlan): Promise<ImportBa
     }
     for (const transaction of plan.added) collect(transaction)
     for (const { next } of plan.updated) collect(next)
+    // Stale rows the user chose to drop. Kept on the batch with the rows it
+    // overwrote, so Undo puts them back.
+    const removed = plan.removed ?? []
+    const dropping = new Set(removed.map((t) => t.id))
+    for (const transaction of removed) {
+      const month = monthOf(transaction.date)
+      if (!incoming.has(month)) incoming.set(month, [])
+    }
 
     for (const [month, transactions] of incoming) {
       const current = (await getSealed<Transaction[]>(db, 'transactions', key, month)) ?? []
-      const merged = new Map(current.map((t) => [t.id, t]))
+      const merged = new Map(current.filter((t) => !dropping.has(t.id)).map((t) => [t.id, t]))
       for (const transaction of transactions) merged.set(transaction.id, transaction)
-      await putSealed(db, 'transactions', key, month, [...merged.values()].sort(byDateDescending))
+      if (merged.size === 0) await deleteSealed(db, 'transactions', month)
+      else await putSealed(db, 'transactions', key, month, [...merged.values()].sort(byDateDescending))
     }
 
     const batch: ImportBatch = {
@@ -179,7 +188,8 @@ export function commitImport(key: CryptoKey, plan: ImportPlan): Promise<ImportBa
       lastDate: plan.lastDate,
       months: [...incoming.keys()].sort(),
       addedIds: plan.added.map((t) => t.id),
-      replaced: plan.updated.map(({ previous }) => previous),
+      replaced: [...plan.updated.map(({ previous }) => previous), ...removed],
+      ...(removed.length > 0 ? { removedIds: removed.map((t) => t.id) } : {}),
       rowsRead: plan.rowsRead,
       unchanged: plan.unchanged,
     }

@@ -263,7 +263,22 @@ export function buildModel(
 }
 
 /** Fixed amounts when the recent splits used the same figures, else each line's share of the total. */
-function shapeOf(splits: Array<{ lines: Array<{ category: string; tags: string[]; amount: number }>; total: number }>): SplitShapeLine[] {
+type SplitLines = Array<{ category: string; tags: string[]; amount: number }>
+
+/** Parts filed exactly alike (three Groceries lines in Monarch, say) are one part of the shape. */
+function mergeAlike(lines: SplitLines): SplitLines {
+  const merged = new Map<string, SplitLines[number]>()
+  for (const line of lines) {
+    const key = `${line.category}|${[...line.tags].sort().join(',')}`
+    const found = merged.get(key)
+    if (found) found.amount = Math.round((found.amount + line.amount) * 100) / 100
+    else merged.set(key, { ...line })
+  }
+  return [...merged.values()]
+}
+
+function shapeOf(raw: Array<{ lines: SplitLines; total: number }>): SplitShapeLine[] {
+  const splits = raw.map((split) => ({ ...split, lines: mergeAlike(split.lines) }))
   const latest = splits[splits.length - 1]!
   const sortLines = (lines: typeof latest.lines) =>
     [...lines].sort((a, z) => a.category.localeCompare(z.category) || a.amount - z.amount)

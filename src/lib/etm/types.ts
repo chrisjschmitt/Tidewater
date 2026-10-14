@@ -197,6 +197,8 @@ export interface ImportBatch {
    * honest if it can put back what a re-import replaced.
    */
   replaced: Transaction[]
+  /** Rows the import removed as no longer in Monarch; their copies are in `replaced`. */
+  removedIds?: string[]
   rowsRead: number
   unchanged: number
 }
