@@ -328,6 +328,31 @@ check('TD and manual rows are never stale', !(fifth.stale ?? []).some((t) => t.s
 check('rows on the first day or before the file are left alone', !(fifth.stale ?? []).some((t) => t.date <= first.firstDate))
 check('nothing stale is removed unless chosen', (fifth.removed ?? []).length === 0)
 
+console.log('\n=== Monarch ids ===')
+
+const withIds = (rows: string[]) =>
+  ['Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags,Owner,Reviewed,Id', ...rows].join('\n')
+const pendingWeek = withIds([
+  '2025-12-29,Corner Bean,Restaurants,Visa (...4242),CORNER BEAN,,-6.00,,Alex,,M-1',
+  "2025-12-30,Fuel Stop,Gas,Visa (...4242),FUEL STOP'S,,-60.00,,Alex,,M-2",
+])
+const postedWeek = withIds([
+  '2025-12-29,Corner Bean,Restaurants,Visa (...4242),CORNER BEAN,,-6.00,,Alex,,M-1',
+  '2025-12-31,Fuel Stop,Gas,Visa (...4242),FUEL STOPS,,-60.00,,Alex,,M-2',
+])
+const week1 = await planImport(pendingWeek, { fileName: 'a.csv', accounts, existing: new Map() })
+check("Monarch's id is kept on the row", week1.added.every((t) => t.externalId?.startsWith('M-')))
+const afterWeek1 = new Map(week1.added.map((t) => [t.id, t]))
+const week2 = await planImport(postedWeek, { fileName: 'b.csv', accounts, existing: afterWeek1 })
+check('a re-dated, re-worded charge is an update, not a new row', week2.added.length === 0 && week2.updated.length === 1 && week2.moved === 1)
+check('the update carries the posted date', week2.updated[0]?.next.date === '2025-12-31')
+check('the pending copy is not left stale', (week2.stale ?? []).length === 0)
+const legacy = new Map(week1.added.map((t) => { const { externalId: _drop, ...rest } = t; return [t.id, rest as Transaction] }))
+const relink = await planImport(pendingWeek, { fileName: 'a.csv', accounts, existing: legacy })
+check('rows stored before ids were kept are linked quietly', relink.updated.length === 0 && relink.unchanged === 2 && (relink.linked ?? []).length === 2)
+const noIds = await planImport(postedWeek.replace(/,Id$/m, '').replace(/,M-\d$/gm, ''), { fileName: 'c.csv', accounts, existing: afterWeek1 })
+check('without an Id column the old behaviour stands', noIds.added.length === 1 && (noIds.stale ?? []).length === 1)
+
 console.log('\n=== Manual entries ===')
 
 const cash = createManualTransaction(

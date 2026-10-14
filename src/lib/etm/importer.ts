@@ -42,6 +42,10 @@ export interface ImportPlan {
   stale?: Transaction[]
   /** The stale rows the user chose to remove with this import (undoable). */
   removed?: Transaction[]
+  /** Unchanged rows that only gain Monarch's own id; written quietly, not counted as updates. */
+  linked?: Transaction[]
+  /** Updates that are the same Monarch transaction under a new date, amount or text. */
+  moved?: number
   unmatched: UnmatchedAccount[]
   internal: number
   firstDate: string
@@ -108,6 +112,15 @@ export async function planImport(
   const months = new Set<string>()
   const seen = new Set<string>()
   const seenAccounts = new Set<string>()
+  // Stored Monarch rows by Monarch's own id: a charge that posted with a new
+  // date or text has a new content id but the same Monarch id.
+  const byMonarchId = new Map<string, Transaction>()
+  for (const row of existing.values()) {
+    if (row.source === 'monarch' && row.externalId) byMonarchId.set(row.externalId, row)
+  }
+  const claimed = new Set<string>()
+  const linked: Transaction[] = []
+  let moved = 0
 
   for (const row of rows) {
     const account = known.get(normalize(row.account))
@@ -141,6 +154,7 @@ export async function planImport(
       reviewed: row.reviewed,
       source: 'monarch',
       importBatchId: batchId,
+      ...(row.monarchId ? { externalId: row.monarchId } : {}),
     }
 
     if (next.internal) plan.internal++
@@ -149,23 +163,46 @@ export async function planImport(
 
     seen.add(id)
     seenAccounts.add(account.id)
-    const previous = existing.get(id)
+    const sameContent = existing.get(id)
+    const sameMonarchId = row.monarchId ? byMonarchId.get(row.monarchId) : undefined
+    const previous =
+      sameContent ?? (sameMonarchId && !claimed.has(sameMonarchId.id) && !seen.has(sameMonarchId.id) ? sameMonarchId : undefined)
     if (!previous) {
       plan.added.push(next)
       months.add(monthOf(row.date))
       continue
     }
+    claimed.add(previous.id)
+    seen.add(previous.id)
 
     // Manual entries are the user's own record of cash and are never revised
     // by an import, even in the unlikely event of an id collision.
-    if (previous.source === 'manual' || !differs(previous, next)) {
+    if (previous.source === 'manual') {
       plan.unchanged++
       continue
     }
 
-    plan.updated.push({ next: { ...next, externalId: previous.externalId }, previous })
+    // Re-dated, re-priced or re-worded in Monarch: the same transaction, so it
+    // replaces the stored copy rather than sitting beside it.
+    if (previous.id !== id) {
+      moved++
+      plan.updated.push({ next, previous })
+      months.add(monthOf(row.date))
+      months.add(monthOf(previous.date))
+      continue
+    }
+
+    if (!differs(previous, next)) {
+      if (next.externalId && previous.externalId !== next.externalId) linked.push({ ...previous, externalId: next.externalId })
+      plan.unchanged++
+      continue
+    }
+
+    plan.updated.push({ next: { ...next, externalId: next.externalId ?? previous.externalId }, previous })
     months.add(monthOf(row.date))
   }
+  if (linked.length > 0) plan.linked = linked
+  if (moved > 0) plan.moved = moved
 
   plan.stale = staleRows(existing, seen, seenAccounts, plan.firstDate, plan.lastDate)
   plan.months = [...months].sort()

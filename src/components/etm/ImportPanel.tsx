@@ -109,7 +109,11 @@ export default function ImportPanel({
   const blocked = (plan?.unmatched.length ?? 0) > 0
   const stale = plan?.stale ?? []
   const nothingToDo =
-    plan !== null && plan.added.length === 0 && plan.updated.length === 0 && !(removeStale && stale.length > 0)
+    plan !== null &&
+    plan.added.length === 0 &&
+    plan.updated.length === 0 &&
+    !(removeStale && stale.length > 0) &&
+    (plan.linked?.length ?? 0) === 0
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.nickname ?? ''
 
   return (
@@ -180,6 +184,19 @@ export default function ImportPanel({
             <Stat label="Already here" value={plan.unchanged} />
           </div>
 
+          {(plan.moved ?? 0) > 0 && (
+            <p className="mt-4 text-xs leading-relaxed text-ink-500">
+              {plan.moved!.toLocaleString()} of the updates {plan.moved === 1 ? 'is a transaction' : 'are transactions'} Monarch
+              re-dated, re-priced or re-worded (a pending charge that posted, say). Monarch’s own id says{' '}
+              {plan.moved === 1 ? 'it is' : 'they are'} the same, so the stored copy is replaced rather than kept beside it.
+            </p>
+          )}
+          {(plan.linked?.length ?? 0) > 0 && plan.added.length === 0 && plan.updated.length === 0 && (
+            <p className="mt-4 text-xs leading-relaxed text-ink-500">
+              Nothing changed, but bringing it in notes Monarch’s own id on {plan.linked!.length.toLocaleString()} rows, so a
+              charge Monarch later re-dates is recognised as the same one.
+            </p>
+          )}
           {plan.internal > 0 && (
             <p className="mt-4 text-xs leading-relaxed text-ink-500">
               {plan.internal.toLocaleString()} of these are transfers or card payments. They are
@@ -303,7 +320,7 @@ export default function ImportPanel({
                   <p className="truncate text-sm font-medium text-ink-900">{batch.fileName}</p>
                   <p className="mt-0.5 text-xs text-ink-500">
                     {new Date(batch.importedAt).toLocaleString()} ·{' '}
-                    {batch.addedIds.length.toLocaleString()} new,{' '}
+                    {(batch.addedIds.length - (batch.moved ?? 0)).toLocaleString()} new,{' '}
                     {(batch.replaced.length - (batch.removedIds?.length ?? 0)).toLocaleString()} updated
                     {(batch.removedIds?.length ?? 0) > 0 && `, ${batch.removedIds!.length.toLocaleString()} removed`}
                   </p>

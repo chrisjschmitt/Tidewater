@@ -156,8 +156,9 @@ export interface Transaction {
   source: TransactionSource
   importBatchId: string
   /**
-   * Reserved for a future direct aggregator feed (§9.1), which supplies stable
-   * ids of its own and would need to dedup against these CSV-imported rows.
+   * The source's own id, when it has one: Monarch's transaction Id. It stays
+   * the same when a pending charge posts with a new date, amount or text, so
+   * a re-import updates the row instead of adding a second copy.
    */
   externalId?: string
   /** Parts of a split; the row itself is then never counted, only its parts. */
@@ -199,6 +200,8 @@ export interface ImportBatch {
   replaced: Transaction[]
   /** Rows the import removed as no longer in Monarch; their copies are in `replaced`. */
   removedIds?: string[]
+  /** Updates stored under a new id (a re-dated Monarch charge); their new ids are in `addedIds`. */
+  moved?: number
   rowsRead: number
   unchanged: number
 }

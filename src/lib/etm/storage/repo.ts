@@ -163,11 +163,15 @@ export function commitImport(key: CryptoKey, plan: ImportPlan): Promise<ImportBa
     }
     for (const transaction of plan.added) collect(transaction)
     for (const { next } of plan.updated) collect(next)
-    // Stale rows the user chose to drop. Kept on the batch with the rows it
-    // overwrote, so Undo puts them back.
+    // Monarch's id written onto rows that did not change: bookkeeping, so not
+    // kept for Undo (an undone link is harmless and re-made next import).
+    for (const transaction of plan.linked ?? []) collect(transaction)
+    // Stale rows the user chose to drop, and stored copies replaced under a
+    // new id (a re-dated charge). Kept on the batch so Undo puts them back.
     const removed = plan.removed ?? []
-    const dropping = new Set(removed.map((t) => t.id))
-    for (const transaction of removed) {
+    const movedFrom = plan.updated.filter(({ next, previous }) => next.id !== previous.id).map(({ previous }) => previous)
+    const dropping = new Set([...removed, ...movedFrom].map((t) => t.id))
+    for (const transaction of [...removed, ...movedFrom]) {
       const month = monthOf(transaction.date)
       if (!incoming.has(month)) incoming.set(month, [])
     }
@@ -187,9 +191,13 @@ export function commitImport(key: CryptoKey, plan: ImportPlan): Promise<ImportBa
       firstDate: plan.firstDate,
       lastDate: plan.lastDate,
       months: [...incoming.keys()].sort(),
-      addedIds: plan.added.map((t) => t.id),
+      addedIds: [
+        ...plan.added.map((t) => t.id),
+        ...plan.updated.filter(({ next, previous }) => next.id !== previous.id).map(({ next }) => next.id),
+      ],
       replaced: [...plan.updated.map(({ previous }) => previous), ...removed],
       ...(removed.length > 0 ? { removedIds: removed.map((t) => t.id) } : {}),
+      ...(movedFrom.length > 0 ? { moved: movedFrom.length } : {}),
       rowsRead: plan.rowsRead,
       unchanged: plan.unchanged,
     }

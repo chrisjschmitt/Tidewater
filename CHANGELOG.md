@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.9 — 2026-10-14
+
+### Fixed
+- Monarch import recognises a transaction by Monarch's own id as well as by its date, amount and bank text. A pending charge that posts with a new date, amount or text (or one re-dated by hand in Monarch) now updates the row already here instead of arriving as a second copy; the import says how many were matched this way, and Undo puts the old version back.
+- The first import after this release notes Monarch's id on the rows already here (no visible change, not counted as updates). Copies left by earlier imports are still listed under "No longer in Monarch".
+
 ## 0.13.8 — 2026-10-14
 
 ### Fixed

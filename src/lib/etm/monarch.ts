@@ -21,6 +21,8 @@ export interface MonarchRow {
   tags: string[]
   owner: string
   reviewed: boolean
+  /** Monarch's own id for the transaction. It survives a pending charge posting with a new date or text. */
+  monarchId?: string
 }
 
 export interface MonarchParseResult {
@@ -78,6 +80,7 @@ export function parseMonarchCsv(text: string): MonarchParseResult {
       tags: splitTags(cell(raw, 'Tags')),
       owner: cell(raw, 'Owner'),
       reviewed: isTruthy(cell(raw, 'Reviewed')),
+      ...(cell(raw, 'Id') ? { monarchId: cell(raw, 'Id') } : {}),
     })
   }
 
