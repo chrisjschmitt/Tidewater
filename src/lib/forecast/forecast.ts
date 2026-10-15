@@ -1,5 +1,5 @@
-import { totalExpenses, totalGoalContributions, totalIncome } from '../budget'
-import { budgetAt } from './planHistory'
+import { totalExpenses, totalGoalContributions, totalIncome, type MonthPlanAdjustment } from '../budget'
+import { budgetAmountIn, budgetAt, planAmountAt } from './planHistory'
 import type { Budget } from '../types'
 import type { Currency, Transaction } from '../etm/types'
 import {
@@ -466,6 +466,28 @@ function futuresFor(
   return config.knownFutures.filter(
     (future) => (future.series ?? 'household') === series && monthOfKnownFuture(future, month),
   )
+}
+
+/**
+ * What `month`'s Plan holds beyond the budget's own lines (with every-two-weeks
+ * payments counted): one-month plan changes, and dated costs pinned on the
+ * month. Their sum is the gap between the Forecast's Plan and the dashboard.
+ */
+export function monthPlanAdjustments(budget: Budget, config: ForecastConfig, month: string): MonthPlanAdjustment[] {
+  const out: MonthPlanAdjustment[] = []
+  for (const [key, entry] of Object.entries(config.planHistory ?? {})) {
+    const difference = roundCents(planAmountAt(budget, config.planHistory, key, month) - budgetAmountIn(budget, key, month))
+    if (difference !== 0) out.push({ label: entry.label, category: entry.label, amount: difference, kind: 'raise' })
+  }
+  for (const future of futuresFor(config, month, 'household')) {
+    out.push({
+      label: future.notes ? `${future.category} (${future.notes})` : future.category,
+      category: future.category,
+      amount: future.amount,
+      kind: 'dated',
+    })
+  }
+  return out
 }
 
 function futureTotal(config: ForecastConfig, month: string, series: SeriesId): number {

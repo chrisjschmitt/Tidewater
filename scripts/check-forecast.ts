@@ -12,6 +12,7 @@ import { cvOf } from '../src/lib/forecast/classify.ts'
 import {
   explainCategory,
   forecast,
+  monthPlanAdjustments,
   forecastMix,
   isOutsideControlWindow,
   lookbackMonths,
@@ -495,6 +496,13 @@ console.log('\n=== Plan raises agree everywhere ===')
     monthPoint(movedResult, '2026-09')?.plan === typicalPlan && monthPoint(movedResult, '2026-11')?.plan === typicalPlan,
   )
   check('one-month raise leaves the budget, so goal room is unchanged', freeAfterExpenses(allowances) === 2500 - typicalPlan)
+  const octAdjust = monthPlanAdjustments(allowances, moved!, '2026-10')
+  check(
+    'the dashboard plus this month\'s adjustments equals the Forecast plan',
+    round(totalExpenses(inMonth(allowances, '2026-10')) + octAdjust.reduce((sum, item) => sum + item.amount, 0)) === octPlan,
+    octAdjust.map((item) => `${item.label} ${item.amount}`).join(', '),
+  )
+  check('no adjustments in a month without changes', monthPlanAdjustments(allowances, moved!, '2026-11').filter((item) => item.kind === 'raise').length === 0)
 
   // From a month on: the budget itself goes up, so the goal room drops by the raise.
   const onward = withPlanChange(allowances, undefined, {

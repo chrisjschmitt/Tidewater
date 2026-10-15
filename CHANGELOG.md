@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.16 — 2026-10-14
+
+### Fixed
+- The dashboard's planned spend now matches the Forecast's Plan for this month. While expense tracking is unlocked, "Living", "Unspoken for", the ring and the group bars include this month's one-month plan changes (a Raise for this month only, e.g. Gas) and dated costs pinned on the month; the note under the ring lists them. Goal suggestions still use an average month. With expense tracking locked or off, the dashboard shows the budget's own lines as before.
+
 ## 0.13.15 — 2026-10-14
 
 ### Changed

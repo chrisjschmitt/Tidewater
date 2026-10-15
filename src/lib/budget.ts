@@ -171,3 +171,29 @@ export function inMonth(b: Budget, month: string): Budget {
     income: b.income.map((line) => (line.everyTwoWeeks ? { ...line, amount: lineAmountIn(line, month) } : line)),
   }
 }
+
+/**
+ * Something the plan holds for this month only, beyond the budget's lines:
+ * a one-month raise (or cut) of a category, or a dated cost pinned on the
+ * month. Known only while expense tracking is unlocked, which keeps them.
+ */
+export interface MonthPlanAdjustment {
+  label: string
+  /** The plan category it belongs to, to place it in its group. */
+  category: string
+  amount: number
+  kind: 'raise' | 'dated'
+}
+
+/** Group totals with this month's adjustments added to the group holding their category (else left out of the bars). */
+export function withAdjustments(summaries: GroupSummary[], adjustments: MonthPlanAdjustment[]): GroupSummary[] {
+  if (adjustments.length === 0) return summaries
+  const key = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ')
+  const totals = summaries.map((summary) => {
+    const names = new Set(summary.lines.map((line) => key(line.name)))
+    const extra = adjustments.filter((item) => names.has(key(item.category))).reduce((sum, item) => sum + item.amount, 0)
+    return { ...summary, total: summary.total + extra }
+  })
+  const spend = totals.reduce((sum, summary) => sum + summary.total, 0)
+  return totals.map((summary) => ({ ...summary, share: spend > 0 ? summary.total / spend : 0 })).sort((a, z) => z.total - a.total)
+}

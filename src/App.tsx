@@ -21,6 +21,8 @@ import {
   inMonth,
   paydayExtras,
   totalExpenses,
+  withAdjustments,
+  type MonthPlanAdjustment,
   totalGoalContributions,
   totalIncome,
   unallocated,
@@ -78,6 +80,8 @@ export default function App() {
   // Folds to a constant null in public builds, so no comparison markup ships.
   const etmActuals = __ETM_AVAILABLE__ ? etmState : null
   const etmContext = __ETM_AVAILABLE__ ? etmChat : null
+  const [etmMonthState, setEtmMonthPlan] = useState<MonthPlanAdjustment[] | null>(null)
+  const monthAdjustments = useMemo(() => (__ETM_AVAILABLE__ ? (etmMonthState ?? []) : []), [etmMonthState])
   const [pendingImport, setPendingImport] = useState<TransactionImport | null>(null)
   const [notice, setNotice] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -269,7 +273,10 @@ export default function App() {
 
   const today = new Date()
   const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  const summaries = useMemo(() => (budget ? groupSummaries(budget, thisMonth) : []), [budget, thisMonth])
+  const summaries = useMemo(
+    () => (budget ? withAdjustments(groupSummaries(budget, thisMonth), monthAdjustments) : []),
+    [budget, thisMonth, monthAdjustments],
+  )
   const activeSummary = useMemo<GroupSummary | null>(
     () => summaries.find((s) => s.group.id === openGroup) ?? null,
     [summaries, openGroup],
@@ -323,13 +330,21 @@ export default function App() {
   // weeks counts this month's payments. Goal suggestions use the average.
   const monthBudget = inMonth(budget, thisMonth)
   const income = totalIncome(monthBudget)
-  const spending = totalExpenses(monthBudget)
+  // One-month plan changes and dated costs, known while expense tracking is unlocked.
+  const adjusted = monthAdjustments.reduce((sum, item) => sum + item.amount, 0)
+  const spending = totalExpenses(monthBudget) + adjusted
   const goalMoney = totalGoalContributions(budget)
-  const left = unallocated(monthBudget)
+  const left = unallocated(monthBudget) - adjusted
   const averageLeft = unallocated(budget)
   const extraOut = paydayExtras(budget.expenses, thisMonth).filter((extra) => extra.paydays > 2)
   const extraIn = paydayExtras(budget.income, thisMonth).filter((extra) => extra.paydays > 2)
-  const tone = balanceTone(monthBudget)
+  const tone = balanceTone({
+    ...monthBudget,
+    expenses: [
+      ...monthBudget.expenses,
+      ...monthAdjustments.map((item, i) => ({ id: `adj-${i}`, name: item.label, groupId: 'other' as GroupId, amount: item.amount, essential: false })),
+    ],
+  })
 
   const setExpenses = (lines: ExpenseLine[], groupId: GroupId) =>
     commit({
@@ -429,6 +444,7 @@ export default function App() {
                 openCategory={etmCategory}
                 onCloseCategory={() => setEtmCategory(null)}
                 onActuals={setEtmActuals}
+                onMonthPlan={setEtmMonthPlan}
                 onEtmContext={setEtmChat}
                 onUnlocked={rememberEtmUnlock}
                 onOpen={() => setEtmOpen(true)}
@@ -469,8 +485,8 @@ export default function App() {
                   actuals={etmActuals}
                 />
               </div>
-              {(extraOut.length > 0 || extraIn.length > 0) && (
-                <ExtraPaydayNote out={extraOut} arriving={extraIn} averageLeft={averageLeft} />
+              {(extraOut.length > 0 || extraIn.length > 0 || monthAdjustments.length > 0) && (
+                <ExtraPaydayNote out={extraOut} arriving={extraIn} adjustments={monthAdjustments} averageLeft={averageLeft} />
               )}
             </section>
 
@@ -890,22 +906,36 @@ function readFileText(
 function ExtraPaydayNote({
   out,
   arriving,
+  adjustments,
   averageLeft,
 }: {
   out: Array<{ name: string; difference: number }>
   arriving: Array<{ name: string; difference: number }>
+  adjustments: MonthPlanAdjustment[]
   averageLeft: number
 }) {
   const more = out.reduce((sum, extra) => sum + extra.difference, 0)
   const extraIn = arriving.reduce((sum, extra) => sum + extra.difference, 0)
   const names = (list: Array<{ name: string }>) => list.map((extra) => extra.name).join(' and ')
+  const parts: React.ReactNode[] = []
+  if (out.length > 0) parts.push(<>a third payment for {names(out)} ({money(more)} more going out than an average month)</>)
+  if (arriving.length > 0) parts.push(<>a third payday for {names(arriving)} ({money(extraIn)} more coming in)</>)
+  const raises = adjustments.filter((item) => item.kind === 'raise')
+  const dated = adjustments.filter((item) => item.kind === 'dated')
+  const list = (items: MonthPlanAdjustment[]) =>
+    items.map((item) => `${item.label} ${item.amount < 0 ? '−' : '+'}${money(Math.abs(item.amount))}`).join(', ')
+  if (raises.length > 0) parts.push(<>plan changes for this month only ({list(raises)})</>)
+  if (dated.length > 0) parts.push(<>dated costs ({list(dated)})</>)
   return (
     <p className="mt-4 rounded-2xl bg-sand-100/70 px-4 py-3 text-xs leading-relaxed text-ink-600">
-      This month
-      {out.length > 0 && <> has a third payment for {names(out)} ({money(more)} more going out than an average month)</>}
-      {out.length > 0 && arriving.length > 0 && ' and'}
-      {arriving.length > 0 && <> has a third payday for {names(arriving)} ({money(extraIn)} more coming in)</>}, and the figures
-      above include {out.length + arriving.length === 1 ? 'it' : 'them'}. In an average month{' '}
+      This month includes{' '}
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && (i === parts.length - 1 ? ' and ' : ', ')}
+          {part}
+        </span>
+      ))}
+      , and the figures above count {parts.length === 1 ? 'it' : 'them'}. In an average month{' '}
       <span className="font-semibold text-ink-900">{money(averageLeft)}</span> is unspoken for — goal suggestions use that.
     </p>
   )

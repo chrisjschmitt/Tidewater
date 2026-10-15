@@ -14,9 +14,10 @@ import {
   wipeVault,
 } from '../../lib/etm/storage/vault'
 import { buildChatSnapshot } from '../../lib/forecast/chatSnapshot'
-import { forecast } from '../../lib/forecast/forecast'
+import { forecast, monthPlanAdjustments } from '../../lib/forecast/forecast'
 import { withHouseholdContribution } from '../../lib/forecast/snapshot'
 import type { EtmChatSnapshot } from '../../lib/etmChat'
+import type { MonthPlanAdjustment } from '../../lib/budget'
 import type { Budget, Goal } from '../../lib/types'
 
 const EtmArea = lazy(() => import('./EtmArea'))
@@ -31,6 +32,8 @@ interface Props {
   openCategory: string | null
   onCloseCategory: () => void
   onActuals: (actuals: DashboardActuals | null) => void
+  /** This month's one-month plan changes and dated costs, for the dashboard's own totals. */
+  onMonthPlan?: (adjustments: MonthPlanAdjustment[] | null) => void
   onEtmContext: (snapshot: EtmChatSnapshot | null) => void
   onUnlocked: (key: CryptoKey, remembered: boolean) => void
   onLocked: () => void
@@ -89,6 +92,7 @@ function Unlocked({
   openCategory,
   onCloseCategory,
   onActuals,
+  onMonthPlan,
   onEtmContext,
   onLocked,
   onWiped,
@@ -148,6 +152,13 @@ function Unlocked({
   useEffect(() => {
     onActuals(actuals && period ? dashboardActuals(actuals, periodLabel(period)) : null)
   }, [actuals, period, onActuals])
+
+  // The dashboard shows this month as it falls; these live here, encrypted.
+  useEffect(() => {
+    if (data.loading) return
+    onMonthPlan?.(monthPlanAdjustments(budget, data.forecastConfig, today().slice(0, 7)))
+  }, [budget, data.forecastConfig, data.loading, onMonthPlan])
+  useEffect(() => () => onMonthPlan?.(null), [onMonthPlan])
 
   useEffect(() => {
     if (data.loading) return
