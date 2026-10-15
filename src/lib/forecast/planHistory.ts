@@ -1,3 +1,4 @@
+import { lineAmountIn, PAYDAYS_PER_YEAR } from '../budget'
 import { groupForCategory, isEssentialCategory } from '../categories'
 import type { Budget, ExpenseLine } from '../types'
 import type { ForecastConfig } from './types'
@@ -38,10 +39,17 @@ export function budgetAmount(budget: Budget, key: string): number {
   )
 }
 
+/** The budget's amount for a category in one month: lines paid every two weeks count that month's paydays. */
+export function budgetAmountIn(budget: Budget, key: string, month: string): number {
+  return round2(
+    budget.expenses.filter((line) => planKey(line.name) === key).reduce((sum, line) => sum + lineAmountIn(line, month), 0),
+  )
+}
+
 /** The plan for one category in one month. */
 export function planAmountAt(budget: Budget, history: PlanHistory | undefined, key: string, month: string): number {
   const era = eraFor(history?.[key], month)
-  return era ? era.amount : budgetAmount(budget, key)
+  return era ? era.amount : budgetAmountIn(budget, key, month)
 }
 
 function eraFor(entry: PlanHistoryEntry | undefined, month: string): PlanEra | undefined {
@@ -55,9 +63,17 @@ function eraFor(entry: PlanHistoryEntry | undefined, month: string): PlanEra | u
  * order stay as the user arranged them.
  */
 export function budgetAt(budget: Budget, history: PlanHistory | undefined, month: string): Budget {
-  if (!history || Object.keys(history).length === 0) return budget
-  let expenses = budget.expenses
-  for (const [key, entry] of Object.entries(history)) {
+  const paidEveryTwoWeeks = budget.expenses.some((line) => line.everyTwoWeeks)
+  if ((!history || Object.keys(history).length === 0) && !paidEveryTwoWeeks) return budget
+  // Lines paid every two weeks carry that month's paydays, not their average.
+  let expenses = paidEveryTwoWeeks
+    ? budget.expenses.map((line) => {
+        if (!line.everyTwoWeeks) return line
+        const { everyTwoWeeks: _schedule, ...rest } = line
+        return { ...rest, amount: lineAmountIn(line, month) }
+      })
+    : budget.expenses
+  for (const [key, entry] of Object.entries(history ?? {})) {
     const era = eraFor(entry, month)
     if (!era) continue
     expenses = withAmount(expenses, key, entry.label, era.amount)
@@ -71,13 +87,22 @@ export function budgetAt(budget: Budget, history: PlanHistory | undefined, month
  * so the product is the sum of what each month actually planned.
  */
 export function budgetOver(budget: Budget, history: PlanHistory | undefined, months: string[]): Budget {
-  if (!history || Object.keys(history).length === 0 || months.length === 0) return budget
+  const paidEveryTwoWeeks = budget.expenses.filter((line) => line.everyTwoWeeks)
+  if (months.length === 0 || ((!history || Object.keys(history).length === 0) && paidEveryTwoWeeks.length === 0)) return budget
   if (months.length === 1) return budgetAt(budget, history, months[0]!)
-  let expenses = budget.expenses
-  for (const [key, entry] of Object.entries(history)) {
-    if (!months.some((month) => eraFor(entry, month))) continue
+  const keys = new Map<string, string>()
+  for (const [key, entry] of Object.entries(history ?? {})) {
+    if (months.some((month) => eraFor(entry, month))) keys.set(key, entry.label)
+  }
+  for (const line of paidEveryTwoWeeks) keys.set(planKey(line.name), line.name)
+  let expenses = budget.expenses.map((line) => {
+    if (!line.everyTwoWeeks) return line
+    const { everyTwoWeeks: _schedule, ...rest } = line
+    return rest
+  })
+  for (const [key, label] of keys) {
     const average = months.reduce((sum, month) => sum + planAmountAt(budget, history, key, month), 0) / months.length
-    expenses = withAmount(expenses, key, entry.label, round2(average))
+    expenses = withAmount(expenses, key, label, round2(average))
   }
   return { ...budget, expenses }
 }
@@ -187,7 +212,13 @@ function withAmount(expenses: ExpenseLine[], key: string, label: string, amount:
     if (planKey(line.name) !== key) return line
     if (placed) return line.amount === 0 ? line : { ...line, amount: 0 }
     placed = true
-    return line.amount === amount ? line : { ...line, amount }
+    if (line.amount === amount) return line
+    // A line paid every two weeks keeps its schedule: the new monthly
+    // average becomes a new payment per payday.
+    if (line.everyTwoWeeks) {
+      return { ...line, amount, everyTwoWeeks: { ...line.everyTwoWeeks, perPayment: round2((amount * 12) / PAYDAYS_PER_YEAR) } }
+    }
+    return { ...line, amount }
   })
   if (placed || amount === 0) return next
   return [

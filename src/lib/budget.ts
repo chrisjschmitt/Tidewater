@@ -1,5 +1,5 @@
 import { GROUPS, GROUP_BY_ID } from './categories'
-import type { Budget, ExpenseLine, Group, GroupId } from './types'
+import type { Budget, EveryTwoWeeks, ExpenseLine, Group, GroupId, IncomeLine } from './types'
 
 export interface GroupSummary {
   group: Group
@@ -92,4 +92,61 @@ export function balanceTone(b: Budget): {
     headline: 'There is real room here',
     detail: 'This is yours to direct — a goal, a trip, or simply more ease.',
   }
+}
+
+// --- Every two weeks --------------------------------------------------------
+
+/** Paydays in a year for a line paid every two weeks. */
+export const PAYDAYS_PER_YEAR = 26
+
+const DAY_MS = 86_400_000
+const round2 = (n: number) => Math.round(n * 100) / 100
+const utc = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return Date.UTC(y!, m! - 1, d ?? 1)
+}
+
+/** The monthly average of a payment made every two weeks. */
+export const everyTwoWeeksMonthly = (perPayment: number): number => round2((perPayment * PAYDAYS_PER_YEAR) / 12)
+
+/** How many paydays fall in `month` (`YYYY-MM`) — two in most months, three in two a year. */
+export function paydaysIn(schedule: Pick<EveryTwoWeeks, 'firstPayday'>, month: string): number {
+  const start = utc(`${month}-01`)
+  const [y, m] = month.split('-').map(Number)
+  const end = Date.UTC(y!, m!, 1)
+  const offset = Math.round((start - utc(schedule.firstPayday)) / DAY_MS)
+  const first = start + (((14 - (offset % 14)) % 14) * DAY_MS)
+  let count = 0
+  for (let day = first; day < end; day += 14 * DAY_MS) count++
+  return count
+}
+
+/** What a line plans for one month: its amount, or each payday's payment for a line paid every two weeks. */
+export function lineAmountIn(line: Pick<ExpenseLine | IncomeLine, 'amount' | 'everyTwoWeeks'>, month: string): number {
+  if (!line.everyTwoWeeks) return line.amount || 0
+  return round2(line.everyTwoWeeks.perPayment * paydaysIn(line.everyTwoWeeks, month))
+}
+
+/** Sets or clears the every-two-weeks schedule, keeping `amount` as the monthly average. */
+export function withEveryTwoWeeks<T extends ExpenseLine | IncomeLine>(line: T, schedule: EveryTwoWeeks | null): T {
+  if (!schedule) {
+    const { everyTwoWeeks: _gone, ...rest } = line
+    return rest as T
+  }
+  const perPayment = Math.max(0, round2(schedule.perPayment))
+  return { ...line, everyTwoWeeks: { perPayment, firstPayday: schedule.firstPayday }, amount: everyTwoWeeksMonthly(perPayment) }
+}
+
+/** Lines whose month differs from their average because of an extra payday (or a short one), for a note. */
+export function paydayExtras(
+  lines: Array<Pick<ExpenseLine | IncomeLine, 'name' | 'amount' | 'everyTwoWeeks'>>,
+  month: string,
+): Array<{ name: string; paydays: number; amount: number; difference: number }> {
+  return lines
+    .filter((line) => line.everyTwoWeeks && line.everyTwoWeeks.perPayment > 0)
+    .map((line) => {
+      const amount = lineAmountIn(line, month)
+      return { name: line.name, paydays: paydaysIn(line.everyTwoWeeks!, month), amount, difference: round2(amount - line.amount) }
+    })
+    .filter((extra) => extra.paydays !== 2)
 }

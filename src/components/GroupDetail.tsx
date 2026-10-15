@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { GroupSummary } from '../lib/budget'
+import { paydaysIn, withEveryTwoWeeks, type GroupSummary } from '../lib/budget'
 import { money, moneyPrecise, uid } from '../lib/format'
 import type { ExpenseLine } from '../lib/types'
 import type { CategorySpend, DashboardActuals } from '../lib/etm/aggregate'
@@ -113,6 +113,7 @@ export default function GroupDetail({
 
   if (!summary) return null
   const { group, lines } = summary
+  const thisMonth = today().slice(0, 7)
   const total = lines.reduce((s, l) => s + l.amount, 0)
   const delta = session?.groupId === group.id ? total - session.total : 0
 
@@ -135,6 +136,10 @@ export default function GroupDetail({
   }
 
   const remove = (id: string) => onChange(lines.filter((l) => l.id !== id))
+
+  /** Switches a line between a monthly amount and a payment every two weeks. */
+  const setSchedule = (id: string, schedule: { perPayment: number; firstPayday: string } | null) =>
+    onChange(lines.map((l) => (l.id === id ? withEveryTwoWeeks(l, schedule) : l)))
 
   const add = () => {
     const name = draftName.trim()
@@ -199,7 +204,12 @@ export default function GroupDetail({
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink-900">{line.name}</p>
-                  {line.essential ? (
+                  {line.everyTwoWeeks ? (
+                    <p className="text-[11px] text-ink-400">
+                      Every two weeks · about {money(line.amount)} a month on average ·{' '}
+                      {paydaysIn(line.everyTwoWeeks, thisMonth)} paydays this month
+                    </p>
+                  ) : line.essential ? (
                     <p className="text-[11px] text-ink-400">Hard to move — that is fine</p>
                   ) : line.observed ? (
                     <p className="text-[11px] text-ink-400">
@@ -211,28 +221,42 @@ export default function GroupDetail({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <Nudge
-                    label={`Decrease ${line.name} by $${step}`}
-                    disabled={line.amount <= 0}
-                    onClick={() => nudge(-1)}
-                  >
-                    −
-                  </Nudge>
+                  {!line.everyTwoWeeks && (
+                    <Nudge
+                      label={`Decrease ${line.name} by $${step}`}
+                      disabled={line.amount <= 0}
+                      onClick={() => nudge(-1)}
+                    >
+                      −
+                    </Nudge>
+                  )}
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-400">
                       $
                     </span>
-                    <AmountInput
-                      value={line.amount}
-                      onChange={(v) => update(line.id, v)}
-                      className="field w-24 pl-7 pr-2 text-right tabular-nums"
-                      ariaLabel={`${line.name} monthly amount`}
-                      autoFocus={line.id === addedId}
-                    />
+                    {line.everyTwoWeeks ? (
+                      <AmountInput
+                        value={line.everyTwoWeeks.perPayment}
+                        onChange={(v) => setSchedule(line.id, { ...line.everyTwoWeeks!, perPayment: Math.max(0, v) })}
+                        className="field w-24 pl-7 pr-2 text-right tabular-nums"
+                        ariaLabel={`${line.name} amount each payday`}
+                      />
+                    ) : (
+                      <AmountInput
+                        value={line.amount}
+                        onChange={(v) => update(line.id, v)}
+                        className="field w-24 pl-7 pr-2 text-right tabular-nums"
+                        ariaLabel={`${line.name} monthly amount`}
+                        autoFocus={line.id === addedId}
+                      />
+                    )}
                   </div>
-                  <Nudge label={`Increase ${line.name} by $${step}`} onClick={() => nudge(1)}>
-                    +
-                  </Nudge>
+                  {line.everyTwoWeeks && <span className="text-[11px] text-ink-400">/ 2 wks</span>}
+                  {!line.everyTwoWeeks && (
+                    <Nudge label={`Increase ${line.name} by $${step}`} onClick={() => nudge(1)}>
+                      +
+                    </Nudge>
+                  )}
                   <button
                     onClick={() => remove(line.id)}
                     aria-label={`Remove ${line.name}`}
@@ -245,6 +269,28 @@ export default function GroupDetail({
                 </div>
               </div>
 
+              {line.everyTwoWeeks ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
+                  <label className="flex items-center gap-1.5">
+                    A payday
+                    <input
+                      type="date"
+                      className="field py-0.5 text-xs"
+                      value={line.everyTwoWeeks.firstPayday}
+                      onChange={(e) =>
+                        e.target.value && setSchedule(line.id, { ...line.everyTwoWeeks!, firstPayday: e.target.value })
+                      }
+                    />
+                  </label>
+                  <button
+                    className="underline decoration-dotted underline-offset-4 hover:text-ink-700"
+                    onClick={() => setSchedule(line.id, null)}
+                  >
+                    Monthly instead
+                  </button>
+                </div>
+              ) : (
+              <>
               <div className="mt-1 flex items-center gap-2">
                 <input
                   type="range"
@@ -267,6 +313,20 @@ export default function GroupDetail({
                   {money(ceiling)}
                 </span>
               </div>
+              <button
+                className="mt-1 text-[11px] text-ink-400 underline decoration-dotted underline-offset-4 hover:text-ink-700"
+                onClick={() =>
+                  setSchedule(line.id, {
+                    perPayment: Math.round((line.amount * 12) / 26),
+                    firstPayday: today(),
+                  })
+                }
+                title="For something paid every other week — a biweekly allowance, payroll or mortgage"
+              >
+                Paid every two weeks?
+              </button>
+              </>
+              )}
             </div>
           )
         })}
@@ -379,4 +439,10 @@ function Nudge({
       {children}
     </button>
   )
+}
+
+/** Today's local date, `YYYY-MM-DD`. */
+function today(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }

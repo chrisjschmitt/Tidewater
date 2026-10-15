@@ -18,6 +18,7 @@ import {
   balanceTone,
   freeAfterExpenses,
   groupSummaries,
+  paydayExtras,
   totalExpenses,
   totalGoalContributions,
   totalIncome,
@@ -319,6 +320,10 @@ export default function App() {
   const spending = totalExpenses(budget)
   const goalMoney = totalGoalContributions(budget)
   const left = unallocated(budget)
+  const now = new Date()
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const extraOut = paydayExtras(budget.expenses, thisMonth).filter((extra) => extra.paydays > 2)
+  const extraIn = paydayExtras(budget.income, thisMonth).filter((extra) => extra.paydays > 2)
   const tone = balanceTone(budget)
 
   const setExpenses = (lines: ExpenseLine[], groupId: GroupId) =>
@@ -459,6 +464,9 @@ export default function App() {
                   actuals={etmActuals}
                 />
               </div>
+              {(extraOut.length > 0 || extraIn.length > 0) && (
+                <ExtraPaydayNote out={extraOut} arriving={extraIn} left={left} />
+              )}
             </section>
 
             <IncomeCard income={budget.income} onChange={setIncome} />
@@ -867,4 +875,33 @@ function readFileText(
     reader.onerror = () => reject(reader.error ?? new Error('Could not read that file.'))
     reader.readAsText(file)
   })
+}
+
+/**
+ * Lines paid every two weeks are planned at their monthly average, so a month
+ * with a third payday costs (or brings) more than the dashboard shows. Said
+ * plainly, so a goal never looks more affordable this month than it is.
+ */
+function ExtraPaydayNote({
+  out,
+  arriving,
+  left,
+}: {
+  out: Array<{ name: string; difference: number }>
+  arriving: Array<{ name: string; difference: number }>
+  left: number
+}) {
+  const more = out.reduce((sum, extra) => sum + extra.difference, 0)
+  const extraIn = arriving.reduce((sum, extra) => sum + extra.difference, 0)
+  const names = (list: Array<{ name: string }>) => list.map((extra) => extra.name).join(' and ')
+  const thisMonthLeft = left - more + extraIn
+  return (
+    <p className="mt-4 rounded-2xl bg-sand-100/70 px-4 py-3 text-xs leading-relaxed text-ink-600">
+      This month has a third payday
+      {out.length > 0 && <> for {names(out)}: {money(more)} more going out than an average month</>}
+      {out.length > 0 && arriving.length > 0 && '; '}
+      {arriving.length > 0 && <>{out.length > 0 ? 'and' : ' for'} {names(arriving)}: {money(extraIn)} more coming in</>}. About{' '}
+      <span className="font-semibold text-ink-900">{money(thisMonthLeft)}</span> is unspoken for this month.
+    </p>
+  )
 }

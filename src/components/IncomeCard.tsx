@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { paydaysIn, withEveryTwoWeeks } from '../lib/budget'
 import { money, uid } from '../lib/format'
 import type { IncomeLine } from '../lib/types'
 
@@ -13,6 +14,9 @@ export default function IncomeCard({ income, onChange }: Props) {
 
   const update = (id: string, amount: number) =>
     onChange(income.map((l) => (l.id === id ? { ...l, amount: Math.max(0, amount) } : l)))
+  const setSchedule = (id: string, schedule: { perPayment: number; firstPayday: string } | null) =>
+    onChange(income.map((l) => (l.id === id ? withEveryTwoWeeks(l, schedule) : l)))
+  const today = localToday()
 
   return (
     <section className="card p-5">
@@ -35,7 +39,8 @@ export default function IncomeCard({ income, onChange }: Props) {
       {open && (
         <div className="mt-4 space-y-2 animate-fade">
           {income.map((line) => (
-            <div key={line.id} className="flex items-center gap-2">
+            <div key={line.id}>
+            <div className="flex items-center gap-2">
               <input
                 value={line.name}
                 onChange={(e) =>
@@ -47,14 +52,27 @@ export default function IncomeCard({ income, onChange }: Props) {
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-400">
                   $
                 </span>
-                <input
-                  type="number"
-                  min={0}
-                  value={Math.round(line.amount)}
-                  onChange={(e) => update(line.id, Number(e.target.value))}
-                  className="field py-1.5 pl-7 text-right text-sm tabular-nums"
-                  aria-label={`${line.name} amount`}
-                />
+                {line.everyTwoWeeks ? (
+                  <input
+                    type="number"
+                    min={0}
+                    value={Math.round(line.everyTwoWeeks.perPayment)}
+                    onChange={(e) =>
+                      setSchedule(line.id, { ...line.everyTwoWeeks!, perPayment: Math.max(0, Number(e.target.value)) })
+                    }
+                    className="field py-1.5 pl-7 text-right text-sm tabular-nums"
+                    aria-label={`${line.name} amount each payday`}
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    min={0}
+                    value={Math.round(line.amount)}
+                    onChange={(e) => update(line.id, Number(e.target.value))}
+                    className="field py-1.5 pl-7 text-right text-sm tabular-nums"
+                    aria-label={`${line.name} amount`}
+                  />
+                )}
               </div>
               <button
                 onClick={() => onChange(income.filter((l) => l.id !== line.id))}
@@ -65,6 +83,37 @@ export default function IncomeCard({ income, onChange }: Props) {
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
+            </div>
+            {line.everyTwoWeeks ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 pl-1 text-[11px] text-ink-400">
+                <span>
+                  Every two weeks · about {money(line.amount)} a month · {paydaysIn(line.everyTwoWeeks, today.slice(0, 7))}{' '}
+                  paydays this month
+                </span>
+                <label className="flex items-center gap-1">
+                  a payday
+                  <input
+                    type="date"
+                    className="field py-0.5 text-xs"
+                    value={line.everyTwoWeeks.firstPayday}
+                    onChange={(e) =>
+                      e.target.value && setSchedule(line.id, { ...line.everyTwoWeeks!, firstPayday: e.target.value })
+                    }
+                  />
+                </label>
+                <button className="underline decoration-dotted underline-offset-4" onClick={() => setSchedule(line.id, null)}>
+                  Monthly instead
+                </button>
+              </div>
+            ) : (
+              <button
+                className="mt-0.5 pl-1 text-[11px] text-ink-400 underline decoration-dotted underline-offset-4 hover:text-ink-700"
+                onClick={() => setSchedule(line.id, { perPayment: Math.round((line.amount * 12) / 26), firstPayday: today })}
+                title="For pay that arrives every other week"
+              >
+                Paid every two weeks?
+              </button>
+            )}
             </div>
           ))}
 
@@ -80,4 +129,10 @@ export default function IncomeCard({ income, onChange }: Props) {
       )}
     </section>
   )
+}
+
+/** Today's local date, `YYYY-MM-DD`. */
+function localToday(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }

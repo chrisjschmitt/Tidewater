@@ -18,12 +18,27 @@ export interface Group {
   soft: string
 }
 
+/**
+ * A line paid every two weeks rather than monthly — a biweekly payroll, an
+ * allowance paid every other Thursday, an accelerated mortgage. `perPayment`
+ * goes out (or comes in) on each payday, counted forwards and backwards from
+ * `firstPayday`. Most months have two paydays and two a year have three, so
+ * the line's `amount` holds the monthly average (26 paydays ÷ 12), and a
+ * single month's figure comes from counting its paydays.
+ */
+export interface EveryTwoWeeks {
+  perPayment: number
+  /** Any payday, `YYYY-MM-DD`. */
+  firstPayday: string
+}
+
 export interface ExpenseLine {
   id: string
   name: string
   groupId: GroupId
-  /** Planned monthly amount, always a positive number. */
+  /** Planned monthly amount, always a positive number. Paid every two weeks: the monthly average. */
   amount: number
+  everyTwoWeeks?: EveryTwoWeeks
   /** What the imported data suggested, kept so we can show "you planned X, you spend Y". */
   observed?: number
   /**
@@ -38,7 +53,9 @@ export interface ExpenseLine {
 export interface IncomeLine {
   id: string
   name: string
+  /** Monthly amount. Paid every two weeks: the monthly average. */
   amount: number
+  everyTwoWeeks?: EveryTwoWeeks
 }
 
 export type GoalKind = 'savings' | 'debt'

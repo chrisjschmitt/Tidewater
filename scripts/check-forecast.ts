@@ -62,7 +62,7 @@ import {
   withPlanForMonth,
   withPlanPinsAsPlans,
 } from '../src/lib/forecast/planHistory.ts'
-import { freeAfterExpenses, totalExpenses } from '../src/lib/budget.ts'
+import { freeAfterExpenses, lineAmountIn, paydayExtras, paydaysIn, totalExpenses, withEveryTwoWeeks } from '../src/lib/budget.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
 import type { Currency, Transaction } from '../src/lib/etm/types.ts'
@@ -1326,6 +1326,45 @@ check(
   'APP_VERSION matches package.json',
   versionSource.includes(`'${pkg.version}'`) || versionSource.includes(`"${pkg.version}"`),
 )
+
+console.log('\n=== Paid every two weeks ===')
+{
+  // An allowance of $150 every other Thursday from Thursday 2026-10-01: three
+  // paydays in October, two in November, three again in April 2027.
+  const schedule = { perPayment: 150, firstPayday: '2026-10-01' }
+  check('three paydays in October 2026', paydaysIn(schedule, '2026-10') === 3)
+  check('two in November 2026', paydaysIn(schedule, '2026-11') === 2)
+  check('paydays count backwards too (September 2026: Sept 3 and 17)', paydaysIn(schedule, '2026-09') === 2, String(paydaysIn(schedule, '2026-09')))
+  const year = ['2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08', '2027-09', '2027-10', '2027-11', '2027-12']
+  const inYear = year.reduce((n, m) => n + paydaysIn(schedule, m), 0)
+  check('26 or 27 paydays in a calendar year', inYear === 26 || inYear === 27, String(inYear))
+  check('the three-payday months of 2027 are April and September', year.filter((m) => paydaysIn(schedule, m) === 3).join(',') === '2027-04,2027-09')
+
+  const line = withEveryTwoWeeks({ id: 'ca', name: 'Chris Allowance', groupId: 'personal' as const, amount: 300, essential: false }, schedule)
+  check('the line is planned at its monthly average', line.amount === 325, String(line.amount))
+  check("a month's amount counts its paydays", lineAmountIn(line, '2026-10') === 450 && lineAmountIn(line, '2026-11') === 300)
+  check('switching back to monthly drops the schedule', withEveryTwoWeeks(line, null).everyTwoWeeks === undefined)
+
+  const plan: Budget = { ...budget, expenses: [...budget.expenses, line, { ...line, id: 'va', name: 'Vicki Allowance' }] }
+  const base = totalExpenses(budget)
+  check('the dashboard total uses the average', totalExpenses(plan) === base + 650)
+  check('the Budget tab plan for October counts three paydays', totalExpenses(budgetOver(plan, undefined, ['2026-10'])) === base + 900)
+  check('and for November two', totalExpenses(budgetOver(plan, undefined, ['2026-11'])) === base + 600)
+  check(
+    'over a span, the plan per month is the average of its months',
+    Math.abs(totalExpenses(budgetOver(plan, undefined, ['2026-10', '2026-11'])) - (base + 750)) < 0.01,
+  )
+  const result = forecast(transactions, plan, withForecastDefaults({ window: 24 }), ASOF)
+  check('the Forecast plan for October agrees', monthPoint(result, '2026-10')?.plan === round(base + 900), String(monthPoint(result, '2026-10')?.plan))
+  check('a plan change keeps the schedule and resets the payment', (() => {
+    const changed = withPlanChange(plan, undefined, { key: planKey('Chris Allowance'), label: 'Chris Allowance', month: '2026-12', amount: 650 })
+    const updated = changed.budget.expenses.find((l) => l.id === 'ca')!
+    return updated.everyTwoWeeks?.perPayment === 300 && updated.amount === 650
+  })())
+  const extras = paydayExtras(plan.expenses, '2026-10')
+  check('the dashboard note names both allowances, $125 more each than average', extras.length === 2 && extras.every((e) => e.difference === 125))
+  check('no note in a two-payday month', paydayExtras(plan.expenses, '2026-11').length === 0)
+}
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed.`)

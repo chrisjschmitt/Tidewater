@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.14 — 2026-10-14
+
+### Added
+- Plan lines paid every two weeks — an allowance every other Thursday, a biweekly payroll, an accelerated mortgage. On any expense line (in its group) or income line ("What arrives"), "Paid every two weeks?" sets an amount per payday and a payday date. Most months have two paydays and two a year have three.
+- The dashboard, "Unspoken for" and goal room use the true monthly average (26 paydays ÷ 12). The Budget tab and the Forecast use each month's real paydays, so a three-payday month shows its higher plan without a raise.
+- In a month with a third payday, a note under the dashboard ring says how much more goes out (or comes in) than an average month and what is unspoken for this month.
+- A plan change on a line paid every two weeks keeps the schedule and sets a new payment per payday.
+
 ## 0.13.13 — 2026-10-14
 
 ### Added
