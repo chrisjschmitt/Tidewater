@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.15 — 2026-10-14
+
+### Changed
+- The dashboard shows this month as it will fall: "Living", "Unspoken for", the ring, the group totals and "What arrives" count this month's real payments on lines paid every two weeks (three in some months), not their average. Goal suggestions still use an average month, since a goal contribution repeats every month; the note under the ring gives that figure.
+- Wording: expense lines paid every two weeks talk about payments ("per payment", "a payment date", "3 payments this month"); "payday" is kept for income.
+
 ## 0.13.14 — 2026-10-14
 
 ### Added

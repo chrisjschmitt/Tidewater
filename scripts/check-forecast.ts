@@ -62,7 +62,7 @@ import {
   withPlanForMonth,
   withPlanPinsAsPlans,
 } from '../src/lib/forecast/planHistory.ts'
-import { freeAfterExpenses, lineAmountIn, paydayExtras, paydaysIn, totalExpenses, withEveryTwoWeeks } from '../src/lib/budget.ts'
+import { freeAfterExpenses, groupSummaries, inMonth, lineAmountIn, paydayExtras, paydaysIn, totalExpenses, unallocated, withEveryTwoWeeks } from '../src/lib/budget.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
 import type { Currency, Transaction } from '../src/lib/etm/types.ts'
@@ -1364,6 +1364,10 @@ console.log('\n=== Paid every two weeks ===')
   const extras = paydayExtras(plan.expenses, '2026-10')
   check('the dashboard note names both allowances, $125 more each than average', extras.length === 2 && extras.every((e) => e.difference === 125))
   check('no note in a two-payday month', paydayExtras(plan.expenses, '2026-11').length === 0)
+  check('the dashboard for October counts three payments', totalExpenses(inMonth(plan, '2026-10')) === base + 900)
+  check('goal room still uses the average month', unallocated(plan) === unallocated(inMonth(plan, '2026-11')) - 50)
+  const personal = groupSummaries(plan, '2026-10').find((g) => g.group.id === 'personal')
+  check('group totals count this month and keep the schedule on the lines', (personal?.lines.some((l) => l.everyTwoWeeks) ?? false) && personal!.total >= 900)
 }
 
 if (failures > 0) {

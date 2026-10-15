@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { paydaysIn, withEveryTwoWeeks } from '../lib/budget'
+import { lineAmountIn, paydaysIn, withEveryTwoWeeks } from '../lib/budget'
 import { money, uid } from '../lib/format'
 import type { IncomeLine } from '../lib/types'
 
@@ -10,7 +10,9 @@ interface Props {
 
 export default function IncomeCard({ income, onChange }: Props) {
   const [open, setOpen] = useState(false)
-  const total = income.reduce((s, l) => s + l.amount, 0)
+  const thisMonth = localToday().slice(0, 7)
+  // This month as it falls: pay every two weeks counts this month's paydays.
+  const total = income.reduce((s, l) => s + lineAmountIn(l, thisMonth), 0)
 
   const update = (id: string, amount: number) =>
     onChange(income.map((l) => (l.id === id ? { ...l, amount: Math.max(0, amount) } : l)))
@@ -61,7 +63,7 @@ export default function IncomeCard({ income, onChange }: Props) {
                       setSchedule(line.id, { ...line.everyTwoWeeks!, perPayment: Math.max(0, Number(e.target.value)) })
                     }
                     className="field py-1.5 pl-7 text-right text-sm tabular-nums"
-                    aria-label={`${line.name} amount each payday`}
+                    aria-label={`${line.name} amount per payday`}
                   />
                 ) : (
                   <input
@@ -87,8 +89,8 @@ export default function IncomeCard({ income, onChange }: Props) {
             {line.everyTwoWeeks ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 pl-1 text-[11px] text-ink-400">
                 <span>
-                  Every two weeks · about {money(line.amount)} a month · {paydaysIn(line.everyTwoWeeks, today.slice(0, 7))}{' '}
-                  paydays this month
+                  Every two weeks · {paydaysIn(line.everyTwoWeeks, thisMonth)} paydays this month (
+                  {money(lineAmountIn(line, thisMonth))}) · about {money(line.amount)} in an average month
                 </span>
                 <label className="flex items-center gap-1">
                   a payday

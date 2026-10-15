@@ -24,8 +24,14 @@ export const unallocated = (b: Budget) =>
 /** Everything not spent on day-to-day life, whether or not it has a job yet. */
 export const freeAfterExpenses = (b: Budget) => totalIncome(b) - totalExpenses(b)
 
-export function groupSummaries(b: Budget): GroupSummary[] {
-  const spend = totalExpenses(b)
+/**
+ * Group totals. With a month, lines paid every two weeks count that month's
+ * payments (three in some months) rather than their average; the lines
+ * themselves are returned unchanged, so editing them keeps their schedule.
+ */
+export function groupSummaries(b: Budget, month?: string): GroupSummary[] {
+  const amountOf = (line: ExpenseLine) => (month ? lineAmountIn(line, month) : line.amount)
+  const spend = b.expenses.reduce((sum, line) => sum + amountOf(line), 0)
   const byGroup = new Map<GroupId, ExpenseLine[]>()
   for (const line of b.expenses) {
     const list = byGroup.get(line.groupId) ?? []
@@ -34,7 +40,7 @@ export function groupSummaries(b: Budget): GroupSummary[] {
   }
   return GROUPS.map((group) => {
     const lines = (byGroup.get(group.id) ?? []).slice().sort((a, z) => z.amount - a.amount)
-    const total = lines.reduce((sum, l) => sum + l.amount, 0)
+    const total = lines.reduce((sum, l) => sum + amountOf(l), 0)
     return { group, lines, total, share: spend > 0 ? total / spend : 0 }
   })
     .filter((g) => g.lines.length > 0)
@@ -149,4 +155,19 @@ export function paydayExtras(
       return { name: line.name, paydays: paydaysIn(line.everyTwoWeeks!, month), amount, difference: round2(amount - line.amount) }
     })
     .filter((extra) => extra.paydays !== 2)
+}
+
+/**
+ * The plan as it falls in one month: lines paid every two weeks carry that
+ * month's payments instead of their average. For the dashboard's own totals;
+ * goal suggestions keep using the average, since a goal contribution repeats
+ * every month.
+ */
+export function inMonth(b: Budget, month: string): Budget {
+  if (!b.expenses.some((line) => line.everyTwoWeeks) && !b.income.some((line) => line.everyTwoWeeks)) return b
+  return {
+    ...b,
+    expenses: b.expenses.map((line) => (line.everyTwoWeeks ? { ...line, amount: lineAmountIn(line, month) } : line)),
+    income: b.income.map((line) => (line.everyTwoWeeks ? { ...line, amount: lineAmountIn(line, month) } : line)),
+  }
 }

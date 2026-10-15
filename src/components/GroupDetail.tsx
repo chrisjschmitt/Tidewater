@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { paydaysIn, withEveryTwoWeeks, type GroupSummary } from '../lib/budget'
+import { lineAmountIn, paydaysIn, withEveryTwoWeeks, type GroupSummary } from '../lib/budget'
 import { money, moneyPrecise, uid } from '../lib/format'
 import type { ExpenseLine } from '../lib/types'
 import type { CategorySpend, DashboardActuals } from '../lib/etm/aggregate'
@@ -91,7 +91,7 @@ export default function GroupDetail({
       if (prev?.groupId !== group.id) {
         return {
           groupId: group.id,
-          total: lines.reduce((s, l) => s + l.amount, 0),
+          total: lines.reduce((s, l) => s + lineAmountIn(l, monthNow()), 0),
           baselines: Object.fromEntries(lines.map((l) => [l.id, baselineFor(l, lines)])),
         }
       }
@@ -113,8 +113,8 @@ export default function GroupDetail({
 
   if (!summary) return null
   const { group, lines } = summary
-  const thisMonth = today().slice(0, 7)
-  const total = lines.reduce((s, l) => s + l.amount, 0)
+  const thisMonth = monthNow()
+  const total = lines.reduce((s, l) => s + lineAmountIn(l, thisMonth), 0)
   const delta = session?.groupId === group.id ? total - session.total : 0
 
   const update = (id: string, amount: number) => {
@@ -206,8 +206,8 @@ export default function GroupDetail({
                   <p className="truncate text-sm font-medium text-ink-900">{line.name}</p>
                   {line.everyTwoWeeks ? (
                     <p className="text-[11px] text-ink-400">
-                      Every two weeks · about {money(line.amount)} a month on average ·{' '}
-                      {paydaysIn(line.everyTwoWeeks, thisMonth)} paydays this month
+                      Every two weeks · {paydaysIn(line.everyTwoWeeks, thisMonth)} payments this month (
+                      {money(lineAmountIn(line, thisMonth))}) · about {money(line.amount)} in an average month
                     </p>
                   ) : line.essential ? (
                     <p className="text-[11px] text-ink-400">Hard to move — that is fine</p>
@@ -239,7 +239,7 @@ export default function GroupDetail({
                         value={line.everyTwoWeeks.perPayment}
                         onChange={(v) => setSchedule(line.id, { ...line.everyTwoWeeks!, perPayment: Math.max(0, v) })}
                         className="field w-24 pl-7 pr-2 text-right tabular-nums"
-                        ariaLabel={`${line.name} amount each payday`}
+                        ariaLabel={`${line.name} amount per payment`}
                       />
                     ) : (
                       <AmountInput
@@ -251,7 +251,7 @@ export default function GroupDetail({
                       />
                     )}
                   </div>
-                  {line.everyTwoWeeks && <span className="text-[11px] text-ink-400">/ 2 wks</span>}
+                  {line.everyTwoWeeks && <span className="text-[11px] text-ink-400">per payment</span>}
                   {!line.everyTwoWeeks && (
                     <Nudge label={`Increase ${line.name} by $${step}`} onClick={() => nudge(1)}>
                       +
@@ -272,7 +272,7 @@ export default function GroupDetail({
               {line.everyTwoWeeks ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
                   <label className="flex items-center gap-1.5">
-                    A payday
+                    A payment date
                     <input
                       type="date"
                       className="field py-0.5 text-xs"
@@ -446,3 +446,6 @@ function today(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
+
+/** This month, `YYYY-MM`: totals here count a line's payments this month, like the dashboard. */
+const monthNow = () => today().slice(0, 7)

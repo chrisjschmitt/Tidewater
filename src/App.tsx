@@ -18,6 +18,7 @@ import {
   balanceTone,
   freeAfterExpenses,
   groupSummaries,
+  inMonth,
   paydayExtras,
   totalExpenses,
   totalGoalContributions,
@@ -266,7 +267,9 @@ export default function App() {
 
   // --- derived ----------------------------------------------------------
 
-  const summaries = useMemo(() => (budget ? groupSummaries(budget) : []), [budget])
+  const today = new Date()
+  const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+  const summaries = useMemo(() => (budget ? groupSummaries(budget, thisMonth) : []), [budget, thisMonth])
   const activeSummary = useMemo<GroupSummary | null>(
     () => summaries.find((s) => s.group.id === openGroup) ?? null,
     [summaries, openGroup],
@@ -316,15 +319,17 @@ export default function App() {
     )
   }
 
-  const income = totalIncome(budget)
-  const spending = totalExpenses(budget)
+  // The dashboard shows this month as it will fall: a line paid every two
+  // weeks counts this month's payments. Goal suggestions use the average.
+  const monthBudget = inMonth(budget, thisMonth)
+  const income = totalIncome(monthBudget)
+  const spending = totalExpenses(monthBudget)
   const goalMoney = totalGoalContributions(budget)
-  const left = unallocated(budget)
-  const now = new Date()
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const left = unallocated(monthBudget)
+  const averageLeft = unallocated(budget)
   const extraOut = paydayExtras(budget.expenses, thisMonth).filter((extra) => extra.paydays > 2)
   const extraIn = paydayExtras(budget.income, thisMonth).filter((extra) => extra.paydays > 2)
-  const tone = balanceTone(budget)
+  const tone = balanceTone(monthBudget)
 
   const setExpenses = (lines: ExpenseLine[], groupId: GroupId) =>
     commit({
@@ -465,7 +470,7 @@ export default function App() {
                 />
               </div>
               {(extraOut.length > 0 || extraIn.length > 0) && (
-                <ExtraPaydayNote out={extraOut} arriving={extraIn} left={left} />
+                <ExtraPaydayNote out={extraOut} arriving={extraIn} averageLeft={averageLeft} />
               )}
             </section>
 
@@ -878,30 +883,30 @@ function readFileText(
 }
 
 /**
- * Lines paid every two weeks are planned at their monthly average, so a month
- * with a third payday costs (or brings) more than the dashboard shows. Said
- * plainly, so a goal never looks more affordable this month than it is.
+ * The dashboard counts this month's real payments, so a month with a third
+ * payment on a line paid every two weeks shows more going out. Said plainly,
+ * with the average month beside it — the figure goal suggestions use.
  */
 function ExtraPaydayNote({
   out,
   arriving,
-  left,
+  averageLeft,
 }: {
   out: Array<{ name: string; difference: number }>
   arriving: Array<{ name: string; difference: number }>
-  left: number
+  averageLeft: number
 }) {
   const more = out.reduce((sum, extra) => sum + extra.difference, 0)
   const extraIn = arriving.reduce((sum, extra) => sum + extra.difference, 0)
   const names = (list: Array<{ name: string }>) => list.map((extra) => extra.name).join(' and ')
-  const thisMonthLeft = left - more + extraIn
   return (
     <p className="mt-4 rounded-2xl bg-sand-100/70 px-4 py-3 text-xs leading-relaxed text-ink-600">
-      This month has a third payday
-      {out.length > 0 && <> for {names(out)}: {money(more)} more going out than an average month</>}
-      {out.length > 0 && arriving.length > 0 && '; '}
-      {arriving.length > 0 && <>{out.length > 0 ? 'and' : ' for'} {names(arriving)}: {money(extraIn)} more coming in</>}. About{' '}
-      <span className="font-semibold text-ink-900">{money(thisMonthLeft)}</span> is unspoken for this month.
+      This month
+      {out.length > 0 && <> has a third payment for {names(out)} ({money(more)} more going out than an average month)</>}
+      {out.length > 0 && arriving.length > 0 && ' and'}
+      {arriving.length > 0 && <> has a third payday for {names(arriving)} ({money(extraIn)} more coming in)</>}, and the figures
+      above include {out.length + arriving.length === 1 ? 'it' : 'them'}. In an average month{' '}
+      <span className="font-semibold text-ink-900">{money(averageLeft)}</span> is unspoken for — goal suggestions use that.
     </p>
   )
 }
