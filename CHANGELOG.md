@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.13 — 2026-10-14
+
+### Added
+- Forecast, "Plan vs forecast by category" (any month): click a category's Forecast figure to see how it was worked out. The pop-up says what type the category is treated as and how sure that is ("Spent in 11 of the last 12 months, usually about $360"), then the steps from history to the figure — the typical amount and how it was chosen, inflation, any dated cost pinned on the month — adding up to the number you clicked. A plan raise on the month is noted; it moves Plan, not Forecast.
+- This month: the month-end rule is spelled out with the category's numbers — "$X spent so far + $Y still expected = $Z", or "already over: spending so far is the forecast". The rule itself is unchanged.
+- Month by month: the history the forecast learned from, newest first. Click an amount to see that month's transactions (Edit on TD and hand-entered rows). "Ignore this month" leaves a month out of what the category learns from — a one-off spike, say — and "Use this month" brings it back; its spend still counts as actual. The forecast recalculates straight away.
+- "Change type" at the top of the pop-up uses the same type setting as Household categories.
+
 ## 0.13.12 — 2026-10-14
 
 ### Fixed

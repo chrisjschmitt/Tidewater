@@ -3,7 +3,7 @@ import Modal from '../Modal'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import type { CategoryForecast, DoubleCountWarning, ExpenseType, PinRequest } from '../../lib/forecast/types'
-import { confidenceLabel, doubleCountCopy, planPriorCopy, seenCopy, typeLabel } from './forecastCopy'
+import { TYPE_CHOICES, confidenceLabel, doubleCountCopy, planPriorCopy, seenCopy, typeLabel } from './forecastCopy'
 import { PinComment } from './PinComment'
 
 interface Props {
@@ -18,15 +18,6 @@ interface Props {
   /** Explicit type override for the open card; omitted means History. */
   overrideType?: ExpenseType
 }
-
-const TYPE_CHOICES: Array<[ExpenseType | 'auto', string]> = [
-  ['auto', 'History'],
-  ['predictable-monthly', 'Monthly'],
-  ['variable-monthly', 'Variable'],
-  ['predictable-annual', 'Annual'],
-  ['seasonal', 'Seasonal'],
-  ['irregular', 'Irregular'],
-]
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 

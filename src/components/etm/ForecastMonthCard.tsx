@@ -42,6 +42,8 @@ interface Props {
   onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
   /** Opens the transactions behind a category's Actual to today. */
   onOpenActual?: (row: { key: string; label: string }) => void
+  /** Opens why a category's Forecast figure is what it is. */
+  onOpenForecast?: (row: { key: string; label: string }) => void
 }
 
 export default function ForecastMonthCard({
@@ -60,6 +62,7 @@ export default function ForecastMonthCard({
   typicalPlanFor,
   onPlanChange,
   onOpenActual,
+  onOpenForecast,
 }: Props) {
   const isCurrent = point.kind === 'current'
   const actual = isCurrent ? current.actualToDate : point.kind === 'past' ? point.actual : 0
@@ -131,6 +134,7 @@ export default function ForecastMonthCard({
         {...(typicalPlanFor && onPlanChange ? { planEdit: { typicalPlanFor, onPlanChange } } : {})}
         pinnedKeys={new Set(placements.map((future) => pinKey(future.category)))}
         {...(isCurrent && onOpenActual ? { onOpenActual } : {})}
+        {...(onOpenForecast ? { onOpenForecast } : {})}
       />
 
       {placements.length > 0 && (
@@ -340,6 +344,7 @@ function PlanVsForecastList({
   planEdit,
   pinnedKeys,
   onOpenActual,
+  onOpenForecast,
 }: {
   rows: VarianceRow[]
   toMonthEnd: boolean
@@ -354,6 +359,7 @@ function PlanVsForecastList({
   /** Categories with a pin on this month, badged in their row. */
   pinnedKeys: Set<string>
   onOpenActual?: (row: { key: string; label: string }) => void
+  onOpenForecast?: (row: { key: string; label: string }) => void
 }) {
   const ignored = new Set(ignoredKeys)
   const active = rows.filter((row) => !ignored.has(row.key))
@@ -379,6 +385,7 @@ function PlanVsForecastList({
           : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'}{' '}
         {planEdit && `Click a Plan figure to change that category's plan from ${monthName(month)} on; earlier months keep theirs. `}
         {onOpenActual && 'Click an Actual to today figure to see its transactions. '}
+        {onOpenForecast && 'Click a Forecast figure to see how it was worked out. '}
         Ignore a line if you expect to hit Plan there anyway — that gap leaves
         Forecast; Plan does not change. Raise adds an amount to the category's
         plan for this month only, or from this month on; the trend is already
@@ -421,6 +428,7 @@ function PlanVsForecastList({
                 {...(planEdit ? { planEdit } : {})}
                 pinned={pinnedKeys.has(row.key)}
                 {...(onOpenActual ? { onOpenActual } : {})}
+                {...(onOpenForecast ? { onOpenForecast } : {})}
               />
             ))}
           </tbody>
@@ -470,6 +478,7 @@ function PlanVsForecastList({
                   {...(planEdit ? { planEdit } : {})}
                   pinned={pinnedKeys.has(row.key)}
                   {...(onOpenActual ? { onOpenActual } : {})}
+                  {...(onOpenForecast ? { onOpenForecast } : {})}
                 />
               ))}
             </tbody>
@@ -500,6 +509,7 @@ function CompareRow({
   planEdit,
   pinned,
   onOpenActual,
+  onOpenForecast,
 }: {
   row: VarianceRow
   running?: number
@@ -512,6 +522,7 @@ function CompareRow({
   planEdit?: PlanEdit
   pinned?: boolean
   onOpenActual?: (row: { key: string; label: string }) => void
+  onOpenForecast?: (row: { key: string; label: string }) => void
 }) {
   const pinDefault = pinAmountFor(row)
   const [open, setOpen] = useState(false)
@@ -567,7 +578,18 @@ function CompareRow({
           </td>
         )}
         <td className={`py-1.5 pr-3 text-right tabular-nums ${ignored ? 'text-ink-400' : 'text-ink-700'}`}>
-          {amountIn(row.forecast, 'CAD')}
+          {onOpenForecast ? (
+            <button
+              type="button"
+              className="tabular-nums underline decoration-sand-300 underline-offset-2 hover:text-ink-900"
+              onClick={() => onOpenForecast({ key: row.key, label: row.label })}
+              aria-label={`How the ${row.label} forecast is worked out`}
+            >
+              {amountIn(row.forecast, 'CAD')}
+            </button>
+          ) : (
+            amountIn(row.forecast, 'CAD')
+          )}
         </td>
         <td className={`py-1.5 pr-3 text-right tabular-nums ${ignored ? 'text-ink-400' : 'text-ink-700'}`}>
           {signedCad(row.delta)}

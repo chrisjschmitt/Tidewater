@@ -8,6 +8,16 @@ export const TYPE_LABEL: Record<ExpenseType, string> = {
   irregular: 'One-time / irregular',
 }
 
+/** Type override choices; `auto` lets history decide. */
+export const TYPE_CHOICES: Array<[ExpenseType | 'auto', string]> = [
+  ['auto', 'History'],
+  ['predictable-monthly', 'Monthly'],
+  ['variable-monthly', 'Variable'],
+  ['predictable-annual', 'Annual'],
+  ['seasonal', 'Seasonal'],
+  ['irregular', 'Irregular'],
+]
+
 export function typeLabel(type: ExpenseType, lowSample: boolean): string {
   if (type === 'irregular' && lowSample) return 'Emerging'
   return TYPE_LABEL[type]

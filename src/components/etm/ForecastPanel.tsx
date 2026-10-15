@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ForecastCategories from './ForecastCategories'
 import ForecastGoals from './ForecastGoals'
 import ForecastActualModal from './ForecastActualModal'
+import ForecastExplainModal from './ForecastExplainModal'
 import ForecastMonthCard from './ForecastMonthCard'
 import ForecastMonthEnd from './ForecastMonthEnd'
 import ForecastTimeline from './ForecastTimeline'
@@ -11,10 +12,16 @@ import { amountIn } from '../../lib/etm/format'
 import { monthName, today } from '../../lib/etm/period'
 import { uid } from '../../lib/format'
 import { walkForward } from '../../lib/forecast/backtest'
-import { forecast, lookbackMonths, monthOfKnownFuture, windowLabel } from '../../lib/forecast/forecast'
+import { explainCategory, forecast, lookbackMonths, monthOfKnownFuture, windowLabel } from '../../lib/forecast/forecast'
 import { lastFullMonth, monthEndVariance, snapshotFromResult } from '../../lib/forecast/snapshot'
 import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot, type PinRequest } from '../../lib/forecast/types'
-import { taggingGaps, withCategoryTypicalMonths, withCategoryTypeOverride, withIgnoredCompare } from '../../lib/forecast/universe'
+import {
+  taggingGaps,
+  withCategoryTypicalMonths,
+  withCategoryTypeOverride,
+  withIgnoredCompare,
+  withIgnoredHistory,
+} from '../../lib/forecast/universe'
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
 import { planAmountAt, planKey } from '../../lib/forecast/planHistory'
@@ -57,7 +64,8 @@ export default function ForecastPanel({
   const currentMonth = asOf.slice(0, 7)
   const [focusedMonth, setFocusedMonth] = useState(currentMonth)
   const [openCategory, setOpenCategory] = useState<string | null>(null)
-  const [openActual, setOpenActual] = useState<{ key: string; label: string } | null>(null)
+  const [openActual, setOpenActual] = useState<{ key: string; label: string; month: string } | null>(null)
+  const [openExplain, setOpenExplain] = useState<{ key: string; label: string; month: string } | null>(null)
   const resolvedConfig = useMemo(() => withForecastDefaults(config), [config])
 
   const lookback = useMemo(
@@ -97,6 +105,13 @@ export default function ForecastPanel({
         : null,
     })
   }, [lastMonthSnapshot, lastPoint, priorMonth, reconstructedMonth, transactions.length])
+  const explanation = useMemo(
+    () =>
+      openExplain
+        ? explainCategory(transactions, budget, config, asOf, openExplain.key, openExplain.month, reimbursableParentTag)
+        : null,
+    [openExplain, transactions, budget, config, asOf, reimbursableParentTag],
+  )
   const gaps = useMemo(
     () => taggingGaps(transactions, config, reimbursableParentTag),
     [transactions, config, reimbursableParentTag],
@@ -250,13 +265,28 @@ export default function ForecastPanel({
               onIgnore={(key, ignored) =>
                 onConfigChange(withIgnoredCompare(config, focused.month, key, ignored))
               }
-              onOpenActual={setOpenActual}
+              onOpenActual={(row) => setOpenActual({ ...row, month: currentMonth })}
+              onOpenForecast={(row) => setOpenExplain({ ...row, month: focused.month })}
             />
           </div>
+          {explanation && openExplain && !openActual && (
+            <ForecastExplainModal
+              explanation={explanation}
+              {...(config.categoryOverrides[explanation.key]?.type
+                ? { overrideType: config.categoryOverrides[explanation.key]!.type }
+                : {})}
+              onChangeType={(type) => onConfigChange(withCategoryTypeOverride(config, explanation.key, type))}
+              onIgnoreMonth={(month, ignored) =>
+                onConfigChange(withIgnoredHistory(config, explanation.key, month, ignored))
+              }
+              onOpenMonth={(month) => setOpenActual({ key: explanation.key, label: explanation.label, month })}
+              onClose={() => setOpenExplain(null)}
+            />
+          )}
           {openActual && (
             <ForecastActualModal
               category={openActual}
-              month={currentMonth}
+              month={openActual.month}
               transactions={transactions}
               config={resolvedConfig}
               reimbursableParentTag={reimbursableParentTag}

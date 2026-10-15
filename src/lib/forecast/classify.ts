@@ -93,6 +93,8 @@ export interface CategorySeries {
   label: string
   /** One value per lookback month, 0 when the category was absent. */
   values: number[]
+  /** This series' own months when some lookback months are ignored; `values` lines up with it. */
+  months?: string[]
 }
 
 function pickType(input: {
@@ -284,6 +286,6 @@ export function classifyCategories(
   overrides: Record<string, CategoryOverride> = {},
 ): CategoryForecast[] {
   return series
-    .map((item) => classifyCategory(item, months, overrides[item.key]))
+    .map((item) => classifyCategory(item, item.months ?? months, overrides[item.key]))
     .sort((a, z) => z.windowTotal - a.windowTotal || a.label.localeCompare(z.label))
 }

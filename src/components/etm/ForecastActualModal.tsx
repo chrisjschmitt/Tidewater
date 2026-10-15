@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import TransactionTable from './TransactionTable'
 import Modal from '../Modal'
 import { amountIn } from '../../lib/etm/format'
-import { monthName } from '../../lib/etm/period'
+import { monthName, today } from '../../lib/etm/period'
 import type { Transaction } from '../../lib/etm/types'
 import { householdRowsIn } from '../../lib/forecast/universe'
 import type { ForecastConfig } from '../../lib/forecast/types'
@@ -51,7 +51,7 @@ export default function ForecastActualModal({
       onClose={onClose}
       width="max-w-3xl"
       title={category.label}
-      subtitle={`${amountIn(spendSoFar.total, 'CAD')} so far in ${monthName(month)} · newest first`}
+      subtitle={`${amountIn(spendSoFar.total, 'CAD')} ${month < today().slice(0, 7) ? 'in' : 'so far in'} ${monthName(month)} · newest first`}
     >
       <div className="rounded-2xl bg-white/70">
         <TransactionTable

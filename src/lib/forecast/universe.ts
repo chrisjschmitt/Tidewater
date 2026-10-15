@@ -250,6 +250,25 @@ export function withIgnoredCompare(
   return { ...config, ignoredCompare }
 }
 
+/** Leave one history month out of a category's lookback, or bring it back. */
+export function withIgnoredHistory(
+  config: ForecastConfig,
+  key: string,
+  month: string,
+  ignored: boolean,
+): ForecastConfig {
+  const current = config.ignoredHistory?.[key] ?? []
+  const next = ignored
+    ? current.includes(month)
+      ? current
+      : [...current, month].sort()
+    : current.filter((item) => item !== month)
+  const ignoredHistory = { ...config.ignoredHistory }
+  if (next.length === 0) delete ignoredHistory[key]
+  else ignoredHistory[key] = next
+  return { ...config, ignoredHistory }
+}
+
 const isLumpyType = (type: ExpenseType | undefined): boolean =>
   type === 'seasonal' || type === 'predictable-annual'
 

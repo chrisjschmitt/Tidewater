@@ -73,6 +73,12 @@ export interface ForecastConfig {
   knownFutures: KnownFuture[]
   /** Category keys dropped below the Plan vs forecast line, by YYYY-MM. */
   ignoredCompare: Record<string, string[]>
+  /**
+   * History months (YYYY-MM) left out of a category's lookback, by category
+   * key. The month's spend still counts as actual; the forecast just does not
+   * learn from it.
+   */
+  ignoredHistory?: Record<string, string[]>
   /** Earlier plan amounts, kept when a category's plan changes from a month on (planHistory.ts). */
   planHistory?: PlanHistory
 }
@@ -146,6 +152,10 @@ export function withForecastDefaults(stored?: Partial<ForecastConfig>): Forecast
       typeof stored.ignoredCompare === 'object' &&
       !Array.isArray(stored.ignoredCompare)
         ? stored.ignoredCompare
+        : {},
+    ignoredHistory:
+      stored?.ignoredHistory && typeof stored.ignoredHistory === 'object' && !Array.isArray(stored.ignoredHistory)
+        ? stored.ignoredHistory
         : {},
     ...(stored?.planHistory && typeof stored.planHistory === 'object' && !Array.isArray(stored.planHistory)
       ? { planHistory: stored.planHistory }
@@ -402,4 +412,62 @@ export interface ForecastResult {
   coverage: CoverageResult
   vacationGoal: VacationGoalMatch
   doubleCounts: DoubleCountWarning[]
+}
+
+/** How the typical amount for one category and month was chosen (forecast.ts `explainCategory`). */
+export type TypicalHow =
+  | { kind: 'plan-prior'; plan: number }
+  | { kind: 'override' }
+  | { kind: 'last-amount' }
+  | { kind: 'median-recent'; months: number }
+  | { kind: 'median-all'; months: number }
+  | { kind: 'mean-present'; months: number }
+  | { kind: 'seasonal-same-month'; months: number }
+  | { kind: 'seasonal-mean-present' }
+  | { kind: 'off-month'; typicalMonthNames: string[] }
+  | { kind: 'irregular'; share: number }
+  | { kind: 'no-history' }
+
+/** One addend on the way from history to the figure. The steps sum to `figure`. */
+export type ExplainStep =
+  | { kind: 'typical'; amount: number; how: TypicalHow }
+  | { kind: 'inflation'; amount: number; percent: number; monthsAhead: number }
+  | { kind: 'pin'; amount: number; id: string; recurrence: KnownFuture['recurrence']; notes: string }
+  | { kind: 'spent'; amount: number }
+  | { kind: 'expected'; amount: number; typical: number; reason?: RemainReason }
+
+export interface ExplainHistoryMonth {
+  month: string
+  /** The category's household spend that month, ignored or not. */
+  amount: number
+  ignored: boolean
+}
+
+export interface CategoryExplanation {
+  key: string
+  label: string
+  month: string
+  kind: 'past' | 'current' | 'future'
+  /** The Forecast column figure for this category and month. */
+  figure: number
+  /** Absent when the category has no history and no plan line. */
+  category?: CategoryForecast
+  /** True when the type was set by hand rather than by history. */
+  typeOverridden: boolean
+  /** Lookback months the category learned from (ignored months taken out). */
+  windowMonths: number
+  history: ExplainHistoryMonth[]
+  /** The typical amount for this month before inflation, and how it was chosen. */
+  typical: { amount: number; how: TypicalHow }
+  steps: ExplainStep[]
+  /** Raises on this month's plan; they do not touch Forecast. */
+  planRaises: Array<{ id: string; amount: number }>
+  /** Current month only: the month-end rule with this category's numbers. */
+  current?: {
+    spent: number
+    expected: number
+    /** What the month is expected to reach before spend so far is taken off. */
+    typical: number
+    outcome: 'still-expected' | 'reached' | 'over' | 'posted' | 'spent-only' | 'nothing'
+  }
 }

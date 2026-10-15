@@ -10,6 +10,7 @@ import { groupForCategory, isInternalCategory } from '../src/lib/categories.ts'
 import { walkForward } from '../src/lib/forecast/backtest.ts'
 import { cvOf } from '../src/lib/forecast/classify.ts'
 import {
+  explainCategory,
   forecast,
   forecastMix,
   isOutsideControlWindow,
@@ -49,6 +50,7 @@ import {
   withCategoryTypicalMonths,
   withCategoryTypeOverride,
   withIgnoredCompare,
+  withIgnoredHistory,
   withVacationTag,
 } from '../src/lib/forecast/universe.ts'
 import { parseMonarchCsv, type MonarchRow } from '../src/lib/etm/monarch.ts'
@@ -1157,6 +1159,159 @@ check(
   })(),
 )
 check('USD household is named and not added into CAD', /Forecast household \(USD\)/.test(chatText) && chatText.includes('Cloud Software'))
+
+console.log('\n=== Forecast explanations add up ===')
+{
+  const stepSum = (steps: Array<{ amount: number }>) => round(steps.reduce((sum, step) => sum + step.amount, 0))
+  const explainCfg = withForecastDefaults({
+    window: 24,
+    inflationPercent: 3,
+    knownFutures: [
+      { id: 'repair-pin', category: 'Engine Repair', amount: 900, month: '2026-11', recurrence: 'once', series: 'household', notes: 'quote' },
+      { id: 'basket-raise', category: 'Market Basket', amount: 75, month: '2026-11', recurrence: 'once', series: 'household', notes: '', addsTo: 'plan' },
+    ],
+  })
+  const explainResult = forecast(transactions, lightBudget, explainCfg, ASOF)
+  const figureOf = (month: string, key: string) =>
+    (month === ASOF.slice(0, 7)
+      ? explainResult.cad.household.currentMonth.planVsForecast
+      : monthPoint(explainResult, month)?.planVsForecast ?? []
+    ).find((row) => row.key === key)?.forecast ?? 0
+  let mismatches: string[] = []
+  for (const point of explainResult.cad.household.calendar) {
+    const rowsHere =
+      point.kind === 'current' ? explainResult.cad.household.currentMonth.planVsForecast : point.planVsForecast
+    for (const row of rowsHere) {
+      const explained = explainCategory(transactions, lightBudget, explainCfg, ASOF, row.key, point.month)
+      if (!near(explained.figure, row.forecast, 0.001) || !near(stepSum(explained.steps), row.forecast, 0.005)) {
+        mismatches.push(`${point.month} ${row.key} ${row.forecast} vs ${explained.figure}/${stepSum(explained.steps)}`)
+      }
+    }
+  }
+  check('every Plan vs forecast figure is explained by steps that sum to it', mismatches.length === 0, mismatches.slice(0, 3).join('; '))
+
+  const dues = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Harbor Dues'), '2027-02')
+  check(
+    'monthly: typical plus inflation is the figure',
+    dues.typical.how.kind === 'last-amount' &&
+      dues.steps.some((step) => step.kind === 'inflation' && step.amount > 0) &&
+      near(stepSum(dues.steps), figureOf('2027-02', nameKey('Harbor Dues')), 0.005),
+    `${dues.typical.how.kind} ${stepSum(dues.steps)}`,
+  )
+  check('monthly: history lists the full lookback', dues.history.length === 24 && dues.windowMonths === 24)
+
+  const club = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Dock Club'), '2027-03')
+  const clubOff = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Dock Club'), '2027-04')
+  check(
+    'annual: the typical month places the when-present average',
+    club.typical.how.kind === 'mean-present' && club.typical.amount === 180 && near(stepSum(club.steps), club.figure, 0.005),
+    `${club.typical.how.kind} ${club.typical.amount}`,
+  )
+  check('annual: another month is explained as off-month and zero', clubOff.typical.how.kind === 'off-month' && clubOff.figure === 0)
+
+  const repair = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Engine Repair'), '2026-11')
+  check(
+    'irregular: zero typical plus the pinned cost is the figure',
+    repair.typical.how.kind === 'irregular' &&
+      repair.typical.amount === 0 &&
+      repair.steps.some((step) => step.kind === 'pin' && step.amount === 900) &&
+      repair.figure === 900 &&
+      stepSum(repair.steps) === 900,
+    `${repair.figure} ${stepSum(repair.steps)}`,
+  )
+  const basketNov = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Market Basket'), '2026-11')
+  check(
+    'a plan raise is listed but not a Forecast step',
+    basketNov.planRaises.some((raise) => raise.amount === 75) &&
+      !basketNov.steps.some((step) => step.kind === 'pin') &&
+      near(stepSum(basketNov.steps), figureOf('2026-11', nameKey('Market Basket')), 0.005),
+  )
+
+  const light = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Wharf Light'), '2026-10')
+  check(
+    'plan prior: the Budget line stands in and sums to the figure',
+    light.typical.how.kind === 'plan-prior' && light.typical.amount === 25 && near(stepSum(light.steps), light.figure, 0.005) && light.figure > 25,
+    `${light.typical.how.kind} ${light.figure}`,
+  )
+
+  const basketNow = explainCategory(transactions, lightBudget, explainCfg, ASOF, nameKey('Market Basket'), ASOF.slice(0, 7))
+  check(
+    'current month under: spent so far plus still expected is the figure',
+    basketNow.current?.outcome === 'still-expected' &&
+      basketNow.current.expected > 0 &&
+      near(basketNow.current.spent + basketNow.current.expected, basketNow.figure, 0.005) &&
+      near(stepSum(basketNow.steps), figureOf(ASOF.slice(0, 7), nameKey('Market Basket')), 0.005),
+    `${basketNow.current?.outcome} ${basketNow.current?.spent}+${basketNow.current?.expected}=${basketNow.figure}`,
+  )
+  const overTx: Transaction[] = [
+    ...transactions,
+    { ...transactions.find((t) => t.category === 'Pharmacy' && t.currency === 'CAD')!, id: 'over-pharm', date: `${ASOF.slice(0, 7)}-10`, amount: -55 },
+  ]
+  const pharmNow = explainCategory(overTx, lightBudget, explainCfg, ASOF, nameKey('Pharmacy'), ASOF.slice(0, 7))
+  const pharmRow = forecast(overTx, lightBudget, explainCfg, ASOF).cad.household.currentMonth.planVsForecast.find(
+    (row) => row.key === nameKey('Pharmacy'),
+  )
+  check(
+    'current month over: spending so far is the forecast',
+    pharmNow.current?.outcome === 'over' &&
+      pharmNow.current.expected === 0 &&
+      pharmNow.figure === pharmNow.current.spent &&
+      pharmNow.figure === pharmRow?.forecast &&
+      stepSum(pharmNow.steps) === pharmNow.figure,
+    `${pharmNow.current?.outcome} ${pharmNow.figure} spent ${pharmNow.current?.spent}`,
+  )
+
+  const basketMonths = explainResult.lookback
+  const ignoreMonth = basketMonths.at(-1)!
+  const ignoredCfg = withIgnoredHistory(explainCfg, nameKey('Market Basket'), ignoreMonth, true)
+  const ignoredExplain = explainCategory(transactions, lightBudget, ignoredCfg, ASOF, nameKey('Market Basket'), '2026-10')
+  const ignoredRow = monthPoint(forecast(transactions, lightBudget, ignoredCfg, ASOF), '2026-10')?.planVsForecast.find(
+    (row) => row.key === nameKey('Market Basket'),
+  )
+  check(
+    'an ignored history month is greyed and leaves the category window',
+    ignoredExplain.history.find((m) => m.month === ignoreMonth)?.ignored === true &&
+      ignoredExplain.windowMonths === basketMonths.length - 1 &&
+      ignoredExplain.history.length === basketMonths.length,
+  )
+  check(
+    'the forecast with an ignored month still matches its explanation',
+    near(stepSum(ignoredExplain.steps), ignoredRow?.forecast ?? -1, 0.005) && ignoredExplain.figure === ignoredRow?.forecast,
+  )
+  check(
+    'Use this month brings it back',
+    withIgnoredHistory(ignoredCfg, nameKey('Market Basket'), ignoreMonth, false).ignoredHistory?.[nameKey('Market Basket')] == null,
+  )
+  const spikeTx: Transaction[] = [
+    ...transactions,
+    { ...transactions.find((t) => t.category === 'Market Basket' && t.currency === 'CAD')!, id: 'spike', date: `${ignoreMonth}-20`, amount: -5000 },
+  ]
+  const spikeCat = cat(forecast(spikeTx, lightBudget, explainCfg, ASOF), 'Market Basket')
+  const spikeLikely = spikeCat?.likely ?? 0
+  const spikeIgnored = cat(
+    forecast(spikeTx, lightBudget, withIgnoredHistory(explainCfg, nameKey('Market Basket'), ignoreMonth, true), ASOF),
+    'Market Basket',
+  )
+  check(
+    'ignoring a spike month takes it out of what the forecast learns from',
+    (spikeIgnored?.windowTotal ?? 0) <= (spikeCat?.windowTotal ?? 0) - 5000 && spikeIgnored!.likely <= spikeLikely,
+    `likely ${spikeLikely} → ${spikeIgnored?.likely}, window ${spikeCat?.windowTotal} → ${spikeIgnored?.windowTotal}`,
+  )
+  const typeChanged = explainCategory(
+    transactions,
+    lightBudget,
+    withCategoryTypeOverride(explainCfg, nameKey('Market Basket'), 'irregular'),
+    ASOF,
+    nameKey('Market Basket'),
+    '2026-10',
+  )
+  check(
+    'Change type is reflected in the explanation',
+    typeChanged.typeOverridden && typeChanged.category?.type === 'irregular' && typeChanged.typical.how.kind === 'irregular',
+  )
+  check('withForecastDefaults keeps an empty ignored-history record', Object.keys(withForecastDefaults({}).ignoredHistory ?? {}).length === 0)
+  mismatches = []
+}
 
 console.log('\n=== Main bundle stays clear of forecasting ===')
 const appSource = readFileSync('src/App.tsx', 'utf8')

@@ -5,16 +5,19 @@ import type { Currency, Transaction } from '../etm/types'
 import {
   classifyCategories,
   mean,
+  monthWords,
   percentile,
   roundCents,
   type CategorySeries,
 } from './classify'
 import type {
+  CategoryExplanation,
   CategoryForecast,
   CoverageResult,
   CurrencyForecast,
   CurrentMonthView,
   DoubleCountWarning,
+  ExplainStep,
   ForecastConfig,
   ForecastMix,
   ForecastMixLine,
@@ -28,6 +31,7 @@ import type {
   SeriesId,
   SetAside,
   TimelineStack,
+  TypicalHow,
   VarianceRow,
   VacationForecast,
   VacationGoalMatch,
@@ -185,13 +189,23 @@ function accumulate(transactions: Transaction[], currency: Currency): CategoryAc
   }))
 }
 
-function toSeries(rows: CategoryActuals[], months: string[], keepKeys: Set<string> = new Set()): CategorySeries[] {
+function toSeries(
+  rows: CategoryActuals[],
+  months: string[],
+  keepKeys: Set<string> = new Set(),
+  ignored: Record<string, string[]> = {},
+): CategorySeries[] {
   return rows
-    .map((row) => ({
-      key: row.key,
-      label: row.label,
-      values: months.map((month) => row.byMonth.get(month) ?? 0),
-    }))
+    .map((row): CategorySeries => {
+      const skip = new Set(ignored[row.key] ?? [])
+      const own = skip.size > 0 ? months.filter((month) => !skip.has(month)) : months
+      return {
+        key: row.key,
+        label: row.label,
+        values: own.map((month) => row.byMonth.get(month) ?? 0),
+        ...(own !== months ? { months: own } : {}),
+      }
+    })
     .filter((series) => series.values.some((value) => value !== 0) || keepKeys.has(series.key))
 }
 
@@ -465,7 +479,7 @@ function seasonalAmount(
   mm: number,
 ): number {
   if (!series) return category.meanPresent
-  const hits = months
+  const hits = (series.months ?? months)
     .map((month, i) => (Number(month.slice(5, 7)) === mm ? series.values[i]! : 0))
     .filter((value) => value > 0)
   return hits.length > 0 ? mean(hits) : category.meanPresent
@@ -564,8 +578,9 @@ function topIrregularMonths(
   for (const category of overlayIrregulars(categories)) {
     const row = byKey.get(category.key)
     if (!row) continue
+    const own = row.months ?? months
     row.values.forEach((amount, i) => {
-      if (amount > 0) cells.push({ key: category.key, month: months[i]!, amount })
+      if (amount > 0) cells.push({ key: category.key, month: own[i]!, amount })
     })
   }
   return cells.sort((a, z) => z.amount - a.amount).slice(0, count)
@@ -1142,6 +1157,33 @@ function doubleCountsFor(
   return warnings
 }
 
+/** Household actuals, lookback series and classified categories — shared by the forecast and its explanations. */
+function householdBasis(args: {
+  currency: Currency
+  householdTx: Transaction[]
+  lookback: string[]
+  budget: Budget
+  config: ForecastConfig
+}): { householdActuals: CategoryActuals[]; householdSeries: CategorySeries[]; householdCategories: CategoryForecast[] } {
+  const { currency, householdTx, lookback, budget, config } = args
+  const extras = [
+    ...budget.expenses.map((line) => ({ key: nameKey(line.name), label: line.name })),
+    ...config.knownFutures
+      .filter((future) => (future.series ?? 'household') === 'household')
+      .map((future) => ({ key: nameKey(future.category), label: future.category })),
+  ]
+  const householdActuals = ensureNamedSeries(accumulate(householdTx, currency), currency === 'CAD' ? extras : [])
+  const householdSeries = toSeries(
+    householdActuals,
+    lookback,
+    currency === 'CAD' ? new Set(budget.expenses.map((line) => nameKey(line.name))) : new Set(),
+    config.ignoredHistory,
+  )
+  const householdCategories = classifyCategories(householdSeries, lookback, config.categoryOverrides)
+  if (currency === 'CAD') applyPlanPriors(householdCategories, budget)
+  return { householdActuals, householdSeries, householdCategories }
+}
+
 function buildCurrency(args: {
   currency: Currency
   householdTx: Transaction[]
@@ -1163,27 +1205,20 @@ function buildCurrency(args: {
     config.reimbursableAllowList,
     parentTag,
   )
-  const extras = [
-    ...budget.expenses.map((line) => ({ key: nameKey(line.name), label: line.name })),
-    ...config.knownFutures
-      .filter((future) => (future.series ?? 'household') === 'household')
-      .map((future) => ({ key: nameKey(future.category), label: future.category })),
-  ]
-  const householdActuals = ensureNamedSeries(accumulate(householdTx, currency), currency === 'CAD' ? extras : [])
+  const { householdActuals, householdSeries, householdCategories } = householdBasis({
+    currency,
+    householdTx,
+    lookback,
+    budget,
+    config,
+  })
   const vacationActuals = ensureNamedSeries(
     accumulate(vacationTx, currency),
     config.knownFutures
       .filter((future) => future.series === 'vacation')
       .map((future) => ({ key: nameKey(future.category), label: future.category })),
   )
-  const householdSeries = toSeries(
-    householdActuals,
-    lookback,
-    currency === 'CAD' ? new Set(budget.expenses.map((line) => nameKey(line.name))) : new Set(),
-  )
   const vacationSeries = toSeries(vacationActuals, lookback)
-  const householdCategories = classifyCategories(householdSeries, lookback, config.categoryOverrides)
-  if (currency === 'CAD') applyPlanPriors(householdCategories, budget)
   const vacationCategories = classifyCategories(vacationSeries, lookback, config.categoryOverrides)
 
   const overlay = overlayFor(
@@ -1390,4 +1425,205 @@ export function forecast(
     vacationGoal,
     doubleCounts: doubleCountsFor(cad.household.categories, resolved, asOf),
   }
+}
+
+/** How `placedAmount` reached its amount, in the terms the explanation shows. */
+function typicalHowFor(
+  category: CategoryForecast | undefined,
+  series: CategorySeries | undefined,
+  lookback: string[],
+  month: string,
+  plan: number,
+  config: ForecastConfig,
+): TypicalHow {
+  if (!category) return { kind: 'no-history' }
+  if (usesPlanPrior(category, plan)) return { kind: 'plan-prior', plan: roundCents(plan) }
+  const override = config.categoryOverrides[category.key]
+  const values = series?.values ?? []
+  const present = values.filter((value) => value > 0).length
+  if (category.type === 'irregular') {
+    const n = lookback.length
+    return { kind: 'irregular', share: n > 0 ? roundCents(category.windowTotal / n) : 0 }
+  }
+  const mm = Number(month.slice(5, 7))
+  if (!isMonthlyType(category.type) && !category.typicalMonths.includes(mm)) {
+    return { kind: 'off-month', typicalMonthNames: monthWords(category.typicalMonths) }
+  }
+  if (override?.amount != null && category.type !== 'seasonal') return { kind: 'override' }
+  if (category.type === 'predictable-monthly') {
+    if (category.usedLastAmount) return { kind: 'last-amount' }
+    return { kind: 'median-recent', months: Math.min(6, present) }
+  }
+  if (category.type === 'variable-monthly') {
+    const first = values.findIndex((value) => value > 0)
+    return { kind: 'median-all', months: first < 0 ? values.length : values.length - first }
+  }
+  if (category.type === 'predictable-annual') return { kind: 'mean-present', months: present }
+  const own = series?.months ?? lookback
+  const hits = own.filter((m, i) => Number(m.slice(5, 7)) === mm && (values[i] ?? 0) > 0).length
+  return hits > 0 ? { kind: 'seasonal-same-month', months: hits } : { kind: 'seasonal-mean-present' }
+}
+
+/**
+ * Why one category's Forecast figure for one month is what it is: the
+ * history it learned from, how the typical amount was chosen, and the steps
+ * from there to the figure. Built from the same pieces as `forecast`, and the
+ * steps always sum to `figure` (scripts/check-forecast.ts holds that).
+ */
+export function explainCategory(
+  transactions: Transaction[],
+  budget: Budget,
+  config: ForecastConfig,
+  asOf: string,
+  key: string,
+  month: string,
+  reimbursableParentTag: string = DEFAULT_REIMBURSABLE_PARENT,
+): CategoryExplanation {
+  const resolved = withForecastDefaults(config)
+  const split = splitUniverse(transactions, resolved, reimbursableParentTag)
+  const lookback = lookbackMonths(asOf, resolved.window, earliestMonth(transactions))
+  const { householdActuals, householdSeries, householdCategories } = householdBasis({
+    currency: 'CAD',
+    householdTx: split.household,
+    lookback,
+    budget,
+    config: resolved,
+  })
+  const currentMonth = asOf.slice(0, 7)
+  const kind: CategoryExplanation['kind'] =
+    month < currentMonth ? 'past' : month === currentMonth ? 'current' : 'future'
+  const category = householdCategories.find((item) => item.key === key)
+  const series = householdSeries.find((item) => item.key === key)
+  const row = householdActuals.find((item) => item.key === key)
+  const monthBudget = budgetAt(budget, resolved.planHistory, month)
+  const plan = planForCategory(monthBudget, key)
+  const pins = futuresFor(resolved, month, 'household').filter((future) => nameKey(future.category) === key)
+  const label =
+    category?.label ??
+    row?.label ??
+    monthBudget.expenses.find((line) => nameKey(line.name) === key)?.name ??
+    pins[0]?.category ??
+    key
+  const skipped = new Set(resolved.ignoredHistory?.[key] ?? [])
+  const history = lookback.map((m) => ({
+    month: m,
+    amount: roundCents(row?.byMonth.get(m) ?? 0),
+    ignored: skipped.has(m),
+  }))
+  const placed = category
+    ? placedAmount(category, series, lookback, month, plan)
+    : { amount: 0, source: 'none' as const }
+  const typical = {
+    amount: roundCents(placed.amount),
+    how: typicalHowFor(category, series, lookback, month, plan, resolved),
+  }
+  const planRaises = pins
+    .filter((future) => !pinAddsToForecast(future) && future.amount !== 0)
+    .map((future) => ({ id: future.id, amount: future.amount }))
+  const base = {
+    key,
+    label,
+    month,
+    kind,
+    ...(category ? { category } : {}),
+    typeOverridden: Boolean(resolved.categoryOverrides[key]?.type),
+    windowMonths: series?.months?.length ?? lookback.length,
+    history,
+    typical,
+    planRaises,
+  }
+
+  if (kind === 'current') {
+    const view = currentMonthView({
+      asOf,
+      categories: householdCategories,
+      series: householdSeries,
+      lookback,
+      actuals: householdActuals,
+      budget,
+      config: resolved,
+      overlay: 0,
+    })
+    const figure = view.planVsForecast.find((item) => item.key === key)?.forecast ?? 0
+    const spent = roundCents(spendInMonth(householdActuals, key, month))
+    const expected = roundCents(figure - spent)
+    const line = view.remainLines.find((item) => item.key === key)
+    let target = line?.typical ?? 0
+    if (!line && category) {
+      if (category.type === 'seasonal' && placed.source === 'seasonal') {
+        target = seasonalCurrentTarget(placed.amount, category.meanPresent, category.lowSample)
+      } else if (category.type === 'irregular' && !category.usedPlanPrior && !category.lowSample && spent > 0) {
+        target = category.meanPresent
+      } else {
+        target = placed.amount
+      }
+    }
+    const outcome: NonNullable<CategoryExplanation['current']>['outcome'] = line
+      ? 'still-expected'
+      : view.postedTypicalKeys.includes(key)
+        ? 'posted'
+        : spent > 0
+          ? target > 0
+            ? spent > roundCents(target) + 0.005
+              ? 'over'
+              : 'reached'
+            : 'spent-only'
+          : 'nothing'
+    const steps: ExplainStep[] = [{ kind: 'spent', amount: spent }]
+    if (expected !== 0) {
+      steps.push({
+        kind: 'expected',
+        amount: expected,
+        typical: roundCents(line?.typical ?? target),
+        ...(line ? { reason: line.reason } : {}),
+      })
+    }
+    return {
+      ...base,
+      figure,
+      steps,
+      current: { spent, expected, typical: roundCents(target), outcome },
+    }
+  }
+
+  const point = calendarPoint({
+    month,
+    kind,
+    categories: householdCategories,
+    series: householdSeries,
+    lookback,
+    actuals: householdActuals,
+    budget,
+    config: resolved,
+    asOf,
+    overlay: 0,
+    seriesId: 'household',
+    householdTx: [],
+    currency: 'CAD',
+    parentTag: reimbursableParentTag,
+    bucketMix: new Map(),
+  })
+  const figure = point.planVsForecast.find((item) => item.key === key)?.forecast ?? 0
+  const monthsAhead = monthDiff(currentMonth, month)
+  const inflated = roundCents(inflate(placed.amount, monthsAhead, resolved.inflationPercent))
+  const steps: ExplainStep[] = [{ kind: 'typical', amount: typical.amount, how: typical.how }]
+  if (inflated !== typical.amount) {
+    steps.push({
+      kind: 'inflation',
+      amount: roundCents(inflated - typical.amount),
+      percent: resolved.inflationPercent,
+      monthsAhead,
+    })
+  }
+  for (const future of pins) {
+    if (!pinAddsToForecast(future) || future.amount === 0) continue
+    steps.push({
+      kind: 'pin',
+      amount: future.amount,
+      id: future.id,
+      recurrence: future.recurrence,
+      notes: future.notes,
+    })
+  }
+  return { ...base, figure, steps }
 }
