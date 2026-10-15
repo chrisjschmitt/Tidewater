@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.12 — 2026-10-14
+
+### Fixed
+- Forecast, "Plan vs forecast by category": raising a category's plan now changes the plan itself, so the Forecast's Plan, the Budget tab, the dashboard's "Unspoken for" and the goal suggestion all show the same figure. Before, a pin raised Plan only inside the Forecast (Forecast said $6,202 while the Budget still said $5,902, and the goal suggestion offered $300 too much).
+- The row button is now Raise, with "<Month> only" (that month's plan, nothing else) or "From <Month> on" (the same as editing the Plan figure, so the dashboard and goal suggestion move with it).
+- Existing plan-only pins are moved, once, into a plan change for their month only; the pins list no longer shows them. Pinned dated costs (on Plan and Forecast) are unchanged.
+
 ## 0.13.11 — 2026-10-14
 
 ### Added

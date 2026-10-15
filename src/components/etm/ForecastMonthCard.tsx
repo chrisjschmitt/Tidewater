@@ -369,21 +369,21 @@ function PlanVsForecastList({
   const forecastTotal = Math.round(active.reduce((sum, row) => sum + row.forecast, 0) * 100) / 100
   const actualTotal = actualFor ? Math.round(active.reduce((sum, row) => sum + actualFor(row), 0) * 100) / 100 : 0
   const columns = actualFor ? 8 : 7
-  const placeLabel = `Pin in ${monthName(month)}`
 
   return (
     <div id="forecast-compare" className="mt-6 scroll-mt-28">
       <h3 className="text-sm font-semibold tracking-tight text-ink-900">Plan vs forecast by category</h3>
       <p className="mt-1 text-sm text-ink-500">
         {toMonthEnd
-          ? 'Typical-month plan (plus any pin on this month) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'
-          : 'Typical-month plan (plus any pin on this month) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'}{' '}
+          ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'
+          : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'}{' '}
         {planEdit && `Click a Plan figure to change that category's plan from ${monthName(month)} on; earlier months keep theirs. `}
         {onOpenActual && 'Click an Actual to today figure to see its transactions. '}
         Ignore a line if you expect to hit Plan there anyway — that gap leaves
-        Forecast; Plan does not change. Pin adds the amount to Plan; the trend
-        is already in Forecast. Skipping a category for a month is a plan
-        change, not an ignore.
+        Forecast; Plan does not change. Raise adds an amount to the category's
+        plan for this month only, or from this month on; the trend is already
+        in Forecast. Skipping a category for a month is a plan change, not an
+        ignore.
       </p>
       {rows.length === 0 ? (
         <p className="mt-3 text-sm text-ink-500">No category has a plan or a forecast this month.</p>
@@ -414,7 +414,6 @@ function PlanVsForecastList({
                 running={soFar}
                 ignored={false}
                 month={month}
-                placeLabel={placeLabel}
                 warned={doubleCounts.some((warning) => warning.category === row.label)}
                 onIgnore={onIgnore}
                 onPlace={onPlace}
@@ -464,7 +463,6 @@ function PlanVsForecastList({
                   row={row}
                   ignored
                   month={month}
-                  placeLabel={placeLabel}
                   warned={doubleCounts.some((warning) => warning.category === row.label)}
                   onIgnore={onIgnore}
                   onPlace={onPlace}
@@ -495,7 +493,6 @@ function CompareRow({
   running,
   ignored,
   month,
-  placeLabel,
   warned,
   onIgnore,
   onPlace,
@@ -508,7 +505,6 @@ function CompareRow({
   running?: number
   ignored: boolean
   month: string
-  placeLabel: string
   warned: boolean
   onIgnore: (key: string, ignored: boolean) => void
   onPlace: (item: PinRequest) => void
@@ -520,10 +516,8 @@ function CompareRow({
   const pinDefault = pinAmountFor(row)
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState(pinDefault)
-  const [notes, setNotes] = useState('')
   useEffect(() => {
     setAmount(pinDefault)
-    setNotes('')
     setOpen(false)
   }, [row.key, pinDefault])
 
@@ -583,7 +577,7 @@ function CompareRow({
         </td>
         <td className="py-1.5 text-right align-top">
           <button type="button" onClick={() => setOpen((value) => !value)} className="btn-quiet text-xs">
-            {open ? 'Close' : 'Pin'}
+            {open ? 'Close' : 'Raise'}
           </button>
         </td>
       </tr>
@@ -596,7 +590,7 @@ function CompareRow({
               <input
                 className="field w-24 py-1.5 text-sm tabular-nums"
                 inputMode="decimal"
-                aria-label={`Amount to pin for ${row.label}`}
+                aria-label={`Amount to raise the ${row.label} plan by`}
                 value={amount || ''}
                 onChange={(event) => setAmount(Number(event.target.value.replace(/[^0-9.]/g, '')) || 0)}
               />
@@ -605,18 +599,30 @@ function CompareRow({
                 className="btn-ghost text-xs"
                 disabled={!(amount > 0)}
                 onClick={() => {
-                  onPlace({ category: row.label, amount, notes, addsTo: 'plan' })
+                  onPlace({ category: row.label, amount, addsTo: 'plan' })
                   setOpen(false)
-                  setNotes('')
                 }}
               >
-                {placeLabel}
+                {monthName(month)} only
               </button>
+              {planEdit && (
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  disabled={!(amount > 0)}
+                  onClick={() => {
+                    onPlace({ category: row.label, amount, addsTo: 'plan', onward: true })
+                    setOpen(false)
+                  }}
+                >
+                  From {monthName(month)} on
+                </button>
+              )}
             </div>
-            <p className="mt-2 text-xs text-ink-400">Adds to Plan. Forecast already has this trend.</p>
-            <div className="mt-2 max-w-md">
-              <PinComment value={notes} onChange={setNotes} />
-            </div>
+            <p className="mt-2 text-xs text-ink-400">
+              Raises this category's plan by that amount — the same plan the Budget tab and the dashboard use.
+              Forecast already has this trend.
+            </p>
           </td>
         </tr>
       )}
@@ -796,7 +802,8 @@ function VarianceItem({
           </button>
         </span>
       </span>
-      <PinComment value={notes} onChange={setNotes} />
+      {/* Above the line it raises this month's plan, which keeps no comment. */}
+      {row.delta <= 0 && <PinComment value={notes} onChange={setNotes} />}
     </li>
   )
 }

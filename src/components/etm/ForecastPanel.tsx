@@ -17,7 +17,7 @@ import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot, type 
 import { taggingGaps, withCategoryTypicalMonths, withCategoryTypeOverride, withIgnoredCompare } from '../../lib/forecast/universe'
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
-import { planAmountAt } from '../../lib/forecast/planHistory'
+import { planAmountAt, planKey } from '../../lib/forecast/planHistory'
 
 interface Props {
   transactions: Transaction[]
@@ -32,6 +32,8 @@ interface Props {
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
   /** Changes a category's plan from a month on (planHistory.ts). */
   onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
+  /** Raises a category's plan for one month, or from that month on (`onward`). */
+  onPlanRaise?: (raise: { key: string; label: string; month: string; amount: number; onward: boolean }) => void
   /** Opens the shared editor on a TD or manual row from a drill-in. */
   onEdit?: (row: Transaction) => void
 }
@@ -48,6 +50,7 @@ export default function ForecastPanel({
   onNotice,
   onApplyHouseholdContribution,
   onPlanChange,
+  onPlanRaise,
   onEdit,
 }: Props) {
   const asOf = today()
@@ -119,6 +122,20 @@ export default function ForecastPanel({
 
   const placeKnownFuture = (draft: PinRequest) => {
     if (!(draft.amount > 0) || !focused) return
+    // A raise to Plan is a plan change, so the Budget tab and the dashboard
+    // see it too — never a pin only this tab knows about.
+    if (draft.addsTo === 'plan' && (draft.series ?? 'household') === 'household' && onPlanRaise) {
+      const onward = Boolean(draft.onward && onPlanChange)
+      onPlanRaise({
+        key: planKey(draft.category),
+        label: draft.category,
+        month: focused.month,
+        amount: draft.amount,
+        onward,
+      })
+      onNotice?.(`Raised the ${draft.category} plan for ${monthName(focused.month)}${onward ? ' on' : ' only'}.`)
+      return
+    }
     onConfigChange({
       ...config,
       knownFutures: [

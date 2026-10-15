@@ -54,6 +54,8 @@ export interface PinRequest {
   recurrence?: KnownFuture['recurrence']
   series?: SeriesId
   addsTo?: PinAddsTo
+  /** With `addsTo: 'plan'`: raise the plan from this month on, not this month only. */
+  onward?: boolean
 }
 
 export interface ForecastConfig {

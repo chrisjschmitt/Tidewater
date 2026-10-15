@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
 import ForecastPanel from './ForecastPanel'
@@ -21,7 +21,14 @@ import TransactionsPanel from './TransactionsPanel'
 import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
 import { monthKeys, type Period } from '../../lib/etm/period'
-import { budgetAt, budgetOver, withPlanChange } from '../../lib/forecast/planHistory'
+import {
+  budgetAt,
+  budgetOver,
+  planAmountAt,
+  withPlanChange,
+  withPlanForMonth,
+  withPlanPinsAsPlans,
+} from '../../lib/forecast/planHistory'
 import type { Budget } from '../../lib/types'
 
 interface Props {
@@ -70,6 +77,16 @@ export default function EtmArea({
   const [tab, setTab] = useState<Tab>('budget')
   const [editingId, setEditingId] = useState<string | null>(null)
   const safeguards = useSafeguards(budget)
+  // Plan-only pins from before 0.13.12 become plan changes for their month,
+  // once, so every Plan figure agrees.
+  const pinsMoved = useRef(false)
+  useEffect(() => {
+    if (pinsMoved.current) return
+    const moved = withPlanPinsAsPlans(budget, data.forecastConfig)
+    if (!moved) return
+    pinsMoved.current = true
+    void data.saveForecastSettings(moved)
+  }, [budget, data.forecastConfig, data.saveForecastSettings])
   const editingRow = editingId ? data.allRows.find((row) => row.id === editingId) : undefined
   const [incomingFile, setIncomingFile] = useState<File | null>(null)
   const rememberWatchName = useCallback(
@@ -248,6 +265,20 @@ export default function EtmArea({
                 onNotice={data.flash}
                 onOpenTidy={() => setTab('month')}
                 onApplyHouseholdContribution={onApplyHouseholdContribution}
+                onPlanRaise={async (raise) => {
+                  const history = data.forecastConfig.planHistory
+                  const change = { ...raise, amount: planAmountAt(budget, history, raise.key, raise.month) + raise.amount }
+                  if (raise.onward && onExpensesChange) {
+                    const next = withPlanChange(budget, history, change)
+                    await data.saveForecastSettings({ ...data.forecastConfig, planHistory: next.history })
+                    onExpensesChange(next.budget.expenses)
+                  } else {
+                    await data.saveForecastSettings({
+                      ...data.forecastConfig,
+                      planHistory: withPlanForMonth(budget, history, change),
+                    })
+                  }
+                }}
                 onEdit={(t) => setEditingId(t.id.split('#')[0]!)}
                 {...(onExpensesChange
                   ? {

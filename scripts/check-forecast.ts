@@ -52,6 +52,15 @@ import {
   withVacationTag,
 } from '../src/lib/forecast/universe.ts'
 import { parseMonarchCsv, type MonarchRow } from '../src/lib/etm/monarch.ts'
+import {
+  budgetOver,
+  planAmountAt,
+  planKey,
+  withPlanChange,
+  withPlanForMonth,
+  withPlanPinsAsPlans,
+} from '../src/lib/forecast/planHistory.ts'
+import { freeAfterExpenses, totalExpenses } from '../src/lib/budget.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
 import type { Currency, Transaction } from '../src/lib/etm/types.ts'
@@ -443,6 +452,80 @@ check(
   decPlanOnlyMix.total === decPlanOnly?.calendar,
   `mix ${decPlanOnlyMix.total} calendar ${decPlanOnly?.calendar}`,
 )
+
+console.log('\n=== Plan raises agree everywhere ===')
+{
+  // The allowance case: two +150 plan-only pins on one month. Moved into plan
+  // history, the Forecast plan, the Budget tab's plan and the goal room agree.
+  const allowances: Budget = {
+    ...budget,
+    expenses: [
+      ...budget.expenses,
+      { id: 'ca', name: 'Chris Allowance', groupId: 'personal', amount: 200, essential: false },
+      { id: 'va', name: 'Vicki Allowance', groupId: 'personal', amount: 200, essential: false },
+    ],
+  }
+  const pin = (id: string, category: string) => ({
+    id,
+    category,
+    amount: 150,
+    month: '2026-10',
+    recurrence: 'once' as const,
+    series: 'household' as const,
+    notes: '',
+    addsTo: 'plan' as const,
+  })
+  const pinned = withForecastDefaults({
+    window: 24,
+    knownFutures: [pin('ca-pin', 'Chris Allowance'), pin('va-pin', 'Vicki Allowance'), ...placed.knownFutures],
+  })
+  const moved = withPlanPinsAsPlans(allowances, pinned)
+  const typicalPlan = totalExpenses(allowances)
+  check('plan-only pins are moved, other pins stay', moved?.knownFutures.length === placed.knownFutures.length)
+  check('moving them again finds nothing', moved !== undefined && withPlanPinsAsPlans(allowances, moved) === undefined)
+  const movedResult = forecast(transactions, allowances, moved!, ASOF)
+  const octPlan = monthPoint(movedResult, '2026-10')?.plan
+  const octBudgetPlan = totalExpenses(budgetOver(allowances, moved!.planHistory, ['2026-10']))
+  check('October Forecast plan matches the pins as they were', octPlan === round(typicalPlan + 300), `plan ${octPlan}`)
+  check('October Budget tab plan matches the Forecast plan', octBudgetPlan === octPlan, `budget ${octBudgetPlan} forecast ${octPlan}`)
+  check(
+    'one-month raise: September and November keep the typical plan',
+    monthPoint(movedResult, '2026-09')?.plan === typicalPlan && monthPoint(movedResult, '2026-11')?.plan === typicalPlan,
+  )
+  check('one-month raise leaves the budget, so goal room is unchanged', freeAfterExpenses(allowances) === 2500 - typicalPlan)
+
+  // From a month on: the budget itself goes up, so the goal room drops by the raise.
+  const onward = withPlanChange(allowances, undefined, {
+    key: planKey('Chris Allowance'),
+    label: 'Chris Allowance',
+    month: '2026-10',
+    amount: planAmountAt(allowances, undefined, planKey('Chris Allowance'), '2026-10') + 150,
+  })
+  const onwardConfig = withForecastDefaults({ window: 24, planHistory: onward.history })
+  const onwardResult = forecast(transactions, onward.budget, onwardConfig, ASOF)
+  const novPlan = monthPoint(onwardResult, '2026-11')?.plan
+  check(
+    'onward raise: November Forecast plan, Budget plan and dashboard plan agree',
+    novPlan === totalExpenses(budgetOver(onward.budget, onward.history, ['2026-11'])) &&
+      novPlan === totalExpenses(onward.budget) &&
+      novPlan === round(typicalPlan + 150),
+    `forecast ${novPlan}`,
+  )
+  check('onward raise: goal room drops by the raise', freeAfterExpenses(onward.budget) === 2500 - typicalPlan - 150)
+  check('onward raise: September keeps the old plan', monthPoint(onwardResult, '2026-09')?.plan === typicalPlan)
+
+  // A one-month raise keeps a change already scheduled after it.
+  const later = withPlanChange(allowances, undefined, { key: planKey('Vicki Allowance'), label: 'Vicki Allowance', month: '2027-01', amount: 260 })
+  const bumped = withPlanForMonth(later.budget, later.history, { key: planKey('Vicki Allowance'), label: 'Vicki Allowance', month: '2026-10', amount: 350 })
+  const vicki = (month: string) => planAmountAt(later.budget, bumped, planKey('Vicki Allowance'), month)
+  check(
+    'one-month raise keeps later plan changes',
+    vicki('2026-09') === 200 && vicki('2026-10') === 350 && vicki('2026-11') === 200 && vicki('2027-01') === 260,
+    `${vicki('2026-09')} ${vicki('2026-10')} ${vicki('2026-11')} ${vicki('2027-01')}`,
+  )
+  const undone = withPlanForMonth(later.budget, bumped, { key: planKey('Vicki Allowance'), label: 'Vicki Allowance', month: '2026-10', amount: 200 })
+  check('setting the month back leaves the history as it was', JSON.stringify(undone) === JSON.stringify(later.history))
+}
 
 console.log('\n=== Current-month remainder ===')
 const current = result.cad.household.currentMonth

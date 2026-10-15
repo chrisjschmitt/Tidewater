@@ -1,5 +1,6 @@
 import { groupForCategory, isEssentialCategory } from '../categories'
 import type { Budget, ExpenseLine } from '../types'
+import type { ForecastConfig } from './types'
 
 /**
  * When a category's plan changes from a given month on, the months before it
@@ -112,6 +113,71 @@ export function withPlanChange(
     budget: { ...budget, expenses: withAmount(budget.expenses, key, label, amount) },
     history: nextHistory,
   }
+}
+
+/**
+ * Change one category's plan for `month` only. The months before and after
+ * keep whatever they had, including changes already scheduled later, and the
+ * budget itself is untouched — so only the history changes.
+ */
+export function withPlanForMonth(
+  budget: Budget,
+  history: PlanHistory | undefined,
+  change: { key: string; label: string; month: string; amount: number },
+): PlanHistory {
+  const { key, label, month } = change
+  const amount = round2(Math.max(0, change.amount))
+  const after = shiftMonth(month, 1)
+  const at = (m: string) => (m === month ? amount : planAmountAt(budget, history, key, m))
+  // Each boundary ends a stretch of months with one amount: the stretch
+  // before the first boundary, then each boundary up to the next.
+  const bounds = [...new Set([...(history?.[key]?.eras ?? []).map((era) => era.until), month, after])].sort()
+  const eras: PlanEra[] = []
+  bounds.forEach((until, i) => {
+    const stretchAmount = at(i === 0 ? shiftMonth(until, -1) : bounds[i - 1]!)
+    const last = eras.at(-1)
+    if (last && last.amount === stretchAmount) last.until = until
+    else eras.push({ until, amount: stretchAmount })
+  })
+  const going = budgetAmount(budget, key)
+  while (eras.length > 0 && eras.at(-1)!.amount === going) eras.pop()
+
+  const next: PlanHistory = { ...(history ?? {}) }
+  if (eras.length > 0) next[key] = { label, eras }
+  else delete next[key]
+  return next
+}
+
+/**
+ * Plan-only pins (before 0.13.12) raised a month's Plan inside the Forecast
+ * tab alone, so the Budget tab and the dashboard disagreed with it. Each one
+ * becomes the same raise as a plan change for its month only, and the pin
+ * goes. Returns undefined when there is nothing to move.
+ */
+export function withPlanPinsAsPlans(budget: Budget, config: ForecastConfig): ForecastConfig | undefined {
+  const moving = config.knownFutures.filter(
+    (future) => future.addsTo === 'plan' && future.recurrence === 'once' && (future.series ?? 'household') === 'household',
+  )
+  if (moving.length === 0) return undefined
+  let history = config.planHistory
+  for (const future of moving) {
+    const key = planKey(future.category)
+    const amount = planAmountAt(budget, history, key, future.month) + future.amount
+    history = withPlanForMonth(budget, history, { key, label: future.category, month: future.month, amount })
+  }
+  const moved = new Set(moving.map((future) => future.id))
+  return {
+    ...config,
+    knownFutures: config.knownFutures.filter((future) => !moved.has(future.id)),
+    ...(history ? { planHistory: history } : {}),
+  }
+}
+
+/** `YYYY-MM` moved by whole months. */
+function shiftMonth(month: string, by: number): string {
+  const [year, mm] = month.split('-').map(Number)
+  const index = year! * 12 + (mm! - 1) + by
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`
 }
 
 /** First line of the category carries the amount; any others are zeroed. A missing category gets a line. */
