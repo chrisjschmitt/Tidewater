@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.18 — 2026-10-16
+
+### Added
+- Review → Possible duplicates also lists a purchase entered by hand that an import brought in too — same account and exact amount within three days, against a Monarch or TD row that counts (e.g. a Costco card charge typed in while Monarch still imports that card). "Keep this one" on the imported copy stops the hand-entered one counting; "Not a duplicate" is remembered. A TD row that is still a shadow (before the switch-over) is never paired.
+
 ## 0.13.17 — 2026-10-16
 
 ### Fixed

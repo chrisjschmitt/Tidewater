@@ -267,6 +267,15 @@ check('a tip added when it posted is flagged as an amount change', tipped.length
 check('a very different amount is not', findPossibleDuplicates([dupe('v1', '2026-10-03', -45, 'f1'), dupe('v2', '2026-10-04', -120, 'f2')]).length === 0)
 check('more than three days apart is not', findPossibleDuplicates([dupe('w1', '2026-10-01', -45, 'f1'), dupe('w2', '2026-10-06', -45, 'f2')]).length === 0)
 check('“not a duplicate” is remembered', findPossibleDuplicates(redated, [pairKey('d1', 'd2')]).length === 0)
+const typed: Transaction = { ...dupe('m1', '2026-10-09', -123.45, ''), source: 'manual', merchant: 'Costco', originalStatement: '' }
+const imported: Transaction = { ...dupe('c1', '2026-10-10', -123.45, ''), source: 'monarch', merchant: 'Costco Wholesale', originalStatement: '' }
+const twice = findPossibleDuplicates([typed, imported], [], new Set(['m1', 'c1']))
+check('a hand-entered purchase that Monarch also imported is flagged', twice.length === 1 && twice[0]!.kind === 'hand' && twice[0]!.a.id === 'm1')
+check('not when the amounts differ', findPossibleDuplicates([typed, { ...imported, amount: -123.4 }], [], new Set(['m1', 'c1'])).length === 0)
+check('not against a row that does not count (a TD shadow row)', findPossibleDuplicates([typed, { ...imported, source: 'td' }], [], new Set(['m1'])).length === 0)
+check('not once the hand-entered copy is marked a duplicate', findPossibleDuplicates([{ ...typed, duplicateOf: 'c1' }, imported], [], new Set(['c1'])).length === 0)
+const dropped = ledgerView([{ ...typed, duplicateOf: 'c1' }, imported], undefined)
+check('keeping the Monarch copy leaves one counted', dropped.length === 1 && dropped[0]!.id === 'c1')
 const kept = ledgerView([redated[0]!, { ...redated[1]!, duplicateOf: 'd1' }], { global: '2026-10-01', perAccount: {} })
 check('a row marked as a duplicate never counts', kept.length === 1 && kept[0]!.id === 'd1')
 check('and is not flagged again', findPossibleDuplicates([redated[0]!, { ...redated[1]!, duplicateOf: 'd1' }]).length === 0)

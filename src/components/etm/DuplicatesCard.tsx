@@ -12,10 +12,10 @@ import type { Transaction } from '../../lib/etm/types'
  */
 export default function DuplicatesCard({ data }: { data: EtmData }) {
   const [busy, setBusy] = useState(false)
-  const pairs = useMemo(
-    () => findPossibleDuplicates(data.allRows, data.rules.settings.notDuplicates),
-    [data.allRows, data.rules.settings.notDuplicates],
-  )
+  const pairs = useMemo(() => {
+    const counting = new Set(data.transactions.map((row) => row.splitOf?.parentId ?? row.id))
+    return findPossibleDuplicates(data.allRows, data.rules.settings.notDuplicates, counting)
+  }, [data.allRows, data.transactions, data.rules.settings.notDuplicates])
   if (pairs.length === 0) return null
   const accountName = (id: string) => data.accounts.find((a) => a.id === id)?.nickname ?? ''
 
@@ -46,7 +46,12 @@ export default function DuplicatesCard({ data }: { data: EtmData }) {
       </p>
       <p className="text-xs text-ink-400">
         {row.category}
-        {row.reviewed ? ' · confirmed' : ''} · from {row.feedFile ?? 'an earlier download'}
+        {row.reviewed ? ' · confirmed' : ''} ·{' '}
+        {row.source === 'manual'
+          ? 'entered by hand'
+          : row.source === 'monarch'
+            ? 'from Monarch'
+            : `from ${row.feedFile ?? 'an earlier download'}`}
       </p>
       <button disabled={busy} className="btn-ghost mt-1 text-xs disabled:opacity-50" onClick={() => void keep(pair, row)}>
         Keep this one
@@ -59,14 +64,19 @@ export default function DuplicatesCard({ data }: { data: EtmData }) {
       <h2 className="text-base font-semibold tracking-tight text-ink-900">Possible duplicates ({pairs.length})</h2>
       <p className="mt-0.5 max-w-prose text-sm text-ink-500">
         The same bank text on the same account, a few days apart, from two different downloads — often a card charge
-        whose date or amount changed when it posted (a tip, a hotel deposit). Keep the one that is right; the other stops
-        counting. If they really are two purchases, say so and they won't be flagged again.
+        whose date or amount changed when it posted (a tip, a hotel deposit) — or a purchase entered by hand that an
+        import also brought in (same account and amount). Keep the one that is right; the other stops counting. If they
+        really are two purchases, say so and they won't be flagged again.
       </p>
       <ul className="mt-4 space-y-3">
         {pairs.map((pair) => (
           <li key={pair.key} className="rounded-2xl bg-sand-100/60 p-3">
             <p className="mb-2 text-sm font-medium text-ink-900">
-              {pair.a.merchant} <span className="text-xs font-normal text-ink-400">· {accountName(pair.a.accountId)} · {pair.a.originalStatement}</span>
+              {pair.a.merchant}{' '}
+              <span className="text-xs font-normal text-ink-400">
+                · {accountName(pair.a.accountId)}
+                {pair.kind === 'hand' ? ' · entered by hand and imported' : ` · ${pair.a.originalStatement}`}
+              </span>
               {!pair.sameAmount && (
                 <span className="ml-2 rounded-full bg-sand-200 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500">
                   Amount changed

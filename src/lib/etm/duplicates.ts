@@ -14,13 +14,20 @@ export interface DuplicatePair {
   a: Transaction
   z: Transaction
   sameAmount: boolean
+  /** 'hand': a hand-entered row and an imported one (Monarch or TD) — the same purchase entered twice. */
+  kind?: 'feeds' | 'hand'
 }
 
 const DAY_MS = 86_400_000
 const textOf = (row: Transaction) => row.originalStatement.replace(/\s+/g, ' ').trim().toUpperCase()
 export const pairKey = (a: string, z: string): string => [a, z].sort().join('|')
 
-export function findPossibleDuplicates(rows: Transaction[], notDuplicates: string[] = []): DuplicatePair[] {
+export function findPossibleDuplicates(
+  rows: Transaction[],
+  notDuplicates: string[] = [],
+  /** Ids of rows that count now (the ledger). Hand-entered rows are only paired with imported rows that count. */
+  counting?: Set<string>,
+): DuplicatePair[] {
   const cleared = new Set(notDuplicates)
   const td = rows.filter((row) => row.source === 'td' && !row.duplicateOf && row.originalStatement)
   const groups = new Map<string, Transaction[]>()
@@ -47,5 +54,34 @@ export function findPossibleDuplicates(rows: Transaction[], notDuplicates: strin
       }
     }
   }
+  pairs.push(...handEnteredTwice(rows, cleared, counting))
   return pairs.sort((p, q) => q.z.date.localeCompare(p.z.date))
+}
+
+/**
+ * A purchase entered by hand that an import also brought in — say a Costco
+ * card charge typed in while Monarch still imports that card. Hand-entered
+ * rows always count, so both would. Matched on account and exact amount,
+ * within three days; the bank text is not compared, since a typed merchant
+ * rarely matches it. The hand-entered row is `a`.
+ */
+function handEnteredTwice(rows: Transaction[], cleared: Set<string>, counting?: Set<string>): DuplicatePair[] {
+  // Only rows that count: before the switch-over a TD row is a shadow, so a
+  // hand-entered row beside it is not counted twice and must not be dropped.
+  const imported = rows.filter(
+    (row) => (row.source === 'monarch' || row.source === 'td') && !row.duplicateOf && (!counting || counting.has(row.id)),
+  )
+  const pairs: DuplicatePair[] = []
+  for (const manual of rows) {
+    if (manual.source !== 'manual' || manual.duplicateOf) continue
+    const cents = Math.round(manual.amount * 100)
+    for (const other of imported) {
+      if (other.accountId !== manual.accountId || Math.round(other.amount * 100) !== cents) continue
+      if (Math.abs(Date.parse(other.date) - Date.parse(manual.date)) > 3 * DAY_MS) continue
+      const key = pairKey(manual.id, other.id)
+      if (cleared.has(key)) continue
+      pairs.push({ key, a: manual, z: other, sameAmount: true, kind: 'hand' })
+    }
+  }
+  return pairs
 }
