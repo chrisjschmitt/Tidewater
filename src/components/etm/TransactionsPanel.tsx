@@ -289,8 +289,11 @@ export default function TransactionsPanel({
                         )}
                         {t.source === 'manual' && (
                           <button
-                            onClick={() => void onRemove(t)}
-                            className="text-xs text-ink-400 transition hover:text-shell-500"
+                            onClick={() => {
+                              const whole = t.splitOf ? ` — the whole transaction, all ${t.splitOf.parts} parts` : ''
+                              if (window.confirm(`Remove ${t.merchant} on ${t.date}${whole}?`)) void onRemove(t)
+                            }}
+                            className="text-xs text-ink-500 transition hover:text-shell-500"
                             aria-label={`Remove ${t.merchant}`}
                           >
                             Remove

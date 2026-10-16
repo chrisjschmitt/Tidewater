@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.17 — 2026-10-16
+
+### Fixed
+- Transactions: "Remove" on a hand-entered transaction that was split did nothing — it looked for the part, not the stored transaction. It now removes the whole transaction (all its parts), asks first, and says what it removed. The button no longer looks greyed out.
+
 ## 0.13.16 — 2026-10-14
 
 ### Fixed

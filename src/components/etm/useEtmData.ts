@@ -321,10 +321,17 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
 
   const removeManual = useCallback(
     async (transaction: Transaction) => {
-      await removeTransaction(unlockedKey, transaction)
+      // A split part from the ledger stands for its stored row: removing it
+      // removes the whole transaction, every part with it.
+      const stored = transaction.splitOf
+        ? allRows.find((row) => row.id === transaction.splitOf!.parentId)
+        : transaction
+      if (!stored || stored.source !== 'manual') return
+      await removeTransaction(unlockedKey, stored)
       await reload()
+      flash(`Removed ${stored.merchant} (${stored.date}).`)
     },
-    [reload, unlockedKey],
+    [allRows, flash, reload, unlockedKey],
   )
 
   return {
