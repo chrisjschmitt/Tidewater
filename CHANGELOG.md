@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.22 — 2026-10-21
+
+### Added
+- Forecast, current month: "Coming in this month" (planned income, with every-two-weeks pay counted for the month) and "Forecast savings" — coming in less the forecast to month-end — set against the goals' monthly contributions, which are named in brackets. Green when it covers them, yellow when within 5% short, red when more than 5% short.
+
 ## 0.13.21 — 2026-10-21
 
 ### Fixed

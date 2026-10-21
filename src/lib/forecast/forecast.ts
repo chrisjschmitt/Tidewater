@@ -1649,3 +1649,10 @@ export function explainCategory(
   }
   return { ...base, figure, steps }
 }
+
+/** How a month's forecast savings stand against its goals: met, within 5%, or short by more than 5%. */
+export function savingsTone(saved: number, goal: number): 'met' | 'close' | 'short' | 'none' {
+  if (goal <= 0) return 'none'
+  if (saved >= goal) return 'met'
+  return saved >= goal * 0.95 ? 'close' : 'short'
+}

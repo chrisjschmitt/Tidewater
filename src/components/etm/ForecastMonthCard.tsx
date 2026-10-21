@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
-import { forecastMix, isOutsideControlWindow, pinAddsToForecast, withCompareIgnores } from '../../lib/forecast/forecast'
+import { forecastMix, isOutsideControlWindow, pinAddsToForecast, savingsTone, withCompareIgnores } from '../../lib/forecast/forecast'
 import type {
   CurrentMonthView,
   ForecastMix,
@@ -44,9 +44,12 @@ interface Props {
   onOpenActual?: (row: { key: string; label: string }) => void
   /** Opens why a category's Forecast figure is what it is. */
   onOpenForecast?: (row: { key: string; label: string }) => void
+  /** Current month only: what the plan says comes in this month, and the goals it should fund. */
+  savings?: { income: number; goals: Array<{ name: string; monthly: number }> }
 }
 
 export default function ForecastMonthCard({
+  savings,
   point,
   current,
   setAside,
@@ -121,6 +124,7 @@ export default function ForecastMonthCard({
           {isCurrent && <Figure label="Still typically lands" amount={remain} />}
         </div>
       )}
+      {isCurrent && savings && <SavingsFigures savings={savings} forecast={displayed.forecast} />}
 
       <PlanVsForecastList
         rows={compare}
@@ -835,21 +839,61 @@ function postedLabels(point: MonthPoint, keys: string[]): string {
   return names.join(', ')
 }
 
+const TONE_CLASS = { met: 'text-green-700', close: 'text-yellow-600', short: 'text-red-600', none: 'text-ink-900' } as const
+
+/**
+ * This month's forecast savings: what the plan says comes in, less the
+ * forecast to month-end, against the goals' monthly contributions. Green when
+ * it covers them, amber within 5%, red when short by more.
+ */
+function SavingsFigures({
+  savings,
+  forecast,
+}: {
+  savings: { income: number; goals: Array<{ name: string; monthly: number }> }
+  forecast: number
+}) {
+  const saved = Math.round((savings.income - forecast) * 100) / 100
+  const goal = savings.goals.reduce((sum, g) => sum + g.monthly, 0)
+  const tone = savingsTone(saved, goal)
+  const goalText = savings.goals.map((g) => `${g.name} ${amountIn(g.monthly, 'CAD')}`).join(', ')
+  const gap = Math.round((saved - goal) * 100) / 100
+  const verdict =
+    tone === 'none'
+      ? 'no monthly goal set'
+      : tone === 'met'
+        ? `covers the goal${savings.goals.length > 1 ? 's' : ''}, ${amountIn(gap, 'CAD')} to spare`
+        : `${amountIn(-gap, 'CAD')} short of the goal${savings.goals.length > 1 ? 's' : ''}`
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <Figure label="Coming in this month" amount={savings.income} hint="planned income, every-two-weeks pay counted" />
+      <Figure
+        label="Forecast savings"
+        amount={saved}
+        tone={tone}
+        hint={`coming in − forecast to month-end · ${verdict}${goalText ? ` (${goalText})` : ''}`}
+      />
+    </div>
+  )
+}
+
 function Figure({
   label,
   amount,
   hint,
   signed,
+  tone = 'none',
 }: {
   label: string
   amount: number
   hint?: string
   signed?: boolean
+  tone?: keyof typeof TONE_CLASS
 }) {
   return (
     <div className="rounded-2xl bg-white/70 px-4 py-3">
       <p className="text-[11px] uppercase tracking-wider text-ink-400">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-ink-900">
+      <p className={`mt-1 text-lg font-semibold tabular-nums ${TONE_CLASS[tone]}`}>
         {signed ? signedCad(amount) : amountIn(amount, 'CAD')}
       </p>
       {hint && <p className="mt-0.5 text-[11px] text-ink-400">{hint}</p>}

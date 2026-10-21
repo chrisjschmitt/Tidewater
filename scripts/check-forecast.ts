@@ -13,6 +13,7 @@ import {
   explainCategory,
   forecast,
   monthPlanAdjustments,
+  savingsTone,
   forecastMix,
   isOutsideControlWindow,
   lookbackMonths,
@@ -1377,6 +1378,14 @@ console.log('\n=== Paid every two weeks ===')
   const personal = groupSummaries(plan, '2026-10').find((g) => g.group.id === 'personal')
   check('group totals count this month and keep the schedule on the lines', (personal?.lines.some((l) => l.everyTwoWeeks) ?? false) && personal!.total >= 900)
 }
+
+console.log('\n=== Forecast savings against goals ===')
+check('$1,100 saved against a $1,000 goal is green', savingsTone(1100, 1000) === 'met')
+check('exactly the goal is green', savingsTone(1000, 1000) === 'met')
+check('$975 is within 5%: yellow', savingsTone(975, 1000) === 'close')
+check('$950 is exactly 5% short: yellow', savingsTone(950, 1000) === 'close')
+check('$900 is red', savingsTone(900, 1000) === 'short')
+check('no goal: no colour', savingsTone(500, 0) === 'none')
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed.`)

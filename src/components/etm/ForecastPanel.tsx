@@ -11,6 +11,7 @@ import { taggingGapsCopy } from './forecastCopy'
 import { amountIn } from '../../lib/etm/format'
 import { monthName, today } from '../../lib/etm/period'
 import { uid } from '../../lib/format'
+import { inMonth, totalIncome } from '../../lib/budget'
 import { walkForward } from '../../lib/forecast/backtest'
 import { explainCategory, forecast, lookbackMonths, monthOfKnownFuture, windowLabel } from '../../lib/forecast/forecast'
 import { lastFullMonth, monthEndVariance, snapshotFromResult } from '../../lib/forecast/snapshot'
@@ -238,6 +239,14 @@ export default function ForecastPanel({
           </div>
           <div id="forecast-month" className="scroll-mt-28">
             <ForecastMonthCard
+              {...(focused.kind === 'current'
+                ? {
+                    savings: {
+                      income: totalIncome(inMonth(budget, focused.month)),
+                      goals: budget.goals.filter((g) => g.monthly > 0).map((g) => ({ name: g.name, monthly: g.monthly })),
+                    },
+                  }
+                : {})}
               point={focused}
               current={household.currentMonth}
               setAside={household.setAside}
