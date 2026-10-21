@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { EtmData } from './useEtmData'
 import { CategorySelect, TagPicker } from './pickers'
+import { evaluateAmount } from '../../lib/etm/calc'
 import { settleRow } from '../../lib/etm/review'
 import { statementKey } from '../../lib/etm/rules/normalize'
 import type { UserRule } from '../../lib/etm/rules/types'
@@ -57,30 +58,45 @@ export default function TransactionEditor({
 
   const round = (n: number) => Math.round(n * 100) / 100
   /** Each part in dollars: as typed, or its percentage of the row with rounding in the last part. */
+  /** What a field holds: a number, or a sum such as =9.95+13%. */
+  const valueOf = (raw: string) => evaluateAmount(raw) ?? 0
   const amounts = (() => {
-    if (mode === 'amount') return lines.map((line) => Number(line.value) || 0)
+    if (mode === 'amount') return lines.map((line) => valueOf(line.value))
     let placed = 0
     return lines.map((line, index) => {
-      const part = index === lines.length - 1 ? round(total - placed) : round((total * (Number(line.value) || 0)) / 100)
+      const part = index === lines.length - 1 ? round(total - placed) : round((total * valueOf(line.value)) / 100)
       placed = round(placed + part)
       return part
     })
   })()
-  const used = mode === 'amount' ? round(amounts.reduce((s, a) => s + a, 0)) : round(lines.reduce((s, l) => s + (Number(l.value) || 0), 0))
+  const used = mode === 'amount' ? round(amounts.reduce((s, a) => s + a, 0)) : round(lines.reduce((s, l) => s + valueOf(l.value), 0))
   const target = mode === 'amount' ? total : 100
   const remainder = round(target - used)
   const valid = remainder === 0 && lines.every((line, i) => line.category.trim() && amounts[i]! > 0)
   const setLine = (index: number, patch: Partial<(typeof lines)[number]>) =>
-    setLines(lines.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)))
   const switchMode = (next: 'amount' | 'percent') => {
     if (next === mode) return
+    // Percent starts as equal shares — 50/50, thirds… — the last part taking
+    // the rounding, so they add to 100 and can be adjusted from there.
+    const equal = round(100 / lines.length)
     setLines(
       lines.map((line, i) => ({
         ...line,
-        value: next === 'percent' ? (total === 0 ? '0' : round((amounts[i]! / total) * 100).toString()) : amounts[i]!.toFixed(2),
+        value:
+          next === 'percent'
+            ? (i === lines.length - 1 ? round(100 - equal * (lines.length - 1)) : equal).toString()
+            : amounts[i]!.toFixed(2),
       })),
     )
     setMode(next)
+  }
+  /** Shows a sum's result once the field is left, e.g. =9.95+13% becomes 11.24. */
+  const settleValue = (index: number) => {
+    const raw = lines[index]!.value
+    if (!/[=+\-*/x×÷%()]/i.test(raw.trim().replace(/^-/, ''))) return
+    const result = evaluateAmount(raw)
+    if (result !== null) setLine(index, { value: mode === 'amount' ? result.toFixed(2) : result.toString() })
   }
 
   const save = async () => {
@@ -168,12 +184,20 @@ export default function TransactionEditor({
         <div key={index} className="flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1">
             <input
-              className="field w-20 py-1 text-right text-sm tabular-nums"
-              inputMode="decimal"
+              className={`field w-28 py-1 text-right text-sm tabular-nums ${line.value.trim() && evaluateAmount(line.value) === null ? 'ring-1 ring-shell-400' : ''}`}
               aria-label={mode === 'amount' ? 'Amount' : 'Percent'}
+              title="A number, or a sum such as =9.95+13% or =9.95+5.95+1.95"
+              placeholder={mode === 'amount' ? '=9.95+13%' : '%'}
+              autoCapitalize="off"
+              autoCorrect="off"
               value={line.value}
               onChange={(e) => setLine(index, { value: e.target.value })}
+              onBlur={() => settleValue(index)}
+              onKeyDown={(e) => e.key === 'Enter' && settleValue(index)}
             />
+            {/[=+*/x×÷%()]/i.test(line.value.replace(/^-/, '')) && evaluateAmount(line.value) !== null && (
+              <span className="text-xs text-ink-400">= {evaluateAmount(line.value)!.toFixed(2)}</span>
+            )}
             {mode === 'percent' && <span className="text-xs text-ink-400">% = {amounts[index]!.toFixed(2)}</span>}
           </span>
           <CategorySelect className="field w-48 py-1 text-sm" value={line.category} options={categories} onChange={(category) => setLine(index, { category })} />

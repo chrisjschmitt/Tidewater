@@ -8,6 +8,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { findPossibleDuplicates, pairKey } from '../src/lib/etm/duplicates.ts'
+import { evaluateAmount } from '../src/lib/etm/calc.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
@@ -255,6 +256,16 @@ const moved = ledgerView([{ ...tdRow, id: 'late', source: 'manual', date: '2026-
 check('the ledger counts it on the new date and keeps the bank date', moved[0]!.date === '2026-10-01' && moved[0]!.bankDate === '2026-09-30')
 check('September loses it, October gains it', aggregate(moved, monthPeriod('2026-09')).spend.CAD === 0 && aggregate(moved, monthPeriod('2026-10')).spend.CAD > 0)
 
+console.log('=== Amount fields that calculate ===')
+check('price plus 13% HST', evaluateAmount('=9.95+13%') === 11.24)
+check('three items added', evaluateAmount('=9.95+5.95+1.95') === 17.85)
+check('a plain number still reads', evaluateAmount('12.50') === 12.5)
+check('brackets and times', evaluateAmount('=(9.95+5.95)*1.13') === 17.97)
+check('a discount', evaluateAmount('=20-10%') === 18)
+check('a percent of an amount', evaluateAmount('=50*13%') === 6.5)
+check('thirds round to cents', evaluateAmount('=100/3') === 33.33)
+check('dollar signs, commas and spaces are ignored', evaluateAmount('= $1,234.50 + 1') === 1235.5)
+check('anything unreadable is refused, never run', [ '=1+', 'abc', '=2*(3', '=1/0', 'alert(1)' ].every((x) => evaluateAmount(x) === null))
 console.log('=== Possible duplicates ===')
 const dupe = (id: string, date: string, amount: number, feedFile: string): Transaction => ({
   ...tdRow, id, date, amount, feedFile, originalStatement: 'BISTRO 21', split: undefined, duplicateOf: undefined,

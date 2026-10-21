@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.20 — 2026-10-21
+
+### Added
+- Split amounts can be sums: start with = and use + − × ÷, brackets and %, e.g. =9.95+13% (price plus HST → 11.24) or =9.95+5.95+1.95 (three items → 17.85). Like a calculator, "+ 13%" adds 13% of what comes before it. The result shows beside the field as you type and replaces the sum when you leave the field; what is still to place updates live. Anything unreadable is outlined and counts as nothing — it is never run as code.
+
+### Changed
+- Split by %: tapping % starts the parts as equal shares (50/50, thirds as 33.33/33.33/33.34…), ready to adjust.
+
 ## 0.13.19 — 2026-10-21
 
 ### Changed
