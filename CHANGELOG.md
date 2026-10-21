@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.21 — 2026-10-21
+
+### Fixed
+- Add a transaction: the Amount field dropped a decimal point as it was typed ("12." became 12), so cents could not be entered. It now keeps what is typed, and takes sums like =9.95+13% as the split fields do.
+
 ## 0.13.20 — 2026-10-21
 
 ### Added

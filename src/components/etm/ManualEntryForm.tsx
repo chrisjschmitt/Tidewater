@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from '../Modal'
 import { CategorySelect, TagPicker } from './pickers'
 import { uid } from '../../lib/format'
+import { evaluateAmount } from '../../lib/etm/calc'
 import type { ManualEntry } from '../../lib/etm/manual'
 import type { Account } from '../../lib/etm/types'
 
@@ -28,6 +29,9 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
     owner: '',
   })
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '')
+  // The typed text, kept as typed: turning it into a number on every key ate
+  // a trailing decimal point ("12." became 12). Sums work too: =9.95+13%.
+  const [amountText, setAmountText] = useState('')
   const [tagList, setTagList] = useState<string[]>([])
   const [error, setError] = useState('')
 
@@ -135,10 +139,20 @@ export default function ManualEntryForm({ accounts, onClose, onSave, onCreateAcc
           <label className="block">
             <span className="label mb-1.5">Amount</span>
             <input
-              className="field"
+              className={`field ${amountText.trim() && evaluateAmount(amountText) === null ? 'ring-1 ring-shell-400' : ''}`}
               inputMode="decimal"
-              value={entry.amount || ''}
-              onChange={(e) => set('amount', Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+              placeholder="12.50 or =9.95+13%"
+              autoCapitalize="off"
+              autoCorrect="off"
+              value={amountText}
+              onChange={(e) => {
+                setAmountText(e.target.value)
+                set('amount', Math.abs(evaluateAmount(e.target.value) ?? 0))
+              }}
+              onBlur={() => {
+                const result = evaluateAmount(amountText)
+                if (result !== null && /[=+*/x×÷%()]/i.test(amountText)) setAmountText(Math.abs(result).toFixed(2))
+              }}
             />
           </label>
         </div>
