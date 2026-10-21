@@ -17,20 +17,28 @@ export default function TransactionEditor({
   data,
   row,
   onDone,
+  prefill,
 }: {
   data: EtmData
   /** The stored row (not a split part from the ledger). */
   row: Transaction
   onDone: () => void
+  /**
+   * A split chosen in review: its parts' categories and tags, with the
+   * amounts left blank for the user to enter — only they know them.
+   */
+  prefill?: { merchant: string; lines: Array<{ category: string; tags: string[]; notes?: string }> }
 }) {
   const start = row.split ?? [{ amount: row.amount, category: row.category === 'Uncategorized' ? '' : row.category, tags: row.tags }]
   const total = Math.abs(row.amount)
-  const [merchant, setMerchant] = useState(row.merchant)
+  const [merchant, setMerchant] = useState(prefill?.merchant ?? row.merchant)
   const [notes, setNotes] = useState(row.notes)
   const [countIn, setCountIn] = useState(row.budgetDate ?? row.date)
   const [mode, setMode] = useState<'amount' | 'percent'>('amount')
   const [lines, setLines] = useState(
-    start.map((line) => ({
+    prefill
+      ? prefill.lines.map((line) => ({ value: '', category: line.category, tags: line.tags, notes: line.notes ?? '' }))
+      : start.map((line) => ({
       value: Math.abs(line.amount).toFixed(2),
       category: line.category,
       tags: line.tags,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.19 — 2026-10-21
+
+### Changed
+- Review: a split suggestion ("Split: Gifts + Groceries…") no longer files and confirms the row in one tap with amounts guessed from a past split. It opens the split form with those parts' categories and tags filled in and the amounts blank, so you enter them; it shows what is still to place until they add up. Single-category suggestions are still one tap.
+
 ## 0.13.18 — 2026-10-16
 
 ### Added

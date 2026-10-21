@@ -41,6 +41,12 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
   const [month, setMonth] = useState<string>('')
   const [show, setShow] = useState<Show>('needs')
   const [editing, setEditing] = useState<string | null>(null)
+  /** A split suggestion picked for a row: the split form opens with its parts, amounts to be entered. */
+  const [prefill, setPrefill] = useState<{ merchant: string; lines: Array<{ category: string; tags: string[]; notes?: string }> } | null>(null)
+  const openEditor = (id: string, withPrefill: typeof prefill = null) => {
+    setPrefill(withPrefill)
+    setEditing(id)
+  }
   const [limit, setLimit] = useState(40)
   const [busy, setBusy] = useState(false)
   const activeMonth = month || months[0] || ''
@@ -211,21 +217,20 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
                       disabled={busy}
                       className="rounded-full bg-sand-100 px-3 py-1 text-xs text-ink-700 hover:bg-tide-50 disabled:opacity-50"
                       onClick={() =>
-                        void save([
-                          settle(
-                            row,
-                            s.merchant,
-                            s.split && s.split.length > 1 ? s.split : [{ amount: row.amount, category: s.category, tags: s.tags }],
-                          ),
-                        ])
+                        s.split && s.split.length > 1
+                          ? openEditor(row.id, {
+                              merchant: s.merchant,
+                              lines: s.split.map((l) => ({ category: l.category, tags: l.tags, ...(l.notes ? { notes: l.notes } : {}) })),
+                            })
+                          : void save([settle(row, s.merchant, [{ amount: row.amount, category: s.category, tags: s.tags }])])
                       }
-                      title="File it this way and confirm"
+                      title={s.split && s.split.length > 1 ? 'Opens the split form with these parts — enter the amounts' : 'File it this way and confirm'}
                     >
-                      {s.split && s.split.length > 1 ? [...new Set(s.split.map((l) => l.category))].join(' + ') : s.category}
+                      {s.split && s.split.length > 1 ? `Split: ${[...new Set(s.split.map((l) => l.category))].join(' + ')}…` : s.category}
                       {s.tags.length > 0 && <span className="text-ink-400"> · {s.tags.join(', ')}</span>}
                     </button>
                   ))}
-                  <button className="btn-quiet text-xs" onClick={() => setEditing(row.id)}>
+                  <button className="btn-quiet text-xs" onClick={() => openEditor(row.id)}>
                     Change…
                   </button>
                 </div>
@@ -233,7 +238,15 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
 
               {editing === row.id && (
                 <div className="mt-3">
-                  <TransactionEditor data={data} row={row} onDone={() => setEditing(null)} />
+                  <TransactionEditor
+                    data={data}
+                    row={row}
+                    {...(prefill ? { prefill } : {})}
+                    onDone={() => {
+                      setEditing(null)
+                      setPrefill(null)
+                    }}
+                  />
                 </div>
               )}
             </li>
