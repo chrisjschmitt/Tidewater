@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.24 — 2026-10-22
+
+### Added
+- Settings → Backups: "Restore from a backup…", beside Back up now — the same restore as Your data → Restore a full backup.
+
+### Changed
+- Restoring a backup asks first, naming the file and when it was saved, and says that it replaces the plan (and all expense data on this device, when the file has them). Cancelling changes nothing.
+
 ## 0.13.23 — 2026-10-21
 
 ### Added

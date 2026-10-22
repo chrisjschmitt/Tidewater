@@ -42,6 +42,8 @@ interface Props {
   onClose: () => void
   onOpenChat: () => void
   onGoalsChange?: (goals: Goal[]) => void
+  /** Restores a full backup file — the same path as Your data → Choose JSON. */
+  onRestoreBackup?: (file: File) => void
   /** Plan edits from the Forecast tab: the budget's expense lines going forward. */
   onExpensesChange?: (expenses: Budget['expenses']) => void
 }
@@ -101,6 +103,7 @@ function Unlocked({
   onOpenChat,
   onGoalsChange,
   onExpensesChange,
+  onRestoreBackup,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
   const [period, setPeriod] = useState<Period>(() => defaultPeriod([]))
@@ -223,6 +226,7 @@ function Unlocked({
             onWiped()
           }}
           {...(onExpensesChange ? { onExpensesChange } : {})}
+          {...(onRestoreBackup ? { onRestoreBackup } : {})}
           onApplyHouseholdContribution={
             onGoalsChange
               ? (monthly, vacationGoalId) =>

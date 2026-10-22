@@ -43,6 +43,7 @@ interface Props {
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
   /** Replaces the budget's expense lines — the plan going forward. */
   onExpensesChange?: (expenses: Budget['expenses']) => void
+  onRestoreBackup?: (file: File) => void
 }
 
 type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'review' | 'import' | 'accounts' | 'settings'
@@ -73,6 +74,7 @@ export default function EtmArea({
   onOpenChat,
   onApplyHouseholdContribution,
   onExpensesChange,
+  onRestoreBackup,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -390,7 +392,7 @@ export default function EtmArea({
 
             {tab === 'settings' && (
               <div className="mb-6 space-y-6">
-                <BackupCard safeguards={safeguards} />
+                <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />
                 <SwitchOverCard data={data} />
                 <RulesSettingsCard data={data} />
               </div>

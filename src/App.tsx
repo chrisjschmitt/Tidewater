@@ -181,6 +181,20 @@ export default function App() {
           setPhase('Restoring your backup…', 70)
           await yieldToUi()
           const restored = parseTidewaterBackup(text)
+          // Restoring replaces everything on this device, so say exactly what
+          // is about to happen first: one wrong file must not undo weeks of work.
+          const saved = new Date(file.lastModified).toLocaleString()
+          const withVault = restored.etm !== undefined
+          const sure = window.confirm(
+            `Restore this backup?\n\n${file.name}\nsaved ${saved}\n\n` +
+              `It replaces the plan on screen${withVault ? ' and all expense-tracking data on this device' : ''} with what is in the file. ` +
+              'Anything entered since that backup will be gone.\n\n' +
+              'Not sure? Cancel, and back up what is here first (Expenses → Settings → Backups → Back up now).',
+          )
+          if (!sure) {
+            flash('Restore cancelled — nothing was changed.')
+            return
+          }
           setPhase('Restoring your backup…', 90)
           commit({ ...restored.budget, updatedAt: new Date().toISOString() })
           const vaultNote = await restoreVaultFromBackup(restored.etm)
@@ -464,6 +478,7 @@ export default function App() {
                   flash('Expense tracking data was erased. Your budget is untouched.')
                 }}
                 onGoalsChange={setGoals}
+                onRestoreBackup={(file) => void handleFile(file)}
                 onExpensesChange={(expenses) => commit({ ...budget, expenses })}
               />
             </Suspense>

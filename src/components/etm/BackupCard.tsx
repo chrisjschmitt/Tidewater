@@ -4,7 +4,7 @@ import type { Safeguards } from './useSafeguards'
  * Settings → Backups. Tidewater keeps one copy of everything, in this
  * browser; this is how that copy survives a cleared browser or a new Mac.
  */
-export default function BackupCard({ safeguards }: { safeguards: Safeguards }) {
+export default function BackupCard({ safeguards, onRestore }: { safeguards: Safeguards; onRestore?: (file: File) => void }) {
   const { persist, lastBackup, ageDays, busy, savedTo, backUp, folderSupported, folder, chooseFolder, allowFolder, forgetFolder, auto, setAuto } =
     safeguards
   return (
@@ -41,8 +41,29 @@ export default function BackupCard({ safeguards }: { safeguards: Safeguards }) {
         <button disabled={busy} onClick={() => void backUp()} className="btn-primary text-xs disabled:opacity-50">
           {busy ? 'Backing up…' : 'Back up now'}
         </button>
+        {onRestore && (
+          <label className="btn-ghost cursor-pointer text-xs">
+            Restore from a backup…
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) onRestore(file)
+              }}
+            />
+          </label>
+        )}
         {savedTo && <span className="text-xs text-ink-500">Saved to {savedTo}</span>}
       </div>
+      {onRestore && (
+        <p className="mt-2 text-xs text-ink-400">
+          Restoring replaces the plan and all expense data on this device with the file’s — it asks first. Then unlock
+          with the same key.
+        </p>
+      )}
       {folderSupported ? (
         <div className="mt-4 rounded-2xl bg-sand-100/60 px-4 py-3 text-sm">
           <p className="font-medium text-ink-900">Backup folder</p>
