@@ -77,6 +77,22 @@ export default function EtmArea({
   const [tab, setTab] = useState<Tab>('budget')
   const [editingId, setEditingId] = useState<string | null>(null)
   const safeguards = useSafeguards(budget)
+  // After an import or a review session, back up to the chosen folder — a
+  // little later, so a run of edits makes one backup, not one each.
+  const batchSignature = data.batches.map((b) => `${b.id}:${b.importedAt}:${b.rowsRead}`).join('|')
+  const lastSignature = useRef<string | null>(null)
+  const { autoBackUpNow } = safeguards
+  useEffect(() => {
+    if (data.loading) return
+    if (lastSignature.current === null) {
+      lastSignature.current = batchSignature
+      return
+    }
+    if (lastSignature.current === batchSignature) return
+    lastSignature.current = batchSignature
+    const timer = window.setTimeout(() => void autoBackUpNow(), 15_000)
+    return () => window.clearTimeout(timer)
+  }, [batchSignature, data.loading, autoBackUpNow])
   // Plan-only pins from before 0.13.12 become plan changes for their month,
   // once, so every Plan figure agrees.
   const pinsMoved = useRef(false)
@@ -164,6 +180,16 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
+            {tab !== 'settings' && safeguards.auto && safeguards.folder && !safeguards.folder.allowed && (
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3">
+                <p className="text-sm text-ink-700">
+                  Automatic backups to {safeguards.folder.name} are waiting for Chrome’s permission.
+                </p>
+                <button onClick={() => void safeguards.allowFolder()} className="btn-primary text-xs">
+                  Allow backups to {safeguards.folder.name}
+                </button>
+              </div>
+            )}
             {tab !== 'settings' && (safeguards.ageDays === undefined || safeguards.ageDays >= BACKUP_NUDGE_DAYS) && (
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3">
                 <p className="text-sm text-ink-700">

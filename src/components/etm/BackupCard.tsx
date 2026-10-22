@@ -5,7 +5,8 @@ import type { Safeguards } from './useSafeguards'
  * browser; this is how that copy survives a cleared browser or a new Mac.
  */
 export default function BackupCard({ safeguards }: { safeguards: Safeguards }) {
-  const { persist, lastBackup, ageDays, busy, savedTo, backUp } = safeguards
+  const { persist, lastBackup, ageDays, busy, savedTo, backUp, folderSupported, folder, chooseFolder, allowFolder, forgetFolder, auto, setAuto } =
+    safeguards
   return (
     <section className="card p-6">
       <h2 className="text-base font-semibold tracking-tight text-ink-900">Backups</h2>
@@ -42,10 +43,55 @@ export default function BackupCard({ safeguards }: { safeguards: Safeguards }) {
         </button>
         {savedTo && <span className="text-xs text-ink-500">Saved to {savedTo}</span>}
       </div>
-      <p className="mt-2 text-xs text-ink-400">
-        In Chrome, with the TD statement folder chosen, the file goes into its “Tidewater backups” folder on Google
-        Drive (Chrome asks once to allow writing). In Safari or on the iPad it goes to Downloads — move it somewhere safe.
-      </p>
+      {folderSupported ? (
+        <div className="mt-4 rounded-2xl bg-sand-100/60 px-4 py-3 text-sm">
+          <p className="font-medium text-ink-900">Backup folder</p>
+          {folder ? (
+            <>
+              <p className="mt-0.5 text-ink-700">
+                {folder.name}
+                {!folder.allowed && <span className="text-shell-500"> · Chrome needs permission again</span>}
+              </p>
+              <label className="mt-2 flex items-center gap-2 text-xs text-ink-700">
+                <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+                Back up here automatically after each import and review session
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {!folder.allowed && (
+                  <button className="btn-primary text-xs" onClick={() => void allowFolder()}>
+                    Allow backups to {folder.name}
+                  </button>
+                )}
+                <button className="btn-ghost text-xs" onClick={() => void chooseFolder()}>
+                  Choose another folder
+                </button>
+                <button className="btn-quiet text-xs" onClick={() => void forgetFolder()}>
+                  Stop using this folder
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-ink-400">
+                One file a day (tidewater-backup-YYYY-MM-DD.json), rewritten with that day’s latest. Chrome may ask
+                once per visit before writing — choose “Allow on every visit” to make it silent.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Choose a folder once — e.g. iCloud Drive → Tidewater → Backups — and Tidewater saves a backup there
+                after each import and review session, as well as when you click Back up now.
+              </p>
+              <button className="btn-ghost mt-2 text-xs" onClick={() => void chooseFolder()}>
+                Choose a backup folder
+              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-ink-400">
+          This browser can’t save into a folder, so backups go to Downloads — move them to your iCloud backups folder.
+          In Chrome on the Mac, Tidewater can back up to a folder automatically.
+        </p>
+      )}
     </section>
   )
 }

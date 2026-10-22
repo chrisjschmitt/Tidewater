@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.23 — 2026-10-21
+
+### Added
+- Settings → Backups: choose a backup folder once (Chrome on the Mac), e.g. iCloud Drive → Tidewater → Backups. "Back up now" writes there, and Tidewater backs up there automatically about 15 seconds after each import and review session — one file a day, rewritten with that day's latest. If Chrome needs its permission again, a strip offers "Allow backups to …". Safari and the iPad keep the download and the weekly reminder.
+
+### Fixed
+- Backup files are named by the local date, so an evening backup is no longer filed under the next day.
+
 ## 0.13.22 — 2026-10-21
 
 ### Added

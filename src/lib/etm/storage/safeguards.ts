@@ -1,3 +1,4 @@
+import { del, get, set } from 'idb-keyval'
 import { serializeTidewaterBackup } from '../../backup'
 import { downloadFile } from '../../storage'
 import type { Budget } from '../../types'
@@ -61,15 +62,154 @@ interface WritableFolder extends StatementFolderHandle {
 
 export const BACKUP_FOLDER = 'Tidewater backups'
 
+// --- The backup folder -------------------------------------------------------
+//
+// A folder chosen once for backups — e.g. iCloud Drive → Tidewater/Backups —
+// that Tidewater writes into directly, and automatically after an import or
+// a review session. Chrome only (File System Access); Safari and the iPad
+// keep the reminder. Like the statement folder, what is kept is the
+// browser's permission token, not data, so it lives outside the vault.
+
+const BACKUP_FOLDER_KEY = 'tidewater.etm.backupFolder'
+const AUTO_KEY = 'tidewater.etm.autoBackup'
+
+export interface BackupFolderHandle {
+  name: string
+  getFileHandle: WritableFolder['getFileHandle']
+  queryPermission?: (descriptor: { mode: 'readwrite' }) => Promise<PermissionState>
+  requestPermission?: (descriptor: { mode: 'readwrite' }) => Promise<PermissionState>
+}
+
+type ReadWritePicker = (options: { mode: 'readwrite'; id: string }) => Promise<BackupFolderHandle>
+
+const readWritePicker = (): ReadWritePicker | undefined => {
+  if (typeof window === 'undefined') return undefined
+  const candidate = (window as unknown as { showDirectoryPicker?: ReadWritePicker }).showDirectoryPicker
+  return typeof candidate === 'function' ? candidate.bind(window) : undefined
+}
+
+export const backupFolderSupported = (): boolean => readWritePicker() !== undefined
+
+/** Null when the dialog was closed. */
+export async function pickBackupFolder(): Promise<BackupFolderHandle | null> {
+  const open = readWritePicker()
+  if (!open) return null
+  try {
+    const handle = await open({ mode: 'readwrite', id: 'tidewater-backups' })
+    await set(BACKUP_FOLDER_KEY, handle)
+    return handle
+  } catch {
+    return null
+  }
+}
+
+export async function rememberedBackupFolder(): Promise<BackupFolderHandle | undefined> {
+  try {
+    const stored = await get<BackupFolderHandle>(BACKUP_FOLDER_KEY)
+    return stored && typeof stored.name === 'string' ? stored : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function forgetBackupFolder(): Promise<void> {
+  try {
+    await del(BACKUP_FOLDER_KEY)
+  } catch {
+    // Nothing to forget.
+  }
+}
+
+/** Whether Tidewater may write there now without asking ('prompt' needs a click first). */
+export async function backupFolderPermission(folder: BackupFolderHandle): Promise<PermissionState> {
+  try {
+    return (await folder.queryPermission?.({ mode: 'readwrite' })) ?? 'prompt'
+  } catch {
+    return 'prompt'
+  }
+}
+
+/** Asks for permission; only from a click. */
+export async function allowBackupFolder(folder: BackupFolderHandle): Promise<boolean> {
+  try {
+    return (await folder.requestPermission?.({ mode: 'readwrite' })) === 'granted'
+  } catch {
+    return false
+  }
+}
+
+export function autoBackupOn(): boolean {
+  try {
+    return localStorage.getItem(AUTO_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+export function setAutoBackup(on: boolean): void {
+  try {
+    localStorage.setItem(AUTO_KEY, on ? 'on' : 'off')
+  } catch {
+    // A private window: stays on.
+  }
+}
+
+/** Named by the local date, so an evening backup is not filed under tomorrow. */
+const backupName = () => {
+  const now = new Date()
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return `tidewater-backup-${day}.json`
+}
+
+async function writeInto(folder: { getFileHandle?: WritableFolder['getFileHandle'] }, name: string, contents: string): Promise<void> {
+  const file = await folder.getFileHandle!(name, { create: true })
+  const stream = await file.createWritable()
+  await stream.write(contents)
+  await stream.close()
+}
+
 /**
- * Writes the backup. Into `<statement folder>/Tidewater backups/` when a
- * folder is remembered and the browser allows writing (Chrome asks once);
+ * The automatic backup: into the chosen backup folder, only when the browser
+ * already allows it (no dialog can open without a click). Returns where it
+ * went, or undefined when it could not be made silently. One file per day,
+ * rewritten through the day, so each day keeps its last state.
+ */
+export async function autoBackUp(budget: Budget): Promise<string | undefined> {
+  if (!autoBackupOn()) return undefined
+  const folder = await rememberedBackupFolder()
+  if (!folder || (await backupFolderPermission(folder)) !== 'granted') return undefined
+  try {
+    const vault = await exportEtmVault()
+    const name = backupName()
+    await writeInto(folder, name, serializeTidewaterBackup(budget, vault ?? undefined))
+    markBackedUp()
+    return `${folder.name}/${name}`
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Writes the backup: into the chosen backup folder when there is one (asking
+ * for permission if needed — this runs from a click); else into
+ * `<statement folder>/Tidewater backups/` when the browser allows writing;
  * otherwise as a download (Safari, iPad). Returns where it went.
  */
 export async function backUpNow(budget: Budget, folder?: StatementFolderHandle): Promise<string> {
   const vault = await exportEtmVault()
-  const name = `tidewater-backup-${new Date().toISOString().slice(0, 10)}.json`
+  const name = backupName()
   const contents = serializeTidewaterBackup(budget, vault ?? undefined)
+
+  const chosen = await rememberedBackupFolder()
+  if (chosen && ((await backupFolderPermission(chosen)) === 'granted' || (await allowBackupFolder(chosen)))) {
+    try {
+      await writeInto(chosen, name, contents)
+      markBackedUp()
+      return `${chosen.name}/${name}`
+    } catch {
+      // Fall through to the older places.
+    }
+  }
 
   const writable = folder as WritableFolder | undefined
   if (writable?.getDirectoryHandle && writable.requestPermission) {
