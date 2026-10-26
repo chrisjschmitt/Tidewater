@@ -90,7 +90,7 @@ import {
 import { createManualTransaction } from '../src/lib/etm/manual.ts'
 import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
 import type { Account, BalanceSnapshot, ReconciliationRecord, Transaction } from '../src/lib/etm/types.ts'
-import { parseTidewaterBackup, serializeTidewaterBackup } from '../src/lib/backup.ts'
+import { backupFileName, parseTidewaterBackup, serializeTidewaterBackup } from '../src/lib/backup.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
@@ -308,6 +308,11 @@ check('the new tag is taken', change?.next.tags.join(',') === 'Reimbursable,Trav
 check('the reviewed flag is taken', change?.next.reviewed === true)
 check('the group is re-derived', change?.next.groupId === groupForCategory('Travel'))
 check('a tag-only edit is enough to count as changed', await tagEditIsAnUpdate())
+
+console.log('\n=== Backup file names ===')
+const oct26 = new Date(2026, 9, 26, 21, 30)
+check('a full backup is named tidewater-backup-<local day>', backupFileName(true, oct26) === 'tidewater-backup-2026-10-26.json')
+check('a plan-only backup says so in its name', backupFileName(false, oct26) === 'tidewater-plan-only-2026-10-26.json')
 
 console.log('\n=== Rows Monarch no longer has ===')
 

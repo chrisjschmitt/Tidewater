@@ -1,5 +1,5 @@
 import { del, get, set } from 'idb-keyval'
-import { serializeTidewaterBackup } from '../../backup'
+import { backupFileName, serializeTidewaterBackup } from '../../backup'
 import { downloadFile } from '../../storage'
 import type { Budget } from '../../types'
 import { exportEtmVault } from './backup'
@@ -154,12 +154,7 @@ export function setAutoBackup(on: boolean): void {
   }
 }
 
-/** Named by the local date, so an evening backup is not filed under tomorrow. */
-const backupName = () => {
-  const now = new Date()
-  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  return `tidewater-backup-${day}.json`
-}
+
 
 async function writeInto(folder: { getFileHandle?: WritableFolder['getFileHandle'] }, name: string, contents: string): Promise<void> {
   const file = await folder.getFileHandle!(name, { create: true })
@@ -180,7 +175,7 @@ export async function autoBackUp(budget: Budget): Promise<string | undefined> {
   if (!folder || (await backupFolderPermission(folder)) !== 'granted') return undefined
   try {
     const vault = await exportEtmVault()
-    const name = backupName()
+    const name = backupFileName(Boolean(vault))
     await writeInto(folder, name, serializeTidewaterBackup(budget, vault ?? undefined))
     markBackedUp()
     return `${folder.name}/${name}`
@@ -197,7 +192,7 @@ export async function autoBackUp(budget: Budget): Promise<string | undefined> {
  */
 export async function backUpNow(budget: Budget, folder?: StatementFolderHandle): Promise<string> {
   const vault = await exportEtmVault()
-  const name = backupName()
+  const name = backupFileName(Boolean(vault))
   const contents = serializeTidewaterBackup(budget, vault ?? undefined)
 
   const chosen = await rememberedBackupFolder()

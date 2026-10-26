@@ -28,7 +28,7 @@ import {
   unallocated,
   type GroupSummary,
 } from './lib/budget'
-import { parseTidewaterBackup, serializeTidewaterBackup } from './lib/backup'
+import { backupFileName, parseTidewaterBackup, serializeTidewaterBackup } from './lib/backup'
 import {
   DEFAULT_PROFILE,
   detectCsvKind,
@@ -187,8 +187,10 @@ export default function App() {
           const withVault = restored.etm !== undefined
           const sure = window.confirm(
             `Restore this backup?\n\n${file.name}\nsaved ${saved}\n\n` +
-              `It replaces the plan on screen${withVault ? ' and all expense-tracking data on this device' : ''} with what is in the file. ` +
-              'Anything entered since that backup will be gone.\n\n' +
+              (withVault
+                ? 'It has the plan and expense data. It replaces the plan on screen and all expense-tracking data on this device; unlock afterwards with the key it was made with. '
+                : 'It has only the plan (income, expense lines, goals) — no expense data. It replaces the plan on screen; the expense data on this device stays as it is. ') +
+              'Anything changed since that backup will be gone.\n\n' +
               'Not sure? Cancel, and back up what is here first (Expenses → Settings → Backups → Back up now).',
           )
           if (!sure) {
@@ -607,7 +609,7 @@ export default function App() {
             }
           }
           downloadFile(
-            `tidewater-backup-${new Date().toISOString().slice(0, 10)}.json`,
+            backupFileName(vault !== undefined && vault !== null),
             serializeTidewaterBackup(budget, vault),
             'application/json',
           )

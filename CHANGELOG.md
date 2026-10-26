@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.27 — 2026-10-26
+
+### Changed
+- Restoring says what the backup holds: "only the plan … the expense data on this device stays as it is" for a plan-only file, or "the plan and expense data … unlock afterwards with the key it was made with" for a full one.
+- Backup files are named by what is inside: tidewater-backup-<day>.json for plan + expense data, tidewater-plan-only-<day>.json when there is no expense data — dated by the local day everywhere, including Your data → Download JSON.
+
 ## 0.13.26 — 2026-10-26
 
 ### Changed

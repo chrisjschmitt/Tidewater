@@ -74,3 +74,12 @@ function asProfile(value: unknown): Profile {
   }
   return value as unknown as Profile
 }
+
+/**
+ * The file name says what is inside: a full backup (plan + encrypted expense
+ * data) or the plan alone, dated by the local day.
+ */
+export function backupFileName(withExpenses: boolean, now = new Date()): string {
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return withExpenses ? `tidewater-backup-${day}.json` : `tidewater-plan-only-${day}.json`
+}
