@@ -74,6 +74,13 @@ script sees or types a password.
 `outputDir` in `accounts.json`, `~/TD-Statements` by default. Names follow a
 fixed contract, because Tidewater reads these files by name:
 
+These are your bank transactions in plain text — the one copy of them that is
+not encrypted. Keep `outputDir` somewhere private, and if it is a synced folder,
+prefer one with end-to-end encryption (iCloud Drive with Advanced Data
+Protection, say) over a service that can read what it stores. Tidewater reads
+the folder directly, so it can sit beside its encrypted backups, e.g.
+`~/Library/Mobile Documents/com~apple~CloudDocs/Tidewater/TD-Statements`.
+
 ```
 TD-transactions-<YYYY-MM-DD>.csv                    ← every account in one file; import this
 raw/TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv     ← each account's export, kept for checking
