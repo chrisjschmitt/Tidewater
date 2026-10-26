@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { changeVaultKey, MIN_KEY_LENGTH } from '../../lib/etm/storage/vault'
+import { changeVaultKey, EXPENSE_KEY_USERNAME, MIN_KEY_LENGTH } from '../../lib/etm/storage/vault'
 
 /**
  * Settings → Expense key. Re-encrypts everything on this device under a new
@@ -78,7 +78,25 @@ export default function KeyCard({
           Change key…
         </button>
       ) : (
-        <div className="mt-3 space-y-2 rounded-2xl bg-sand-100/60 p-4">
+        <form
+          className="mt-3 space-y-2 rounded-2xl bg-sand-100/60 p-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (ready) void change()
+          }}
+        >
+          {/* For password managers: the key is filed under this username, so it is
+              saved as one entry and filled on unlock. Not shown, not focusable. */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={EXPENSE_KEY_USERNAME}
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+            className="sr-only"
+          />
           <p className="text-xs text-ink-500">
             Best: have your password manager generate the new key, save it there first, then paste it into both
             fields — so what is saved is exactly what is used.
@@ -110,14 +128,14 @@ export default function KeyCard({
           </label>
           {message && <p className="text-xs text-shell-500">{message}</p>}
           <div className="flex gap-2">
-            <button disabled={!ready} className="btn-primary text-xs disabled:opacity-50" onClick={() => void change()}>
+            <button type="submit" disabled={!ready} className="btn-primary text-xs disabled:opacity-50">
               {busy ? 'Re-encrypting…' : 'Change key and back up'}
             </button>
-            <button className="btn-quiet text-xs" onClick={() => setOpen(false)}>
+            <button type="button" className="btn-quiet text-xs" onClick={() => setOpen(false)}>
               Cancel
             </button>
           </div>
-        </div>
+        </form>
       )}
     </section>
   )

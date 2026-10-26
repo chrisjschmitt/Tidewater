@@ -19,6 +19,9 @@ import { setEtmPresence } from '../../storage'
  */
 export const MIN_KEY_LENGTH = 8
 
+/** The username password managers file the expense key under; Tidewater itself has no usernames. */
+export const EXPENSE_KEY_USERNAME = 'expense-key'
+
 export type UnlockFailure = 'wrong-key' | 'unavailable'
 
 export type UnlockResult = { ok: true; key: CryptoKey } | { ok: false; reason: UnlockFailure }

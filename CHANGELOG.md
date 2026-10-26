@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.26 — 2026-10-26
+
+### Changed
+- The unlock, set-up and Change key forms carry a hidden username, "expense-key", so password managers save the expense key as one entry under that name and fill it in on unlock, instead of asking for a username.
+
 ## 0.13.25 — 2026-10-26
 
 ### Added

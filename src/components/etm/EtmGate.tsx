@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import Modal from '../Modal'
-import { MIN_KEY_LENGTH, createVault, unlockVault } from '../../lib/etm/storage/vault'
+import { EXPENSE_KEY_USERNAME, MIN_KEY_LENGTH, createVault, unlockVault } from '../../lib/etm/storage/vault'
 
 interface Props {
   /** Setup asks for the key twice; unlock has an existing vault to open. */
@@ -69,6 +69,18 @@ export default function EtmGate({ mode, onClose, onUnlocked }: Props) {
       }
     >
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
+        {/* For password managers: the key is filed under this username, so it is
+            saved as one entry and filled on unlock. Not shown, not focusable. */}
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value={EXPENSE_KEY_USERNAME}
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+        />
         <div>
           <label className="label mb-1.5" htmlFor="etm-key">
             Key
