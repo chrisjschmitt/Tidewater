@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.25 — 2026-10-26
+
+### Added
+- Settings → Expense key → "Change key…": while unlocked, re-encrypts everything on this device under a new key, then makes a backup with it. Every record is opened with the current key first and only then written back, in one step, so a failure leaves the vault as it was. "Stay unlocked" carries over to the new key. Backups made before the change still need the old key. For when the key in the password manager turns out not to be the one in use.
+
 ## 0.13.24 — 2026-10-22
 
 ### Added

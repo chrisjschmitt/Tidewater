@@ -104,6 +104,7 @@ function Unlocked({
   onGoalsChange,
   onExpensesChange,
   onRestoreBackup,
+  onUnlocked,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
   const [period, setPeriod] = useState<Period>(() => defaultPeriod([]))
@@ -227,6 +228,8 @@ function Unlocked({
           }}
           {...(onExpensesChange ? { onExpensesChange } : {})}
           {...(onRestoreBackup ? { onRestoreBackup } : {})}
+          unlockedKey={unlockedKey}
+          onKeyChanged={(key) => void rememberedKey().then((still) => onUnlocked(key, still !== null))}
           onApplyHouseholdContribution={
             onGoalsChange
               ? (monthly, vacationGoalId) =>

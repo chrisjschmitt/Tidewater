@@ -12,6 +12,7 @@ import TransactionEditor from './TransactionEditor'
 import Modal from '../Modal'
 import SwitchOverCard from './SwitchOverCard'
 import BackupCard from './BackupCard'
+import KeyCard from './KeyCard'
 import { BACKUP_NUDGE_DAYS, useSafeguards } from './useSafeguards'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
@@ -44,6 +45,9 @@ interface Props {
   /** Replaces the budget's expense lines — the plan going forward. */
   onExpensesChange?: (expenses: Budget['expenses']) => void
   onRestoreBackup?: (file: File) => void
+  /** The session's key, for re-encrypting under a new one. */
+  unlockedKey: CryptoKey
+  onKeyChanged: (key: CryptoKey) => void
 }
 
 type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'review' | 'import' | 'accounts' | 'settings'
@@ -75,6 +79,8 @@ export default function EtmArea({
   onApplyHouseholdContribution,
   onExpensesChange,
   onRestoreBackup,
+  unlockedKey,
+  onKeyChanged,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -392,6 +398,7 @@ export default function EtmArea({
 
             {tab === 'settings' && (
               <div className="mb-6 space-y-6">
+                <KeyCard unlockedKey={unlockedKey} onKeyChanged={onKeyChanged} onBackUp={safeguards.backUp} />
                 <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />
                 <SwitchOverCard data={data} />
                 <RulesSettingsCard data={data} />

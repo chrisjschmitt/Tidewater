@@ -1,12 +1,14 @@
 import {
   cryptoAvailable,
   deriveKey,
+  open,
   PBKDF2_ITERATIONS,
   randomSalt,
+  seal,
   sealSentinel,
   sentinelMatches,
 } from '../crypto'
-import { deleteEtmDb, openEtmDb, type VaultMeta } from './db'
+import { deleteEtmDb, openEtmDb, RECORD_STORES, type SealedRecord, type VaultMeta } from './db'
 import { forgetStatementFolder } from './statementFolder'
 import { setEtmPresence } from '../../storage'
 
@@ -111,4 +113,62 @@ export async function wipeVault(): Promise<void> {
   // module has to say so explicitly or the grant would outlive the data.
   await forgetStatementFolder()
   await setEtmPresence(null)
+}
+
+/**
+ * Re-encrypt everything under a new key, while unlocked with the current one.
+ * For a key that has been lost or mistyped in the password manager: as long
+ * as this device still opens, its data can move to a key that is known.
+ *
+ * Every record is decrypted with the current key first, in memory; only when
+ * all of them have opened is anything written, and then in one transaction —
+ * so a failure part-way leaves the vault exactly as it was, never half old
+ * key and half new. Backups made before the change still need the old key.
+ */
+export async function changeVaultKey(current: CryptoKey, passphrase: string): Promise<UnlockResult> {
+  if (!cryptoAvailable()) return { ok: false, reason: 'unavailable' }
+  const meta = await readVaultMeta()
+  if (!meta || !(await sentinelMatches(current, meta.sentinel))) return { ok: false, reason: 'wrong-key' }
+
+  const db = await openEtmDb()
+  try {
+    const plain = new Map<string, Array<{ id: string; value: unknown }>>()
+    for (const name of RECORD_STORES) {
+      const records = (await db.getAll(name)) as SealedRecord[]
+      const opened: Array<{ id: string; value: unknown }> = []
+      for (const record of records) opened.push({ id: record.id, value: await open<unknown>(current, record.sealed) })
+      plain.set(name, opened)
+    }
+
+    const salt = randomSalt()
+    const key = await deriveKey(passphrase, salt, PBKDF2_ITERATIONS)
+    const nextMeta: VaultMeta = {
+      version: 1,
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      sentinel: await sealSentinel(key),
+      createdAt: meta.createdAt,
+    }
+    const resealed = new Map<string, SealedRecord[]>()
+    for (const [name, rows] of plain) {
+      const out: SealedRecord[] = []
+      for (const row of rows) out.push({ id: row.id, sealed: await seal(key, row.value) })
+      resealed.set(name, out)
+    }
+
+    const remembered = await db.get('unlock', 'remembered')
+    const tx = db.transaction(['meta', 'unlock', ...RECORD_STORES], 'readwrite')
+    await tx.objectStore('meta').put(nextMeta, 'vault')
+    for (const name of RECORD_STORES) {
+      const store = tx.objectStore(name)
+      await store.clear()
+      for (const record of resealed.get(name) ?? []) await store.put(record)
+    }
+    // Staying unlocked carries over, now with the new key.
+    if (remembered) await tx.objectStore('unlock').put({ key, rememberedAt: new Date().toISOString() }, 'remembered')
+    await tx.done
+    return { ok: true, key }
+  } finally {
+    db.close()
+  }
 }
