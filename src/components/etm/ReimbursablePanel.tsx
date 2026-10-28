@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import SettleUpCard from './SettleUpCard'
 import TransactionTable from './TransactionTable'
 import {
   aggregate,
@@ -105,6 +106,16 @@ export default function ReimbursablePanel({
 
         <TagSetting config={config} onChange={onConfigChange} />
       </section>
+
+      {period.kind === 'month' && (
+        <SettleUpCard
+          accounts={accounts}
+          transactions={transactions}
+          month={period.start.slice(0, 7)}
+          config={config}
+          onConfigChange={onConfigChange}
+        />
+      )}
 
       <section className="card p-6">
         <h2 className="text-base font-semibold tracking-tight text-ink-900">By bucket</h2>

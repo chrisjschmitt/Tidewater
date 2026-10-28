@@ -91,6 +91,7 @@ import { createManualTransaction } from '../src/lib/etm/manual.ts'
 import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
 import type { Account, BalanceSnapshot, ReconciliationRecord, Transaction } from '../src/lib/etm/types.ts'
 import { backupFileName, parseTidewaterBackup, serializeTidewaterBackup } from '../src/lib/backup.ts'
+import { settleUp } from '../src/lib/etm/settleUp.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
@@ -487,6 +488,33 @@ check(
   check('an advance on an account kept out of the budget is not owed', round(bucket?.own.CAD ?? 0) === 40, String(bucket?.own.CAD))
   check('owed and own add up to the bucket', round((bucket?.owed.CAD ?? 0) + (bucket?.own.CAD ?? 0)) === round(bucket?.spend.CAD ?? 0))
   check('and the totals split the same way', round(split.reimbursable.owed.CAD) === 60 && round(split.reimbursable.own.CAD) === 40)
+}
+
+console.log('\n=== Settling up a month ===')
+{
+  const acct = (id: string, kind: Account['kind'], excludedFromBudget: boolean) =>
+    ({ id, nickname: id, kind, currency: 'CAD', monarchName: id, funding: false, mainCard: false, savingsDestination: false, excludedFromBudget }) as Account
+  const accts = [acct('Aeroplan', 'credit', false), acct('Costco', 'credit', false), acct('Own card', 'credit', true), acct('Own bank', 'chequing', true)]
+  const row = (id: string, accountId: string, date: string, amount: number, tag: string) =>
+    ({ id, accountId, date, amount, tags: [`Reimbursable: ${tag}`], merchant: id, originalStatement: id, notes: '', currency: 'CAD', monarchAccount: '', category: 'x', groupId: 'personal', internal: false, owner: '', reviewed: false, source: 'monarch', importBatchId: 'b' }) as Transaction
+  const rows = [
+    row('minds', 'Aeroplan', '2026-10-23', -67.78, 'Chris Personal'),
+    row('costco', 'Costco', '2026-10-09', -29.91, 'Chris Personal'),
+    row('late', 'Aeroplan', '2026-10-29', -10, 'Vicki Personal'),
+    row('sept-late', 'Aeroplan', '2026-09-29', -5, 'Vicki Personal'),
+    row('sept-early', 'Aeroplan', '2026-09-20', -99, 'Vicki Personal'),
+    row('artdoc', 'Own card', '2026-10-07', -72.88, 'Chris Business'),
+    row('etfr', 'Own bank', '2026-10-02', -70.5, 'Chris Personal'),
+  ]
+  const s1 = settleUp(rows, accts, '2026-10', { '2026-09': '2026-09-26', '2026-10': '2026-10-27' }, 'Reimbursable')
+  const line = (lines: { account: Account; amount: number }[], id: string) => lines.find((l) => l.account.id === id)?.amount ?? 0
+  check('advances up to the reimbursement day are covered', line(s1.coveredByAccount, 'Aeroplan') === 67.78 && line(s1.coveredByAccount, 'Costco') === 29.91)
+  check('later ones are still to reimburse, by the account that paid', line(s1.owedByAccount, 'Aeroplan') === 15, String(line(s1.owedByAccount, 'Aeroplan')))
+  check('what was open after last month’s day carries in', s1.owedRows.some((r) => r.transaction.id === 'sept-late' && r.state === 'carried'))
+  check('but what last month’s reimbursement covered does not', !s1.owedRows.some((r) => r.transaction.id === 'sept-early'))
+  check('own-account advances are listed by account, not owed', line(s1.ownByAccount, 'Own card') === 72.88 && line(s1.ownByAccount, 'Own bank') === 70.5)
+  const noDay = settleUp(rows, accts, '2026-10', undefined, 'Reimbursable')
+  check('with no day recorded, everything this month is still to reimburse', line(noDay.owedByAccount, 'Aeroplan') === 77.78 && noDay.coveredByAccount.length === 0)
 }
 
 check('the marker is matched however it is typed', isReimbursable({ tags: ['  reimbursABLE '] } as never, 'Reimbursable'))

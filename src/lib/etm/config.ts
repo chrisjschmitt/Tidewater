@@ -69,6 +69,12 @@ export interface EtmConfig {
    * first of the next month.
    */
   monthCutoffs?: Record<string, string>
+  /**
+   * Month → the day its reimbursements were made (done a few days before
+   * month end so the expense account is funded). Advances on or before it are
+   * covered; later ones are still to reimburse and carry into next month.
+   */
+  reimbursedOn?: Record<string, string>
 }
 
 export interface TdCutover {
@@ -104,6 +110,7 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   categoryGroups: stored?.categoryGroups && typeof stored.categoryGroups === 'object' ? stored.categoryGroups : undefined,
   rules: stored?.rules && typeof stored.rules === 'object' ? stored.rules : undefined,
   monthCutoffs: stored?.monthCutoffs && typeof stored.monthCutoffs === 'object' ? stored.monthCutoffs : undefined,
+  reimbursedOn: stored?.reimbursedOn && typeof stored.reimbursedOn === 'object' ? stored.reimbursedOn : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/

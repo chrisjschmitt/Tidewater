@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.29 — 2026-10-28
+
+### Added
+- Reimbursable → Settle up (one month at a time): what is owed back, by the account that paid (e.g. TD Aeroplan Visa, the Costco card, the expense account), and what is on your own accounts — "to pay on this card" for a personal card, "already paid from this account" for a personal bank account.
+- "Reimbursed on": record the day the month's reimbursements were made (a few days before month end). Advances up to it show as covered by that reimbursement; later ones as still to reimburse, with their transactions listed; anything still open after last month's day carries into this month.
+
 ## 0.13.28 — 2026-10-28
 
 ### Fixed
