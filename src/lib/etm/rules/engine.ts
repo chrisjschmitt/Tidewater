@@ -284,15 +284,22 @@ function onTrip(result: RuleResult, input: RuleInput, ctx: RuleContext): RuleRes
   const adjust = (outcome: Outcome): Outcome => {
     if (isInternal(outcome.category)) return outcome
     const recat = (category: string) => settings.tripRecategorize[category] ?? category
-    const tag = (category: string, tags: string[]) => {
-      if (!settings.tripTag || regular) return tags
+    // A regular merchant is left untagged — a subscription that bills during a
+    // trip isn't trip spending. But when the trip itself refiles the row (fuel
+    // for the rental car → Transportation), it is trip spending wherever it was
+    // bought, so it takes the tag too.
+    const tag = (category: string, tags: string[], refiled = false) => {
+      if (!settings.tripTag || (regular && !refiled)) return tags
       if (settings.tripSkipCategories.some((c) => c.toLowerCase() === category.toLowerCase())) return tags
       if (tags.some((t) => normalizeTag(t).startsWith(prefix))) return tags
       return [...tags, settings.tripTag]
     }
-    const split = outcome.split?.map((line) => ({ ...line, category: recat(line.category), tags: tag(recat(line.category), line.tags) }))
+    const split = outcome.split?.map((line) => {
+      const category = recat(line.category)
+      return { ...line, category, tags: tag(category, line.tags, category !== line.category) }
+    })
     const category = recat(outcome.category)
-    return { ...outcome, category, tags: tag(category, outcome.tags), ...(split ? { split } : {}) }
+    return { ...outcome, category, tags: tag(category, outcome.tags, category !== outcome.category), ...(split ? { split } : {}) }
   }
   return {
     ...result,

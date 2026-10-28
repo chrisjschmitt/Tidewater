@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.30 — 2026-10-28
+
+### Fixed
+- Trips: a purchase the trip refiles (fuel → Transportation, phone → travel data) now always gets the trip tag, even at a merchant you use regularly — fuel at your usual station on a trip is trip spending. Regular merchants the trip does not refile (a subscription that bills during a trip) are still left untagged.
+
 ## 0.13.29 — 2026-10-28
 
 ### Added

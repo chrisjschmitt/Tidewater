@@ -192,6 +192,14 @@ check('trip: a new merchant gets the trip tag on review suggestions', onTrip('MU
 check('trip: restaurants are not tagged', !(onTrip('NEW BISTRO', -40).outcome?.tags ?? []).includes('Reimbursable: Vacation'))
 check('trip: re-filed category gets the tag', onTrip('PARKING LOT 9', -6).outcome?.category === 'Transportation' && onTrip('PARKING LOT 9', -6).outcome!.tags.includes('Reimbursable: Vacation'))
 check('trip: a regular merchant is not trip spending', !(onTrip('BOOKSHOP', -20).outcome?.tags ?? []).includes('Reimbursable: Vacation'))
+{
+  // A regular merchant the trip refiles (fuel at the usual station → Transportation) is trip spending.
+  const refiling = { ...tripSettings, tripRecategorize: { ...tripSettings.tripRecategorize, Gas: 'Transportation' } }
+  const fuel = ['2026-05-02', '2026-06-02', '2026-07-02', '2026-08-02'].map((d) => h(d, 'FUEL STOP 7', 'Gas', -60, { accountId: 'card', card: true }))
+  const fuelModel = buildModel([...history, ...fuel], refiling, { asOf: '2026-09-01', reimbursableTag: 'Reimbursable' })
+  const refiled = categorize({ date: '2026-09-05', description: 'FUEL STOP 9', amount: -45, account: card }, { ...ctx, model: fuelModel, settings: refiling }).outcome
+  check('trip: a regular merchant the trip refiles still gets the tag', refiled?.category === 'Transportation' && refiled.tags.includes('Reimbursable: Vacation'), JSON.stringify(refiled?.tags))
+}
 check('trip: an account outside the family is left alone', onTrip('PARKING LOT 9', -6, bank).outcome?.category === 'Parking & Tolls')
 check('trip: outside the dates nothing changes', onTrip('PARKING LOT 9', -6, card, '2026-09-20').outcome?.category === 'Parking & Tolls')
 check('trip: card payments untouched', onTrip('PAYMENT - THANK YOU', 300).outcome?.tags.length === 0)
