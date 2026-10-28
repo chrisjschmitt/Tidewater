@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.32 — 2026-10-28
+
+### Added
+- Reimbursable → Export to CSV: every reimbursable transaction in the period, on all accounts (own accounts and USD included), one line per row or split part. Columns: date, account, merchant, category, bucket, tags, amount advanced (refunds negative), currency, paid from (family account, owed back / own account, not owed), reimbursement (covered on the recorded day, or still to reimburse), notes and statement text.
+
+### Fixed
+- The version in the header said 0.13.30 after the 0.13.31 release.
+
 ## 0.13.31 — 2026-10-28
 
 ### Added

@@ -21,6 +21,7 @@ import {
 } from '../../lib/etm/config'
 import { amountIn } from '../../lib/etm/format'
 import { includes, periodLabel, type Period } from '../../lib/etm/period'
+import { reimbursableCsv, reimbursableFileName } from '../../lib/etm/reimbursableExport'
 import type { Account, Transaction } from '../../lib/etm/types'
 
 interface Props {
@@ -103,6 +104,24 @@ export default function ReimbursablePanel({
           — the generic tag, or any “{tag}: …” sub-tag. Budget spending plus
           reimbursable spending is everything that left your accounts.
         </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            className="btn-ghost text-xs"
+            disabled={reimbursable.count === 0}
+            onClick={() => {
+              const { csv } = reimbursableCsv(transactions, accounts, period, tag, config.reimbursedOn, (bucket) =>
+                bucketName(config, bucket),
+              )
+              downloadCsv(reimbursableFileName(period), csv)
+            }}
+          >
+            Export to CSV
+          </button>
+          <span className="text-[11px] text-ink-400">
+            Every reimbursable transaction in {periodLabel(period)}, on all accounts — one line per row or split part.
+          </span>
+        </div>
 
         <TagSetting config={config} onChange={onConfigChange} />
       </section>
@@ -329,4 +348,13 @@ function Figure({ label, money }: { label: string; money: Money }) {
       )}
     </div>
   )
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }

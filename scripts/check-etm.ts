@@ -92,6 +92,8 @@ import { MonarchFormatError, parseMonarchCsv } from '../src/lib/etm/monarch.ts'
 import type { Account, BalanceSnapshot, ReconciliationRecord, Transaction } from '../src/lib/etm/types.ts'
 import { backupFileName, parseTidewaterBackup, serializeTidewaterBackup } from '../src/lib/backup.ts'
 import { settleUp } from '../src/lib/etm/settleUp.ts'
+import { reimbursableCsv } from '../src/lib/etm/reimbursableExport.ts'
+import { monthPeriod } from '../src/lib/etm/period.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
 let failures = 0
@@ -515,6 +517,20 @@ console.log('\n=== Settling up a month ===')
   check('own-account advances are listed by account, not owed', line(s1.ownByAccount, 'Own card') === 72.88 && line(s1.ownByAccount, 'Own bank') === 70.5)
   const noDay = settleUp(rows, accts, '2026-10', undefined, 'Reimbursable')
   check('with no day recorded, everything this month is still to reimburse', line(noDay.owedByAccount, 'Aeroplan') === 77.78 && noDay.coveredByAccount.length === 0)
+
+  const usd = { ...row('usd', 'Aeroplan', '2026-10-12', -20, 'Vacation Account'), currency: 'USD' as const }
+  const refund = { ...row('refund', 'Costco', '2026-10-14', 5.25, 'Chris Personal'), merchant: '=cmd', notes: 'said "thanks", ok' }
+  const plain = { ...row('plain', 'Aeroplan', '2026-10-15', -3, 'x'), tags: ['Groceries'] }
+  const out = reimbursableCsv([...rows, usd, refund, plain], accts, monthPeriod('2026-10'), 'Reimbursable', { '2026-10': '2026-10-27' })
+  const csvLines = out.csv.trim().split('\r\n')
+  const lineFor = (start: string) => csvLines.find((l) => l.startsWith(start)) ?? ''
+  check('the export lists every reimbursable row in the month, on all accounts and currencies', out.count === 7, String(out.count))
+  check('the export leaves out untagged rows and other months', !out.csv.includes('plain') && !out.csv.includes('sept-'))
+  check('a covered family advance is marked covered', lineFor('2026-10-23').endsWith(',Covered 2026-10-27,,minds') && lineFor('2026-10-23').includes(',67.78,CAD,Family account (owed back),'))
+  check('a later one is still to reimburse', lineFor('2026-10-29').includes(',Still to reimburse,'))
+  check('own-account rows say so and carry no reimbursement state', lineFor('2026-10-07').includes(',72.88,CAD,Own account (not owed),,'))
+  check('USD rows are included with their currency', lineFor('2026-10-12').includes(',20.00,USD,Family account (owed back),,'))
+  check('a refund is negative, quotes and formulas are escaped', lineFor('2026-10-14').includes(",'=cmd,") && lineFor('2026-10-14').includes(',-5.25,') && lineFor('2026-10-14').includes('"said ""thanks"", ok"'))
 }
 
 check('the marker is matched however it is typed', isReimbursable({ tags: ['  reimbursABLE '] } as never, 'Reimbursable'))
