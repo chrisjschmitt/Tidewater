@@ -1,4 +1,5 @@
 import type { PlanHistory } from './planHistory'
+import { readPlanNotes, type PlanNotes } from './planNotes'
 import type { Currency } from '../etm/types'
 
 export type ForecastWindow = 12 | 24 | 'all'
@@ -56,6 +57,8 @@ export interface PinRequest {
   addsTo?: PinAddsTo
   /** With `addsTo: 'plan'`: raise the plan from this month on, not this month only. */
   onward?: boolean
+  /** With `addsTo: 'plan'`: when to revisit the raise's note, `YYYY-MM`. */
+  reviewBy?: string
 }
 
 export interface ForecastConfig {
@@ -81,6 +84,8 @@ export interface ForecastConfig {
   ignoredHistory?: Record<string, string[]>
   /** Earlier plan amounts, kept when a category's plan changes from a month on (planHistory.ts). */
   planHistory?: PlanHistory
+  /** Why each plan is what it is, with months to review it by (planNotes.ts). */
+  planNotes?: PlanNotes
 }
 
 export interface ForecastSnapshot {
@@ -160,6 +165,7 @@ export function withForecastDefaults(stored?: Partial<ForecastConfig>): Forecast
     ...(stored?.planHistory && typeof stored.planHistory === 'object' && !Array.isArray(stored.planHistory)
       ? { planHistory: stored.planHistory }
       : {}),
+    ...(readPlanNotes(stored?.planNotes) ? { planNotes: readPlanNotes(stored?.planNotes)! } : {}),
   }
 }
 

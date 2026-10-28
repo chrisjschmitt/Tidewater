@@ -64,6 +64,17 @@ import {
   withPlanForMonth,
   withPlanPinsAsPlans,
 } from '../src/lib/forecast/planHistory.ts'
+import {
+  dueReviews,
+  hasNotes,
+  planChanges,
+  planStory,
+  readPlanNotes,
+  withChangeNote,
+  withoutNotesAfter,
+  withReviewed,
+  withStandingNote,
+} from '../src/lib/forecast/planNotes.ts'
 import { freeAfterExpenses, groupSummaries, inMonth, lineAmountIn, paydayExtras, paydaysIn, totalExpenses, unallocated, withEveryTwoWeeks } from '../src/lib/budget.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
@@ -481,11 +492,17 @@ console.log('\n=== Plan raises agree everywhere ===')
   })
   const pinned = withForecastDefaults({
     window: 24,
-    knownFutures: [pin('ca-pin', 'Chris Allowance'), pin('va-pin', 'Vicki Allowance'), ...placed.knownFutures],
+    knownFutures: [{ ...pin('ca-pin', 'Chris Allowance'), notes: 'Birthday month' }, pin('va-pin', 'Vicki Allowance'), ...placed.knownFutures],
   })
   const moved = withPlanPinsAsPlans(allowances, pinned)
   const typicalPlan = totalExpenses(allowances)
   check('plan-only pins are moved, other pins stay', moved?.knownFutures.length === placed.knownFutures.length)
+  check(
+    'a moved pin’s comment becomes the raise’s note',
+    moved?.planNotes?.[planKey('Chris Allowance')]?.changes[0]?.text === 'Birthday month' &&
+      moved?.planNotes?.[planKey('Chris Allowance')]?.changes[0]?.month === '2026-10' &&
+      moved?.planNotes?.[planKey('Vicki Allowance')] === undefined,
+  )
   check('moving them again finds nothing', moved !== undefined && withPlanPinsAsPlans(allowances, moved) === undefined)
   const movedResult = forecast(transactions, allowances, moved!, ASOF)
   const octPlan = monthPoint(movedResult, '2026-10')?.plan
@@ -547,6 +564,39 @@ console.log('\n=== Plan raises agree everywhere ===')
     skippedRow('2026-11')?.plan === 0 && skippedRow('2027-02')?.plan === 0,
     JSON.stringify(skippedRow('2026-11')),
   )
+
+  // Notes on plan changes.
+  {
+    const key = planKey('Vicki Allowance')
+    const row = { key, label: 'Vicki Allowance' }
+    let notes = withChangeNote(undefined, { ...row, month: '2027-01', text: '  New gym  ', reviewBy: '2027-06' })
+    notes = withStandingNote(notes, { ...row, text: 'Seasonal: higher in winter' })
+    const changes = planChanges(later.budget, bumped, notes, key)
+    check(
+      'plan changes are read from the history, a one-month raise as raise and return',
+      changes.map((c) => `${c.month}:${c.from}>${c.to}`).join(' ') === '2026-10:200>350 2026-11:350>200 2027-01:200>260',
+      changes.map((c) => `${c.month}:${c.from}>${c.to}`).join(' '),
+    )
+    check('a change carries its note, trimmed', changes.at(-1)?.note?.text === 'New gym')
+    const march = planStory(later.budget, bumped, notes, key, '2027-03')
+    check('a month’s story is the latest change at or before it', march.change?.month === '2027-01' && march.standing?.text === 'Seasonal: higher in winter')
+    check('the story history is newest first', march.history[0]?.month === '2027-01' && march.history.length === 3)
+    check('a month before any change has no change', planStory(later.budget, bumped, notes, key, '2026-09').change === undefined)
+    check('the marker knows there are notes', hasNotes(notes, key) && !hasNotes(notes, planKey('Chris Allowance')))
+    check('nothing is due before its review month', dueReviews(notes, '2027-05').length === 0)
+    const due = dueReviews(notes, '2027-06')
+    check('a note is due from its review month', due.length === 1 && due[0]?.month === '2027-01')
+    const moved = withReviewed(notes, due[0]!, '2027-12')
+    check('“Still right” moves the review on and keeps the note', dueReviews(moved, '2027-06').length === 0 && dueReviews(moved, '2027-12')[0]?.note.text === 'New gym')
+    const cleared = withReviewed(notes, due[0]!)
+    check('… or clears it', dueReviews(cleared, '2030-01').length === 0 && cleared[key]?.changes[0]?.text === 'New gym')
+    const removed = withChangeNote(notes, { ...row, month: '2027-01', text: ' ' })
+    check('an empty note is removed, the standing note stays', removed[key]?.changes.length === 0 && removed[key]?.standing !== undefined)
+    check('a change from a month on drops notes on the later changes it replaces', withoutNotesAfter(notes, key, '2026-12')?.[key]?.changes.length === 0)
+    check('notes survive a round trip through storage', JSON.stringify(readPlanNotes(JSON.parse(JSON.stringify(notes)))) === JSON.stringify(notes))
+    check('damaged notes are dropped, not fatal', readPlanNotes({ x: { label: 'X', changes: [{ month: 'bad', text: 'y' }, 5] }, y: 3 }) === undefined)
+    check('the config keeps notes', withForecastDefaults({ planNotes: notes }).planNotes?.[key]?.changes.length === 1)
+  }
 }
 
 console.log('\n=== Current-month remainder ===')

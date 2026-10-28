@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.33 — 2026-10-28
+
+### Added
+- Notes on the plan. Changing a Plan figure (now a small form under the row) or Raising it has an optional **Why?** — the assumption behind it — and an optional **Review by** month.
+- A note mark beside each Plan figure in Plan vs forecast: tap it for why the plan is what it is this month — the category's standing note (e.g. "Seasonal: higher Jun–Sep"), the change that set this month's amount with its note, and the full history of changes. Earlier changes show "No note yet" with Add.
+- **Assumptions to revisit** at the top of the Forecast tab once a note's review month arrives: **Still right** (pick the next review month, or none) or **Change plan** (opens that category's Plan form).
+- Notes are kept encrypted with the forecast settings and travel in backups. A comment on an old plan pin carries over as its raise's note.
+
+### Changed
+- A plan change from a month on drops the notes on the later changes it replaces.
+
 ## 0.13.32 — 2026-10-28
 
 ### Added

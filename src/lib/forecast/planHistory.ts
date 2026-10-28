@@ -1,6 +1,7 @@
 import { lineAmountIn, PAYDAYS_PER_YEAR } from '../budget'
 import { groupForCategory, isEssentialCategory } from '../categories'
 import type { Budget, ExpenseLine } from '../types'
+import { withChangeNote } from './planNotes'
 import type { ForecastConfig } from './types'
 
 /**
@@ -185,16 +186,22 @@ export function withPlanPinsAsPlans(budget: Budget, config: ForecastConfig): For
   )
   if (moving.length === 0) return undefined
   let history = config.planHistory
+  let notes = config.planNotes
   for (const future of moving) {
     const key = planKey(future.category)
     const amount = planAmountAt(budget, history, key, future.month) + future.amount
     history = withPlanForMonth(budget, history, { key, label: future.category, month: future.month, amount })
+    // The pin's comment becomes the raise's note.
+    if (future.notes.trim()) {
+      notes = withChangeNote(notes, { key, label: future.category, month: future.month, text: future.notes })
+    }
   }
   const moved = new Set(moving.map((future) => future.id))
   return {
     ...config,
     knownFutures: config.knownFutures.filter((future) => !moved.has(future.id)),
     ...(history ? { planHistory: history } : {}),
+    ...(notes ? { planNotes: notes } : {}),
   }
 }
 

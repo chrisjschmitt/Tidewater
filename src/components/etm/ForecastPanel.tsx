@@ -26,6 +26,18 @@ import {
 import type { Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
 import { planAmountAt, planKey } from '../../lib/forecast/planHistory'
+import {
+  dueReviews,
+  hasNotes,
+  planStory,
+  withChangeNote,
+  withReviewed,
+  withStandingNote,
+  type DueReview,
+  type PlanChangeRequest,
+  type PlanNoteDraft,
+} from '../../lib/forecast/planNotes'
+import type { PlanNotesEdit } from './ForecastMonthCard'
 
 interface Props {
   transactions: Transaction[]
@@ -39,9 +51,9 @@ interface Props {
   onNotice?: (message: string) => void
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
   /** Changes a category's plan from a month on (planHistory.ts). */
-  onPlanChange?: (change: { key: string; label: string; month: string; amount: number }) => void
+  onPlanChange?: (change: PlanChangeRequest) => void
   /** Raises a category's plan for one month, or from that month on (`onward`). */
-  onPlanRaise?: (raise: { key: string; label: string; month: string; amount: number; onward: boolean }) => void
+  onPlanRaise?: (raise: { key: string; label: string; month: string; amount: number; onward: boolean; note?: PlanNoteDraft }) => void
   /** Opens the shared editor on a TD or manual row from a drill-in. */
   onEdit?: (row: Transaction) => void
 }
@@ -67,6 +79,7 @@ export default function ForecastPanel({
   const [openCategory, setOpenCategory] = useState<string | null>(null)
   const [openActual, setOpenActual] = useState<{ key: string; label: string; month: string } | null>(null)
   const [openExplain, setOpenExplain] = useState<{ key: string; label: string; month: string } | null>(null)
+  const [openPlanKey, setOpenPlanKey] = useState<string | null>(null)
   const resolvedConfig = useMemo(() => withForecastDefaults(config), [config])
 
   const lookback = useMemo(
@@ -136,6 +149,25 @@ export default function ForecastPanel({
     : []
   const gapsCopy = taggingGapsCopy(gaps.uncategorizedHousehold, gaps.parentOnlyReimbursable)
 
+  const notesFor = (month: string): PlanNotesEdit => ({
+    storyFor: (key) => planStory(budget, config.planHistory, config.planNotes, key, month),
+    has: (key) => hasNotes(config.planNotes, key),
+    onChangeNote: (row, changeMonth, draft) =>
+      onConfigChange({ ...config, planNotes: withChangeNote(config.planNotes, { ...row, month: changeMonth, ...draft }) }),
+    onStandingNote: (row, draft) =>
+      onConfigChange({ ...config, planNotes: withStandingNote(config.planNotes, { ...row, ...draft }) }),
+    ...(openPlanKey && month === currentMonth ? { openKey: openPlanKey } : {}),
+    onOpened: () => setOpenPlanKey(null),
+  })
+  const reviews = dueReviews(config.planNotes, currentMonth)
+  const changePlanFor = (review: DueReview) => {
+    // Acting on it answers the review; the new change can carry its own note.
+    onConfigChange({ ...config, planNotes: withReviewed(config.planNotes, review) })
+    setFocusedMonth(currentMonth)
+    setOpenPlanKey(review.key)
+    jumpTo('forecast-compare')
+  }
+
   const placeKnownFuture = (draft: PinRequest) => {
     if (!(draft.amount > 0) || !focused) return
     // A raise to Plan is a plan change, so the Budget tab and the dashboard
@@ -148,6 +180,7 @@ export default function ForecastPanel({
         month: focused.month,
         amount: draft.amount,
         onward,
+        ...(draft.notes?.trim() || draft.reviewBy ? { note: { text: draft.notes ?? '', ...(draft.reviewBy ? { reviewBy: draft.reviewBy } : {}) } } : {}),
       })
       onNotice?.(`Raised the ${draft.category} plan for ${monthName(focused.month)}${onward ? ' on' : ' only'}.`)
       return
@@ -211,6 +244,18 @@ export default function ForecastPanel({
         </nav>
       )}
 
+      {!empty && reviews.length > 0 && (
+        <RevisitCard
+          reviews={reviews}
+          currentMonth={currentMonth}
+          canChange={Boolean(onPlanChange)}
+          onStillRight={(review, next) =>
+            onConfigChange({ ...config, planNotes: withReviewed(config.planNotes, review, next) })
+          }
+          onChangePlan={changePlanFor}
+        />
+      )}
+
       {!empty && gapsCopy && (
         <section className="card p-6">
           <h2 className="text-base font-semibold tracking-tight text-ink-900">Tagging still open</h2>
@@ -265,6 +310,7 @@ export default function ForecastPanel({
                 ? {
                     onPlanChange,
                     typicalPlanFor: (key: string) => planAmountAt(budget, config.planHistory, key, focused.month),
+                    planNotes: notesFor(focused.month),
                   }
                 : {})}
               onPlace={(row) => placeKnownFuture(row)}
@@ -378,4 +424,106 @@ function oldestDate(transactions: Transaction[]): string {
     if (transaction.date < min) min = transaction.date
   }
   return min
+}
+
+/** Notes whose review month has arrived: confirm them or change the plan. */
+function RevisitCard({
+  reviews,
+  currentMonth,
+  canChange,
+  onStillRight,
+  onChangePlan,
+}: {
+  reviews: DueReview[]
+  currentMonth: string
+  canChange: boolean
+  onStillRight: (review: DueReview, next?: string) => void
+  onChangePlan: (review: DueReview) => void
+}) {
+  return (
+    <section className="card p-6">
+      <h2 className="text-base font-semibold tracking-tight text-ink-900">Assumptions to revisit</h2>
+      <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+        Notes you asked to look at again by now. If the assumption still holds, say when to look next (or never);
+        otherwise change the plan.
+      </p>
+      <ul className="mt-4 space-y-2">
+        {reviews.map((review) => (
+          <RevisitLine
+            key={`${review.key}|${review.month ?? 'standing'}`}
+            review={review}
+            currentMonth={currentMonth}
+            canChange={canChange}
+            onStillRight={onStillRight}
+            onChangePlan={onChangePlan}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function RevisitLine({
+  review,
+  currentMonth,
+  canChange,
+  onStillRight,
+  onChangePlan,
+}: {
+  review: DueReview
+  currentMonth: string
+  canChange: boolean
+  onStillRight: (review: DueReview, next?: string) => void
+  onChangePlan: (review: DueReview) => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [next, setNext] = useState('')
+  return (
+    <li className="rounded-2xl bg-white/70 px-4 py-3 text-sm">
+      <p className="font-medium text-ink-900">
+        {review.label}
+        <span className="font-normal text-ink-400">
+          {' '}
+          · {review.month ? `plan change ${monthName(review.month)}` : 'category note'} · review by{' '}
+          {monthName(review.note.reviewBy!)}
+        </span>
+      </p>
+      <p className="mt-0.5 text-ink-700">{review.note.text || 'No note text.'}</p>
+      {confirming ? (
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <label className="text-xs text-ink-500">
+            Next review <span className="text-ink-400">(leave empty for none)</span>
+            <input
+              type="month"
+              className="field mt-1 block py-1.5 text-sm"
+              min={currentMonth}
+              value={next}
+              onChange={(event) => setNext(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-primary text-xs"
+            onClick={() => onStillRight(review, next > currentMonth ? next : undefined)}
+          >
+            Confirm
+          </button>
+          <button type="button" className="btn-quiet text-xs" onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" className="btn-ghost text-xs" onClick={() => setConfirming(true)}>
+            Still right
+          </button>
+          {canChange && (
+            <button type="button" className="btn-ghost text-xs" onClick={() => onChangePlan(review)}>
+              Change plan
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  )
 }

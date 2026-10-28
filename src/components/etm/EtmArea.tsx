@@ -30,6 +30,13 @@ import {
   withPlanForMonth,
   withPlanPinsAsPlans,
 } from '../../lib/forecast/planHistory'
+import {
+  withChangeNote,
+  withoutNotesAfter,
+  type PlanChangeRequest,
+  type PlanNoteDraft,
+  type PlanNotes,
+} from '../../lib/forecast/planNotes'
 import type { Budget } from '../../lib/types'
 
 interface Props {
@@ -299,26 +306,35 @@ export default function EtmArea({
                 onNotice={data.flash}
                 onOpenTidy={() => setTab('month')}
                 onApplyHouseholdContribution={onApplyHouseholdContribution}
-                onPlanRaise={async (raise) => {
+                onPlanRaise={async ({ note, ...raise }) => {
                   const history = data.forecastConfig.planHistory
                   const change = { ...raise, amount: planAmountAt(budget, history, raise.key, raise.month) + raise.amount }
                   if (raise.onward && onExpensesChange) {
                     const next = withPlanChange(budget, history, change)
-                    await data.saveForecastSettings({ ...data.forecastConfig, planHistory: next.history })
+                    await data.saveForecastSettings({
+                      ...data.forecastConfig,
+                      planHistory: next.history,
+                      ...notesFor(data.forecastConfig.planNotes, raise, note, true),
+                    })
                     onExpensesChange(next.budget.expenses)
                   } else {
                     await data.saveForecastSettings({
                       ...data.forecastConfig,
                       planHistory: withPlanForMonth(budget, history, change),
+                      ...notesFor(data.forecastConfig.planNotes, raise, note, false),
                     })
                   }
                 }}
                 onEdit={(t) => setEditingId(t.id.split('#')[0]!)}
                 {...(onExpensesChange
                   ? {
-                      onPlanChange: async (change: { key: string; label: string; month: string; amount: number }) => {
+                      onPlanChange: async ({ note, ...change }: PlanChangeRequest) => {
                         const next = withPlanChange(budget, data.forecastConfig.planHistory, change)
-                        await data.saveForecastSettings({ ...data.forecastConfig, planHistory: next.history })
+                        await data.saveForecastSettings({
+                          ...data.forecastConfig,
+                          planHistory: next.history,
+                          ...notesFor(data.forecastConfig.planNotes, change, note, true),
+                        })
                         onExpensesChange(next.budget.expenses)
                       },
                     }
@@ -460,4 +476,21 @@ function earliestSwitch(data: EtmData): string | undefined {
   const cutover = data.config.tdCutover
   if (!cutover) return undefined
   return [cutover.global, ...Object.values(cutover.perAccount)].filter((d): d is string => Boolean(d)).sort()[0]
+}
+
+/**
+ * The notes after a plan change: a change from a month on drops notes on the
+ * later changes it replaces; the new note, if any, goes on its month.
+ */
+function notesFor(
+  notes: PlanNotes | undefined,
+  change: { key: string; label: string; month: string },
+  note: PlanNoteDraft | undefined,
+  onward: boolean,
+): { planNotes?: PlanNotes } {
+  let next = onward ? withoutNotesAfter(notes, change.key, change.month) : notes
+  if (note && (note.text.trim() || note.reviewBy)) {
+    next = withChangeNote(next, { key: change.key, label: change.label, month: change.month, ...note })
+  }
+  return next ? { planNotes: next } : {}
 }
