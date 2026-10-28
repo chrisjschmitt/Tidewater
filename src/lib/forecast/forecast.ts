@@ -417,7 +417,10 @@ function planVsForecastRows(
       key
     const plan = roundCents(planForCategory(budget, key) + (pinByKey.get(key) ?? 0))
     const forecastAmt = roundCents(forecastByKey.get(key)?.amount ?? 0)
-    if (plan === 0 && forecastAmt === 0) continue
+    // A Budget line stays even at $0, so a category skipped for a month can
+    // still be planned again for a later one.
+    const onBudget = budget.expenses.some((line) => nameKey(line.name) === key)
+    if (plan === 0 && forecastAmt === 0 && !onBudget) continue
     rows.push({
       key,
       label,

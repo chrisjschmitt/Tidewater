@@ -536,6 +536,17 @@ console.log('\n=== Plan raises agree everywhere ===')
   )
   const undone = withPlanForMonth(later.budget, bumped, { key: planKey('Vicki Allowance'), label: 'Vicki Allowance', month: '2026-10', amount: 200 })
   check('setting the month back leaves the history as it was', JSON.stringify(undone) === JSON.stringify(later.history))
+
+  // A $0 plan from a month on keeps the category in the table, so it can be planned again.
+  const skipped = withPlanChange(allowances, undefined, { key: planKey('Vicki Allowance'), label: 'Vicki Allowance', month: '2026-11', amount: 0 })
+  const skippedResult = forecast(transactions, skipped.budget, withForecastDefaults({ window: 24, planHistory: skipped.history }), ASOF)
+  const skippedRow = (month: string) =>
+    monthPoint(skippedResult, month)?.planVsForecast.find((row) => row.key === planKey('Vicki Allowance'))
+  check(
+    'a $0 plan keeps the category in Plan vs forecast',
+    skippedRow('2026-11')?.plan === 0 && skippedRow('2027-02')?.plan === 0,
+    JSON.stringify(skippedRow('2026-11')),
+  )
 }
 
 console.log('\n=== Current-month remainder ===')

@@ -366,8 +366,12 @@ function PlanVsForecastList({
   onOpenForecast?: (row: { key: string; label: string }) => void
 }) {
   const ignored = new Set(ignoredKeys)
-  const active = rows.filter((row) => !ignored.has(row.key))
-  const tucked = rows.filter((row) => ignored.has(row.key))
+  const [sort, setSort] = useState<{ by: SortColumn; down: boolean }>({ by: 'gap', down: true })
+  const onSort = (by: SortColumn) =>
+    setSort((now) => (now.by === by ? { by, down: !now.down } : { by, down: by !== 'category' }))
+  const sorted = sortRows(rows, sort.by, sort.down, actualFor)
+  const active = sorted.filter((row) => !ignored.has(row.key))
+  const tucked = sorted.filter((row) => ignored.has(row.key))
   const runningRows: Array<{ row: VarianceRow; running: number }> = []
   let running = 0
   for (const row of active) {
@@ -385,8 +389,8 @@ function PlanVsForecastList({
       <h3 className="text-sm font-semibold tracking-tight text-ink-900">Plan vs forecast by category</h3>
       <p className="mt-1 text-sm text-ink-500">
         {toMonthEnd
-          ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'
-          : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first. The running total adds those signed differences as you go down.'}{' '}
+          ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds those signed differences as you go down.'
+          : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds those signed differences as you go down.'}{' '}
         {planEdit && `Click a Plan figure to change that category's plan from ${monthName(month)} on; earlier months keep theirs. `}
         {onOpenActual && 'Click an Actual to today figure to see its transactions. '}
         {onOpenForecast && 'Click a Forecast figure to see how it was worked out. '}
@@ -406,11 +410,11 @@ function PlanVsForecastList({
               <th className="pb-2 pr-2 font-medium">
                 <span className="sr-only">Ignore</span>
               </th>
-              <th className="pb-2 pr-3 font-medium">Category</th>
-              <th className="pb-2 pr-3 text-right font-medium">Plan</th>
-              {actualFor && <th className="pb-2 pr-3 text-right font-medium">Actual to today</th>}
-              <th className="pb-2 pr-3 text-right font-medium">Forecast</th>
-              <th className="pb-2 pr-3 text-right font-medium">Difference</th>
+              <SortHeading column="category" label="Category" sort={sort} onSort={onSort} />
+              <SortHeading column="plan" label="Plan" sort={sort} onSort={onSort} right />
+              {actualFor && <SortHeading column="actual" label="Actual to today" sort={sort} onSort={onSort} right />}
+              <SortHeading column="forecast" label="Forecast" sort={sort} onSort={onSort} right />
+              <SortHeading column="difference" label="Difference" sort={sort} onSort={onSort} right />
               <th className="pb-2 pr-3 text-right font-medium">Running total</th>
               <th className="pb-2 text-right font-medium">
                 <span className="sr-only">Pin</span>
@@ -491,6 +495,68 @@ function PlanVsForecastList({
         </div>
       )}
     </div>
+  )
+}
+
+type SortColumn = 'gap' | 'category' | 'plan' | 'actual' | 'forecast' | 'difference'
+
+/** The table's order; 'gap' (largest absolute difference first) is the default. */
+function sortRows(
+  rows: VarianceRow[],
+  by: SortColumn,
+  down: boolean,
+  actualFor?: (row: VarianceRow) => number,
+): VarianceRow[] {
+  const value = (row: VarianceRow): number => {
+    switch (by) {
+      case 'plan':
+        return row.plan
+      case 'actual':
+        return actualFor ? actualFor(row) : 0
+      case 'forecast':
+        return row.forecast
+      case 'difference':
+        return row.delta
+      default:
+        return Math.abs(row.delta)
+    }
+  }
+  const sign = down ? -1 : 1
+  return rows.slice().sort((a, z) => {
+    const order = by === 'category' ? a.label.localeCompare(z.label) : value(a) - value(z)
+    return sign * order || a.label.localeCompare(z.label)
+  })
+}
+
+function SortHeading({
+  column,
+  label,
+  sort,
+  onSort,
+  right = false,
+}: {
+  column: SortColumn
+  label: string
+  sort: { by: SortColumn; down: boolean }
+  onSort: (column: SortColumn) => void
+  right?: boolean
+}) {
+  const active = sort.by === column
+  return (
+    <th
+      className={`pb-2 pr-3 font-medium ${right ? 'text-right' : ''}`}
+      aria-sort={active ? (sort.down ? 'descending' : 'ascending') : 'none'}
+    >
+      <button
+        type="button"
+        className={`uppercase tracking-wider hover:text-ink-700 ${active ? 'text-ink-700' : ''}`}
+        onClick={() => onSort(column)}
+        title={`Sort by ${label.toLowerCase()}`}
+      >
+        {label}
+        {active && <span aria-hidden="true"> {sort.down ? '↓' : '↑'}</span>}
+      </button>
+    </th>
   )
 }
 

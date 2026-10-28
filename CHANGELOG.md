@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.31 — 2026-10-28
+
+### Added
+- Forecast → Plan vs forecast by category: click Category, Plan, Actual to today, Forecast or Difference to sort by it; click again to reverse. The running total follows the order shown.
+
+### Fixed
+- A category whose plan is set to $0 from a month on no longer disappears from the table for those months, so it can be planned again for any later month (no need for a $1 placeholder).
+
 ## 0.13.30 — 2026-10-28
 
 ### Fixed
