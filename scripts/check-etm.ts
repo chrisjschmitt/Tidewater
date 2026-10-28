@@ -475,6 +475,20 @@ check(
     BUCKETS.reduce((s, b) => s + b.count, 0) === dec.reimbursable.count,
 )
 
+// Who paid decides who is owed: a family account is owed it back; an account
+// kept out of the budget (a personal card) settles it directly.
+{
+  const base = { id: '', date: '2025-12-10', merchant: 'Shop', originalStatement: 'SHOP', notes: '', currency: 'CAD' as const, monarchAccount: '', category: 'Chris personal', groupId: 'personal' as const, internal: false, owner: '', reviewed: false, source: 'monarch' as const, importBatchId: 'b' }
+  const familyCharge = { ...base, id: 'f', accountId: 'family', amount: -60, tags: ['Reimbursable: Chris Personal'] }
+  const ownCardCharge = { ...base, id: 'o', accountId: 'own-card', amount: -40, tags: ['Reimbursable: Chris Personal'] }
+  const split = aggregate([familyCharge, ownCardCharge], dec.period, { excludeAccountIds: new Set(['own-card']), reimbursableTag: 'Reimbursable' })
+  const bucket = split.reimbursable.buckets[0]
+  check('a family-paid advance is owed back', round(bucket?.owed.CAD ?? 0) === 60, String(bucket?.owed.CAD))
+  check('an advance on an account kept out of the budget is not owed', round(bucket?.own.CAD ?? 0) === 40, String(bucket?.own.CAD))
+  check('owed and own add up to the bucket', round((bucket?.owed.CAD ?? 0) + (bucket?.own.CAD ?? 0)) === round(bucket?.spend.CAD ?? 0))
+  check('and the totals split the same way', round(split.reimbursable.owed.CAD) === 60 && round(split.reimbursable.own.CAD) === 40)
+}
+
 check('the marker is matched however it is typed', isReimbursable({ tags: ['  reimbursABLE '] } as never, 'Reimbursable'))
 check(
   'a sub-tag alone is enough',

@@ -54,12 +54,19 @@ export interface ReimbursableBucket {
   /** The name after the colon, plus any other tags — or "No bucket". */
   label: string
   tags: string[]
+  /** Everything, whichever account paid: owed + own. */
   spend: Money
+  /** Paid from accounts that count in the family budget: what is owed back to them. */
+  owed: Money
+  /** Paid from accounts kept out of the family budget (a personal card): settled directly, not owed to the family accounts. */
+  own: Money
   count: number
 }
 
 export interface ReimbursableTotals {
   spend: Money
+  owed: Money
+  own: Money
   count: number
   buckets: ReimbursableBucket[]
 }
@@ -103,7 +110,7 @@ export function aggregate(
   const reimbursableTag = options.reimbursableTag ?? DEFAULT_CONFIG.reimbursableTag
   const buckets = new Map<string, CategoryActual & { spellings: Map<string, number> }>()
   const claimed = new Map<string, ReimbursableBucket>()
-  const reimbursable: ReimbursableTotals = { spend: zeroMoney(), count: 0, buckets: [] }
+  const reimbursable: ReimbursableTotals = { spend: zeroMoney(), owed: zeroMoney(), own: zeroMoney(), count: 0, buckets: [] }
   let counted = 0
   let internal = 0
 
@@ -122,11 +129,16 @@ export function aggregate(
     if (isReimbursable(transaction, reimbursableTag)) {
       const tags = bucketOf(transaction, reimbursableTag)
       const label = bucketLabel(tags)
-      const bucket = claimed.get(label) ?? { label, tags, spend: zeroMoney(), count: 0 }
+      const bucket = claimed.get(label) ?? { label, tags, spend: zeroMoney(), owed: zeroMoney(), own: zeroMoney(), count: 0 }
+      // Split by who paid: a family account is owed it back; an account kept
+      // out of the family budget (a personal card) settles it directly.
+      const part = excluded.has(transaction.accountId) ? 'own' : 'owed'
       addTo(bucket.spend, transaction.currency, -transaction.amount)
+      addTo(bucket[part], transaction.currency, -transaction.amount)
       bucket.count++
       claimed.set(label, bucket)
       addTo(reimbursable.spend, transaction.currency, -transaction.amount)
+      addTo(reimbursable[part], transaction.currency, -transaction.amount)
       reimbursable.count++
       continue
     }

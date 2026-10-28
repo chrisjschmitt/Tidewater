@@ -55,12 +55,16 @@ export default function ReimbursablePanel({
   )
   const { reimbursable } = actuals
 
-  const rowsFor = (label: string) =>
+  // The same rows the totals count, split the same way: paid from a family
+  // account (owed back) or from an account kept out of the budget (settled
+  // directly). Before, the list left the second kind out while the total kept
+  // it, so a bucket could show an amount over an empty list.
+  const rowsFor = (label: string, own: boolean) =>
     transactions
       .filter(
         (t) =>
           !t.internal &&
-          !excluded.has(t.accountId) &&
+          excluded.has(t.accountId) === own &&
           includes(period, t.date) &&
           isReimbursable(t, tag) &&
           bucketLabel(bucketOf(t, tag)) === label,
@@ -80,11 +84,17 @@ export default function ReimbursablePanel({
           </p>
         </header>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Figure label="Reimbursable out" money={reimbursable.spend} />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Figure label="Owed to the family accounts" money={reimbursable.owed} />
+          <Figure label="On your own accounts" money={reimbursable.own} />
           <Figure label="Budget spending" money={actuals.spend} />
           <Figure label="Total out" money={actuals.totalOut} />
         </div>
+        <p className="mt-3 text-xs text-ink-400">
+          “Owed to the family accounts” is what was paid for someone from an account that counts in the budget — the
+          amount to transfer back. “On your own accounts” was charged to an account kept out of the family budget (a
+          personal card) and is settled there directly, so nobody owes it to the family accounts.
+        </p>
 
         <p className="mt-3 text-xs text-ink-400">
           {reimbursable.count.toLocaleString()} transaction
@@ -123,12 +133,18 @@ export default function ReimbursablePanel({
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
-                  {presentIn(bucket.spend).map(([currency, value]) => (
+                  {(presentIn(bucket.owed).length > 0 ? presentIn(bucket.owed) : [['CAD', 0] as const]).map(([currency, value]) => (
                     <span
                       key={currency}
                       className="block text-sm font-semibold tabular-nums text-ink-900"
+                      title="Owed to the family accounts"
                     >
-                      {amountIn(Math.abs(value), currency)}
+                      {amountIn(value, currency)} owed
+                    </span>
+                  ))}
+                  {presentIn(bucket.own).map(([currency, value]) => (
+                    <span key={`own-${currency}`} className="block text-[11px] tabular-nums text-ink-400">
+                      + {amountIn(value, currency)} on your own accounts
                     </span>
                   ))}
                 </span>
@@ -141,11 +157,20 @@ export default function ReimbursablePanel({
                     bucket={bucket.label}
                     onChange={onConfigChange}
                   />
+                  <p className="px-4 pt-3 text-[11px] uppercase tracking-wider text-ink-400">Owed to the family accounts</p>
                   <TransactionTable
-                    rows={rowsFor(bucket.label)}
-                    empty="Nothing here in this period."
+                    rows={rowsFor(bucket.label, false)}
+                    empty="Nothing paid from the family accounts in this period."
                     omitTags={[tag]}
                   />
+                  {presentIn(bucket.own).length > 0 && (
+                    <>
+                      <p className="px-4 pt-3 text-[11px] uppercase tracking-wider text-ink-400">
+                        On your own accounts — settled directly, not owed
+                      </p>
+                      <TransactionTable rows={rowsFor(bucket.label, true)} empty="None." omitTags={[tag]} />
+                    </>
+                  )}
                 </div>
               )}
             </div>

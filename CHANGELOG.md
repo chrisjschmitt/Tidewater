@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.28 — 2026-10-28
+
+### Fixed
+- Reimbursable: a bucket's total counted charges on accounts kept out of the family budget (a personal card) while its list left them out, so a bucket could show an amount over an empty list (Chris Business: $72.88, no rows).
+
+### Changed
+- Reimbursable now splits every bucket, and the totals, by who paid: "owed" — paid from accounts that count in the family budget, the amount to transfer back — and "on your own accounts" — charged to an account kept out of the budget and settled there directly, not owed to the family accounts. Each bucket's list shows both, under those headings.
+
 ## 0.13.27 — 2026-10-26
 
 ### Changed
