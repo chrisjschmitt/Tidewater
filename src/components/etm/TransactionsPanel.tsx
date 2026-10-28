@@ -53,18 +53,23 @@ export default function TransactionsPanel({
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
   const choices = useMemo(() => optionsFrom(transactions), [transactions])
 
+  // Newest first, then by merchant: the order shown and the order the
+  // Budget so far column adds up in.
   const rows = useMemo(
-    () => filterTransactions(transactions, period, filters),
+    () =>
+      filterTransactions(transactions, period, filters).sort(
+        (a, z) => z.date.localeCompare(a.date) || a.merchant.localeCompare(z.merchant) || a.id.localeCompare(z.id),
+      ),
     [transactions, period, filters],
   )
 
-  // The Budget tab's “spent”, row by row: oldest first, so the newest row's
-  // figure is the period's total and can be matched against the Budget tab.
+  // The Budget tab's “spent”, row by row, added from the bottom of the list
+  // up — the order shown, newest first — so each figure is that row plus
+  // everything below it, and the top row's is the period's total.
   const budgetRunning = useMemo(() => {
     const running = new Map<string, number>()
     let sum = 0
-    const chronological = [...rows].sort((a, z) => a.date.localeCompare(z.date) || a.id.localeCompare(z.id))
-    for (const t of chronological) {
+    for (const t of [...rows].reverse()) {
       if (t.currency !== 'CAD' || !countsAsBudgetSpend(t, reimbursableTag, accounts)) continue
       sum = Math.round((sum - t.amount) * 100) / 100
       running.set(t.id, sum)

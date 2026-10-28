@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.34 — 2026-10-28
+
+### Fixed
+- Transactions → Budget so far now adds up in the order shown (newest first, by merchant within a day), so each figure is that row plus everything below it and the top row is the period's total. Before, rows within a day were added in an internal order, so the figures looked jumbled even though the totals were right.
+
 ## 0.13.33 — 2026-10-28
 
 ### Added
