@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.35 — 2026-10-28
+
+### Added
+- Expenses opens with **Data on this device**: how far its TD and Monarch rows reach, and when and on which device its data last changed (e.g. "TD to Oct 28 · Monarch to Oct 28 · last changed Oct 28, 9:16 AM on Mac · Chrome").
+- **Check the latest backup**: pick the newest backup file (iCloud → Tidewater/Backups) and Tidewater says whether it holds the same data, newer data (with a Restore button), or older data than this device. In Chrome on the Mac, with the backup folder allowed, it checks the folder by itself on opening.
+- Backups now carry that record in plain text — dates and a device name only, no amounts, merchants or accounts — and restoring one carries it over, so the iPad shows the Mac's date after a restore. Backups made before this release can't be compared; their file date is the guide.
+
 ## 0.13.34 — 2026-10-28
 
 ### Fixed

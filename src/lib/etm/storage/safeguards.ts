@@ -120,6 +120,31 @@ export async function forgetBackupFolder(): Promise<void> {
   }
 }
 
+/**
+ * The newest full backup in the chosen backup folder, when the browser lets
+ * Tidewater read it without asking (Chrome, permission already given).
+ * Undefined anywhere else — Safari and the iPad pick the file instead.
+ */
+export async function newestBackupInFolder(): Promise<File | undefined> {
+  const folder = (await rememberedBackupFolder()) as
+    | (BackupFolderHandle & {
+        values?: () => AsyncIterable<{ kind: string; name: string; getFile?: () => Promise<File> }>
+      })
+    | undefined
+  if (!folder?.values || (await backupFolderPermission(folder)) !== 'granted') return undefined
+  try {
+    let newest: File | undefined
+    for await (const entry of folder.values()) {
+      if (entry.kind !== 'file' || !/^tidewater-backup-.*\.json$/.test(entry.name) || !entry.getFile) continue
+      const file = await entry.getFile()
+      if (!newest || file.lastModified > newest.lastModified) newest = file
+    }
+    return newest
+  } catch {
+    return undefined
+  }
+}
+
 /** Whether Tidewater may write there now without asking ('prompt' needs a click first). */
 export async function backupFolderPermission(folder: BackupFolderHandle): Promise<PermissionState> {
   try {

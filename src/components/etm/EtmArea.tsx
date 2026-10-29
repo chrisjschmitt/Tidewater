@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AccountsPanel from './AccountsPanel'
 import BudgetPanel from './BudgetPanel'
 import ForecastPanel from './ForecastPanel'
@@ -38,6 +38,8 @@ import {
   type PlanNotes,
 } from '../../lib/forecast/planNotes'
 import type { Budget } from '../../lib/types'
+import FreshnessBar from './FreshnessBar'
+import { digest, noteData, readFreshness, writeFreshness, type Freshness } from '../../lib/etm/freshness'
 
 interface Props {
   data: EtmData
@@ -108,6 +110,46 @@ export default function EtmArea({
     const timer = window.setTimeout(() => void autoBackUpNow(), 15_000)
     return () => window.clearTimeout(timer)
   }, [batchSignature, data.loading, autoBackUpNow])
+  // How fresh this device's data is: a digest of everything a backup holds
+  // (transactions, settings, the plan). A new digest means it changed here.
+  const freshnessInput = useMemo(() => {
+    if (data.loading) return undefined
+    const rows = data.allRows
+    const latest = (source: string) =>
+      rows.reduce<string | undefined>((max, t) => (t.source === source && (!max || t.date > max) ? t.date : max), undefined)
+    const signature = digest(
+      JSON.stringify([
+        rows.map((t) => [t.id, t.date, t.amount, t.category, t.tags, t.notes, t.reviewed, t.split, t.duplicateOf, t.budgetDate]),
+        data.accounts,
+        data.config,
+        data.forecastConfig,
+        [budget.income, budget.expenses, budget.goals],
+      ]),
+    )
+    // Before this device kept a record, its last import is the best guess at
+    // when its data last changed — not the moment it was first opened.
+    const lastImport = data.batches.reduce<string | undefined>(
+      (max, b) => (!max || b.importedAt > max ? b.importedAt : max),
+      undefined,
+    )
+    return { signature, tdThrough: latest('td'), monarchThrough: latest('monarch'), lastImport }
+  }, [data.loading, data.batches, data.allRows, data.accounts, data.config, data.forecastConfig, budget.income, budget.expenses, budget.goals])
+  const [freshness, setFreshness] = useState<Freshness | undefined>(() => readFreshness())
+  useEffect(() => {
+    if (!freshnessInput) return
+    const next = noteData(
+      {
+        signature: freshnessInput.signature,
+        ...(freshnessInput.tdThrough ? { tdThrough: freshnessInput.tdThrough } : {}),
+        ...(freshnessInput.monarchThrough ? { monarchThrough: freshnessInput.monarchThrough } : {}),
+      },
+      readFreshness(),
+      ...(readFreshness() ? [] : [freshnessInput.lastImport]),
+    )
+    writeFreshness(next)
+    setFreshness(next)
+  }, [freshnessInput])
+
   // Plan-only pins from before 0.13.12 become plan changes for their month,
   // once, so every Plan figure agrees.
   const pinsMoved = useRef(false)
@@ -195,6 +237,7 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
+            {tab !== 'settings' && onRestoreBackup && <FreshnessBar freshness={freshness} onRestore={onRestoreBackup} />}
             {tab !== 'settings' && safeguards.auto && safeguards.folder && !safeguards.folder.allowed && (
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3">
                 <p className="text-sm text-ink-700">

@@ -93,6 +93,7 @@ import type { Account, BalanceSnapshot, ReconciliationRecord, Transaction } from
 import { backupFileName, parseTidewaterBackup, serializeTidewaterBackup } from '../src/lib/backup.ts'
 import { settleUp } from '../src/lib/etm/settleUp.ts'
 import { reimbursableCsv } from '../src/lib/etm/reimbursableExport.ts'
+import { asFreshness, compareFreshness, deviceName, digest, freshnessInBackup, noteData } from '../src/lib/etm/freshness.ts'
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 
@@ -1286,6 +1287,32 @@ check(
     pending: 40,
   })?.pending === 40,
 )
+
+
+console.log('\n=== Which copy is newest ===')
+{
+  const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+  const ipad = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15'
+  check('a Mac running Chrome is named so', deviceName(mac, 0) === 'Mac · Chrome', deviceName(mac, 0))
+  check('an iPad posing as a Mac is told apart by touch', deviceName(ipad, 5) === 'iPad · Safari', deviceName(ipad, 5))
+  check('the digest is stable and notices a change', digest('abc') === digest('abc') && digest('abc') !== digest('abd'))
+
+  const first = noteData({ signature: 's1', tdThrough: '2026-10-28' }, undefined, '2026-10-28T13:00:00.000Z', '2026-10-28T20:00:00.000Z', 'Mac · Chrome')
+  check('with no record yet, the last import dates the data, not the first open', first.changedAt === '2026-10-28T13:00:00.000Z' && first.device === 'Mac · Chrome')
+  const reopened = noteData({ signature: 's1', tdThrough: '2026-10-28' }, first, undefined, '2026-10-29T08:00:00.000Z', 'iPad · Safari')
+  check('the same data on another open (or after a restore) keeps its date and device', reopened.changedAt === first.changedAt && reopened.device === 'Mac · Chrome')
+  const changed = noteData({ signature: 's2' }, first, undefined, '2026-10-29T08:00:00.000Z', 'iPad · Safari')
+  check('changed data is dated now, on this device', changed.changedAt === '2026-10-29T08:00:00.000Z' && changed.device === 'iPad · Safari')
+
+  const older = { changedAt: '2026-10-22T20:05:00.000Z', device: 'iPad · Safari', signature: 'old' }
+  check('a backup with newer data is reported newer', compareFreshness(older, first) === 'backup-newer')
+  check('this device ahead of the backup is reported so', compareFreshness(first, older) === 'device-newer')
+  check('the same data is up to date', compareFreshness(first, { ...first }) === 'same')
+  check('a backup from before dating began is unknown', compareFreshness(first, undefined) === 'unknown')
+  const file = JSON.stringify({ version: 1, income: [], expenses: [], etm: { version: 1, freshness: first } })
+  check('the record is read from a backup file', freshnessInBackup(file)?.signature === 's1' && freshnessInBackup('{not json') === undefined)
+  check('a damaged record is ignored', asFreshness({ changedAt: 'yesterday', device: 'x', signature: 'y' }) === undefined)
+}
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)

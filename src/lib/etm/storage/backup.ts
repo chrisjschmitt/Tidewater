@@ -1,6 +1,7 @@
 import { setEtmPresence } from '../../storage'
 import { RECORD_STORES, openEtmDb, type RecordStore, type SealedRecord, type VaultMeta } from './db'
 import { readVaultMeta } from './vault'
+import { asFreshness, readFreshness, writeFreshness, type Freshness } from '../freshness'
 
 /** JSON-safe ciphertext. The key is never in this object. */
 export interface EtmVaultBackup {
@@ -10,6 +11,8 @@ export interface EtmVaultBackup {
   sentinel: { iv: string; data: string }
   createdAt: string
   stores: Record<RecordStore, Array<{ id: string; iv: string; data: string }>>
+  /** In plain text, so another device can tell whether this backup is newer (freshness.ts). */
+  freshness?: Freshness
 }
 
 /**
@@ -27,7 +30,8 @@ export async function exportEtmVault(): Promise<EtmVaultBackup | null> {
     for (const name of RECORD_STORES) {
       stores[name] = await db.getAll(name)
     }
-    return encodeVaultBackup(meta, stores)
+    const freshness = readFreshness()
+    return { ...encodeVaultBackup(meta, stores), ...(freshness ? { freshness } : {}) }
   } finally {
     db.close()
   }
@@ -57,6 +61,8 @@ export async function restoreEtmVault(raw: unknown): Promise<void> {
     db.close()
   }
 
+  // The restored data is as fresh as the device that backed it up.
+  writeFreshness(asFreshness((raw as { freshness?: unknown } | null)?.freshness))
   await setEtmPresence({ setUp: true, remembered: false })
 }
 
