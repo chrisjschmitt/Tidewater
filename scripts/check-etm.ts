@@ -315,8 +315,13 @@ check('a tag-only edit is enough to count as changed', await tagEditIsAnUpdate()
 
 console.log('\n=== Backup file names ===')
 const oct26 = new Date(2026, 9, 26, 21, 30)
-check('a full backup is named tidewater-backup-<local day>', backupFileName(true, oct26) === 'tidewater-backup-2026-10-26.json')
-check('a plan-only backup says so in its name', backupFileName(false, oct26) === 'tidewater-plan-only-2026-10-26.json')
+check('a full backup is named tidewater-backup-<local day and time>', /^tidewater-backup-2026-10-26-\d{4}\.json$/.test(backupFileName(true, oct26)), backupFileName(true, oct26))
+check('a plan-only backup says so in its name', /^tidewater-plan-only-2026-10-26-\d{4}\.json$/.test(backupFileName(false, oct26)))
+check(
+  'the time is local and 24-hour, so names sort in order',
+  backupFileName(true, new Date(2026, 9, 28, 20, 22)) === 'tidewater-backup-2026-10-28-2022.json' &&
+    backupFileName(true, new Date(2026, 9, 28, 9, 5)) < backupFileName(true, new Date(2026, 9, 28, 20, 22)),
+)
 
 console.log('\n=== Rows Monarch no longer has ===')
 

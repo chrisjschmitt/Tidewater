@@ -91,7 +91,8 @@ export default function BackupCard({ safeguards, onRestore }: { safeguards: Safe
                 </button>
               </div>
               <p className="mt-2 text-xs text-ink-400">
-                One file a day (tidewater-backup-YYYY-MM-DD.json), rewritten with that day’s latest. Chrome may ask
+                Each backup is its own file, named by day and time (tidewater-backup-YYYY-MM-DD-HHMM.json); automatic
+                backups during one visit update that visit’s file. Older files stay until you delete them. Chrome may ask
                 once per visit before writing — choose “Allow on every visit” to make it silent.
               </p>
             </>

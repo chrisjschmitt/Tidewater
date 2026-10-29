@@ -188,11 +188,16 @@ async function writeInto(folder: { getFileHandle?: WritableFolder['getFileHandle
   await stream.close()
 }
 
+// One automatic backup file per visit: a run of imports and reviews keeps
+// rewriting it, so the folder gains a file per sitting, not per edit.
+let autoFileName: string | undefined
+
 /**
  * The automatic backup: into the chosen backup folder, only when the browser
  * already allows it (no dialog can open without a click). Returns where it
- * went, or undefined when it could not be made silently. One file per day,
- * rewritten through the day, so each day keeps its last state.
+ * went, or undefined when it could not be made silently. Named by the day and
+ * time of the visit's first automatic backup, and rewritten for the rest of
+ * that visit.
  */
 export async function autoBackUp(budget: Budget): Promise<string | undefined> {
   if (!autoBackupOn()) return undefined
@@ -200,7 +205,10 @@ export async function autoBackUp(budget: Budget): Promise<string | undefined> {
   if (!folder || (await backupFolderPermission(folder)) !== 'granted') return undefined
   try {
     const vault = await exportEtmVault()
-    const name = backupFileName(Boolean(vault))
+    if (!autoFileName || autoFileName.startsWith('tidewater-plan-only') === Boolean(vault)) {
+      autoFileName = backupFileName(Boolean(vault))
+    }
+    const name = autoFileName
     await writeInto(folder, name, serializeTidewaterBackup(budget, vault ?? undefined))
     markBackedUp()
     return `${folder.name}/${name}`

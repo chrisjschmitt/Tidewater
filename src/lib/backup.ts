@@ -80,6 +80,8 @@ function asProfile(value: unknown): Profile {
  * data) or the plan alone, dated by the local day.
  */
 export function backupFileName(withExpenses: boolean, now = new Date()): string {
-  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  return withExpenses ? `tidewater-backup-${day}.json` : `tidewater-plan-only-${day}.json`
+  const two = (n: number) => String(n).padStart(2, '0')
+  // Local day and time (24-hour), so every backup is its own file and names sort in order.
+  const stamp = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`
+  return withExpenses ? `tidewater-backup-${stamp}.json` : `tidewater-plan-only-${stamp}.json`
 }

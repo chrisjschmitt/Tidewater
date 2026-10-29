@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.37 — 2026-10-28
+
+### Changed
+- Backup files are named by day **and time** (e.g. `tidewater-backup-2026-10-28-2022.json`), so every backup is its own file and two devices can't hold different versions of "today's" file. Automatic backups during one visit keep updating that visit's file, so a run of imports and reviews adds one file, not one per edit. Older files are never deleted by Tidewater.
+
 ## 0.13.36 — 2026-10-28
 
 ### Fixed
