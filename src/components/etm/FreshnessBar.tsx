@@ -27,7 +27,7 @@ export default function FreshnessBar({
 
   const check = async (file: File) => {
     const backup = freshnessInBackup(await file.text())
-    setFound({ file, backup, result: compareFreshness(freshness, backup) })
+    setFound({ file, backup, result: compareFreshness(freshness, backup, file.lastModified) })
   }
 
   // Where the backup folder can be read without asking, look on opening.
@@ -37,7 +37,7 @@ export default function FreshnessBar({
     void newestBackupInFolder().then(async (file) => {
       if (!file || cancelled) return
       const backup = freshnessInBackup(await file.text())
-      if (!cancelled) setFound({ file, backup, result: compareFreshness(freshness, backup) })
+      if (!cancelled) setFound({ file, backup, result: compareFreshness(freshness, backup, file.lastModified) })
     })
     return () => {
       cancelled = true
@@ -85,7 +85,9 @@ export default function FreshnessBar({
             {found.result === 'device-newer' &&
               `This device has newer changes than ${found.file.name} (${describe(found.backup!)}). Back up here so other devices can catch up.`}
             {found.result === 'unknown' &&
-              `${found.file.name} doesn’t say when its data changed — it was made before 0.13.35. Its file date is the best guide.`}
+              (found.backup
+                ? `${found.file.name} holds different data from this device, and its dates don’t say which is newer. If it was saved on the device you last worked on, restore it.`
+                : `${found.file.name} doesn’t say when its data changed — it was made before 0.13.35. Its file date is the best guide.`)}
           </p>
           {newer && (
             <button type="button" className="btn-primary text-xs" onClick={() => onRestore(found.file)}>

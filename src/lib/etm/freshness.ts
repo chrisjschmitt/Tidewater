@@ -124,11 +124,25 @@ export function noteData(
 
 export type Comparison = 'same' | 'backup-newer' | 'device-newer' | 'unknown'
 
-/** How a backup's data compares with this device's. */
-export function compareFreshness(device: Freshness | undefined, backup: Freshness | undefined): Comparison {
+/**
+ * How a backup's data compares with this device's. When both say the same
+ * moment but hold different data — the first record on each device is dated
+ * by its last import, and later changes that weren't imports leave that date
+ * alone — the backup file's own save time decides: saved after this device's
+ * data last changed, it is the newer copy.
+ */
+export function compareFreshness(
+  device: Freshness | undefined,
+  backup: Freshness | undefined,
+  fileSavedAt?: number,
+): Comparison {
   if (!device || !backup) return 'unknown'
   if (device.signature === backup.signature) return 'same'
-  return Date.parse(backup.changedAt) > Date.parse(device.changedAt) ? 'backup-newer' : 'device-newer'
+  const here = Date.parse(device.changedAt)
+  const there = Date.parse(backup.changedAt)
+  if (there !== here) return there > here ? 'backup-newer' : 'device-newer'
+  if (fileSavedAt === undefined || !Number.isFinite(fileSavedAt)) return 'unknown'
+  return fileSavedAt > here ? 'backup-newer' : 'unknown'
 }
 
 /** The freshness record inside a backup file's text, if it has one. */

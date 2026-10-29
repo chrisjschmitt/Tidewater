@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.36 — 2026-10-28
+
+### Fixed
+- Check the latest backup: when the backup and this device carry the same "last changed" time but different data (the first record on each device is dated by its last import), the backup file's save time now decides, instead of wrongly saying this device is newer.
+
 ## 0.13.35 — 2026-10-28
 
 ### Added
