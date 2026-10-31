@@ -21,6 +21,12 @@ export interface StatementReading {
   /** Rows read, so the user can tell a truncated file from a whole one. */
   rows: number
   firstDate: string
+  /**
+   * The closing balance at the end of each day in the file, oldest first,
+   * with that day's row count — so a month can be closed on its own last day
+   * even when the file runs past it (see `readingThrough`).
+   */
+  byDay?: Array<{ date: string; balance: number; rows: number }>
 }
 
 export class StatementFormatError extends Error {
@@ -70,14 +76,50 @@ export function parseStatementCsv(text: string): StatementReading {
   const sorted = [...readings].sort((a, z) => a.date.localeCompare(z.date))
   const latest = sorted[sorted.length - 1]!.date
   const newestFirst = fileRunsNewestFirst(readings)
-  const onLatest = readings.filter((reading) => reading.date === latest)
-  const closing = newestFirst ? onLatest[0]! : onLatest[onLatest.length - 1]!
+  const closingOn = (date: string) => {
+    const on = readings.filter((reading) => reading.date === date)
+    return { row: newestFirst ? on[0]! : on[on.length - 1]!, rows: on.length }
+  }
+  const closing = closingOn(latest).row
+  const days = [...new Set(sorted.map((reading) => reading.date))]
 
   return {
     date: closing.date,
     balance: closing.balance,
     rows: readings.length,
     firstDate: sorted[0]!.date,
+    byDay: days.map((date) => {
+      const { row, rows } = closingOn(date)
+      return { date, balance: row.balance, rows }
+    }),
+  }
+}
+
+/**
+ * The reading as it stood at the end of `end`, when the file runs past it.
+ * TD dates weekend and holiday activity on a chequing account with the next
+ * business day, and its running balance already includes it — so the month's
+ * closing balance is the one after the last row dated within the month.
+ * Undefined when the file has nothing on or before `end`, or no daily balances.
+ */
+export function readingThrough(
+  reading: StatementReading,
+  end: string,
+): { reading: StatementReading; later: { rows: number; firstDate: string } } | undefined {
+  if (reading.date <= end || !reading.byDay) return undefined
+  const upTo = reading.byDay.filter((day) => day.date <= end)
+  const last = upTo[upTo.length - 1]
+  if (!last) return undefined
+  const after = reading.byDay.filter((day) => day.date > end)
+  return {
+    reading: {
+      date: last.date,
+      balance: last.balance,
+      rows: upTo.reduce((sum, day) => sum + day.rows, 0),
+      firstDate: reading.firstDate,
+      byDay: upTo,
+    },
+    later: { rows: after.reduce((sum, day) => sum + day.rows, 0), firstDate: after[0]!.date },
   }
 }
 

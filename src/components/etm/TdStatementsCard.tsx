@@ -245,6 +245,7 @@ function StatementFolderReviewTable({
                     <Tag tone="warn">Outside {monthName(month).split(' ')[0]}</Tag>
                   )}
                   {row.carriedFrom && <Tag>Carried forward</Tag>}
+                  {row.heldBack && <Tag>Month-end balance</Tag>}
                 </span>
                 <span className="block text-[11px] text-ink-400">
                   {isReadable(row) && row.carriedFrom
@@ -257,6 +258,13 @@ function StatementFolderReviewTable({
                         ? 'Not recorded: this account has no last four digits, so nothing in the file could be matched to it. Add them on the Accounts tab, then read the file again.'
                         : `Nothing in the file for …${row.account.lastFour}. TD skips an account with no transactions in the period; enter its balance by hand if so.`}
                 </span>
+                {row.heldBack && (
+                  <span className="mt-0.5 block text-[11px] text-ink-500">
+                    The balance before {row.heldBack.rows} row{row.heldBack.rows === 1 ? '' : 's'} TD dated{' '}
+                    {row.heldBack.firstDate} — weekend or holiday activity TD posts on the next business day. They
+                    count in {monthName(nextMonthOf(month))}, so {monthName(month).split(' ')[0]}’s rows explain this balance exactly.
+                  </span>
+                )}
               </span>
             </label>
           )
@@ -443,3 +451,8 @@ const Tag = ({ children, tone }: { children: React.ReactNode; tone?: 'warn' }) =
     {children}
   </span>
 )
+
+const nextMonthOf = (month: string): string => {
+  const [y, m] = month.split('-').map(Number)
+  return m === 12 ? `${y! + 1}-01` : `${y}-${String(m! + 1).padStart(2, '0')}`
+}

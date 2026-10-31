@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.38 — 2026-10-31
+
+### Fixed
+- Closing balances for a bank account now close the month on its own last row. TD dates weekend and holiday activity on a chequing account with the next business day (a Saturday ATM withdrawal shows as Monday) and its running balance already includes it, so a download made on the weekend ran ahead of the month's rows and the month wouldn't reconcile. The balance recorded is now the one after the month's last row, marked "Month-end balance", with a note of how many rows TD dated into the next month — they count there. Card files keep the "Outside the month" warning.
+
 ## 0.13.37 — 2026-10-28
 
 ### Changed

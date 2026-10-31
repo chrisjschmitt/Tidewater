@@ -223,6 +223,39 @@ check('missing and nothing recorded before: nothing invented', !noHistory.readin
 const lateMonth = reviewRows(accounts, quietRead, '2026-11', { balances: [], downloadDate: '2026-10-07' }).find((r) => r.account.id === visa.id)!
 check('a download from before the month carries nothing into it', !lateMonth.carriedFrom && lateMonth.outsideMonth === true)
 
+console.log('=== A month closed on its own last row ===')
+// TD dates weekend activity on a bank account with the next business day, and
+// its running balance already includes it: October closes before those rows.
+const weekend = parseStatementCsv(
+  [
+    '2026-10-30,INSURANCE,63.82,,1000.00',
+    '2026-10-30,FEE,3.75,,996.25',
+    '2026-11-02,TFR-FR SAVINGS,,150.00,1146.25',
+    '2026-11-02,NON-TD ATM W/D,104.50,,1041.75',
+  ].join('\n'),
+)
+check('the file’s closing balance is its last row', weekend.date === '2026-11-02' && weekend.balance === 1041.75)
+const weekendFile = { name: 'TD-transactions-2026-10-31.csv', labelSlug: 'everyday', lastFour: '1111', date: '2026-10-31' }
+const octClose = reviewRows(accounts, new Map([[chequing.id, { file: weekendFile, reading: weekend }]]), '2026-10', {
+  balances: [],
+  downloadDate: '2026-10-31',
+}).find((r) => r.account.id === chequing.id)!
+check(
+  'October closes on its last row, before the rows TD dated Nov 2',
+  octClose.balance === 996.25 && octClose.reading?.date === '2026-10-30' && !octClose.outsideMonth,
+  `${octClose.balance} ${octClose.reading?.date}`,
+)
+check('and says how many rows it left for November', octClose.heldBack?.rows === 2 && octClose.heldBack.firstDate === '2026-11-02')
+check('it is recorded as October’s balance', snapshotFor(octClose, 'b3')?.date === '2026-10-30' && snapshotFor(octClose, 'b3')?.balance === 996.25)
+const novClose = reviewRows(accounts, new Map([[chequing.id, { file: weekendFile, reading: weekend }]]), '2026-11', { balances: [] }).find(
+  (r) => r.account.id === chequing.id,
+)!
+check('November takes the whole file', novClose.balance === 1041.75 && !novClose.heldBack)
+const weekendCard = reviewRows(accounts, new Map([[visa.id, { file: weekendFile, reading: weekend }]]), '2026-10', { balances: [] }).find(
+  (r) => r.account.id === visa.id,
+)!
+check('a card file past the month still warns instead', weekendCard.outsideMonth === true && !weekendCard.heldBack)
+
 console.log('=== Editing and the budget running total ===')
 const mk = (id: string, amount: number, category: string, extra: Partial<Transaction> = {}): Transaction => ({
   ...tdRow, id, date: '2026-10-03', amount, category, tags: [], internal: category === 'Transfer', split: undefined, ...extra,

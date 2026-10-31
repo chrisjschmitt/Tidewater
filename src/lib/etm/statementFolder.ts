@@ -1,4 +1,4 @@
-import type { StatementReading } from './statement'
+import { readingThrough, type StatementReading } from './statement'
 import { isCombinedFileName } from './td'
 import type { Account, BalanceSnapshot } from './types'
 
@@ -194,6 +194,12 @@ export interface StatementReviewRow {
   carriedFrom?: string
   /** The date the snapshot is recorded at, when it differs from the last row's. */
   asOf?: string
+  /**
+   * Rows the file dates after the month — TD's next-business-day dating of
+   * weekend activity on a bank account. The balance shown is the one before
+   * them, at the month's last row; they count in the next month.
+   */
+  heldBack?: { rows: number; firstDate: string }
 }
 
 /** What a carried-forward balance needs: the day of the download, and what is already recorded. */
@@ -252,6 +258,19 @@ export function reviewRows(
     }
     if (!read.reading) {
       return { account, file: read.file, error: read.error ?? 'That file could not be read.' }
+    }
+    // A bank file that runs past the month: close the month on its own last
+    // row. (Card files' running balances don't chain, so they keep the
+    // "outside the month" warning instead.)
+    const through = account.kind === 'credit' ? undefined : readingThrough(read.reading, monthEnd(month))
+    if (through) {
+      const reading = through.reading
+      const kept = closingBalanceOf(account, reading)
+      if (reading.date.slice(0, 7) === month) {
+        return { account, file: read.file, reading, balance: kept, heldBack: through.later }
+      }
+      const asOf = carryDate(month, read.file.date)
+      if (asOf) return { account, file: read.file, reading, balance: kept, carriedFrom: reading.date, asOf, heldBack: through.later }
     }
     const balance = closingBalanceOf(account, read.reading)
     if (read.reading.date.slice(0, 7) === month) return { account, file: read.file, reading: read.reading, balance }
