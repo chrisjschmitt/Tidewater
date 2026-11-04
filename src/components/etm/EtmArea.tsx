@@ -19,6 +19,7 @@ import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
 import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
+import FeedCompareCard from './FeedCompareCard'
 import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
 import { monthKeys, type Period } from '../../lib/etm/period'
@@ -420,6 +421,8 @@ export default function EtmArea({
                 onConfigChange={(config) => void data.saveSettings(config)}
               />
             )}
+
+            {tab === 'transactions' && <FeedCompareCard data={data} period={period} />}
 
             {tab === 'transactions' && (
               <TransactionsPanel

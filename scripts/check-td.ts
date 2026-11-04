@@ -14,6 +14,7 @@ import { monthPeriod } from '../src/lib/etm/period.ts'
 import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
 import { planTdImport } from '../src/lib/etm/importer.ts'
 import { budgetDateOf, counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
+import { dailyCompare } from '../src/lib/etm/dailyCompare.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
 import { downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
 import {
@@ -185,6 +186,36 @@ const counted = new Set(ledgerView(edge, octSwitch).map((t) => t.id))
 check('a purchase dated either side by the two feeds counts once — TD side, when TD is on or after the date', counted.has('t-late') && !counted.has('m-early'))
 check('… and the Monarch side, when TD dates it before the switch-over', counted.has('m-late') && !counted.has('t-early'))
 check('an account with no TD feed stays on Monarch after a global switch-over', counted.has('costco'))
+
+console.log('=== TD vs Monarch, day by day ===')
+{
+  const r = (id: string, source: Transaction['source'], date: string, text: string, amount: number, category: string, accountId = chequing.id): Transaction => ({
+    ...base(id, source, date, accountId), originalStatement: text, amount, category, internal: category === 'Transfer', tags: [],
+  })
+  const rows = [
+    r('mA', 'monarch', '2026-11-03', 'FOOD STORE', -50, 'Groceries'),
+    r('tA', 'td', '2026-11-03', 'FOOD STORE', -50, 'Groceries'),
+    r('mP', 'monarch', '2026-11-04', 'CAFE', -20, 'Restaurants & Bars'),
+    r('mF', 'monarch', '2026-11-02', 'CHQ', -252.08, 'Trailer park fees'),
+    r('tF', 'td', '2026-11-02', 'CHQ', -252.08, 'Transfer'),
+    r('mX', 'monarch', '2026-10-31', 'ATM W/D', -100, 'Cash for spending'),
+    r('tX', 'td', '2026-11-02', 'ATM W/D', -100, 'Cash for spending'),
+    r('hand', 'manual', '2026-11-03', 'MARKET', -10, 'Groceries'),
+    { ...r('cc', 'monarch', '2026-11-03', '', -30, 'Groceries', 'acct-otherbank') },
+  ]
+  const days = dailyCompare(rows, { period: monthPeriod('2026-11'), accounts, reimbursableTag: 'Reimbursable' })
+  const total = (side: 'monarchSpend' | 'tdSpend') => Math.round(days.reduce((s, d) => s + d[side], 0) * 100) / 100
+  check('Monarch side adds up as Monarch would count the month', total('monarchSpend') === 362.08, `${total('monarchSpend')}`)
+  check('TD side adds up as TD would count the month', total('tdSpend') === 190, `${total('tdSpend')}`)
+  const nov2 = days.find((d) => d.date === '2026-11-02')!
+  check('a purchase dated Oct 31 by Monarch and Nov 2 by TD lines up on Nov 2, Monarch counting it in October',
+    nov2.lines.some((l) => l.kind === 'paired' && l.monarch[0]?.id === 'mX' && l.monarchSpend === 0 && l.tdSpend === 100))
+  check('filed differently shows as a pair with different spend', nov2.lines.some((l) => l.kind === 'paired' && l.monarchSpend === 252.08 && l.tdSpend === 0))
+  const nov4 = days.find((d) => d.date === '2026-11-04')!
+  check('a Monarch row TD lacks (pending) is Monarch only', nov4.lines.length === 1 && nov4.lines[0]!.kind === 'monarchOnly')
+  const nov3 = days.find((d) => d.date === '2026-11-03')!
+  check('hand-entered and no-TD-feed rows are shared, same on both sides', nov3.lines.filter((l) => l.kind === 'shared').length === 2 && nov3.monarchSpend === nov3.tdSpend)
+}
 
 console.log('=== Splits ===')
 const splitRow: Transaction = {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.46 — 2026-11-04
+
+### Added
+- Transactions → **TD vs Monarch, day by day** (tap Show): for the period, budget spend each day as Monarch would count it beside as TD would — whichever feed the budget is on — with the month's totals and difference. *Only days that differ* is on by default. Tap a day for its rows side by side: the same purchase from both feeds on one line, rows only one feed has ("Only in Monarch — pending, or not in TD's file"; "Only in TD"), rows the two share (hand-entered, or an account with no TD feed), and the lines that make the difference first and marked: *Filed differently*, or *Dated differently — counts in another month on one side*.
+
 ## 0.13.45 — 2026-11-04
 
 ### Fixed
