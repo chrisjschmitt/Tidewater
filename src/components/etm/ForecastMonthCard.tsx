@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { PlanChangeRequest, PlanNote, PlanNoteDraft, PlanStory } from '../../lib/forecast/planNotes'
+import type { PlanChangeRequest, PlanNote, PlanNoteDraft } from '../../lib/forecast/planNotes'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import { forecastMix, isOutsideControlWindow, pinAddsToForecast, savingsTone, withCompareIgnores } from '../../lib/forecast/forecast'
@@ -41,8 +41,10 @@ interface Props {
   typicalPlanFor?: (key: string) => number
   /** Changes the category's plan from this month on; earlier months keep theirs. */
   onPlanChange?: (change: PlanChangeRequest) => void
-  /** Notes on plan changes and categories, shown from the Plan figure. */
-  planNotes?: PlanNotesEdit
+  /** Opens a category month by month, from its Plan figure. */
+  onOpenPlan?: (row: { key: string; label: string }) => void
+  /** Whether a category has plan notes, for the mark beside its Plan figure. */
+  hasPlanNotes?: (key: string) => boolean
   /** Opens the transactions behind a category's Actual to today. */
   onOpenActual?: (row: { key: string; label: string }) => void
   /** Opens why a category's Forecast figure is what it is. */
@@ -67,7 +69,8 @@ export default function ForecastMonthCard({
   onIgnore,
   typicalPlanFor,
   onPlanChange,
-  planNotes,
+  onOpenPlan,
+  hasPlanNotes,
   onOpenActual,
   onOpenForecast,
 }: Props) {
@@ -139,8 +142,8 @@ export default function ForecastMonthCard({
         onPlace={onPlace}
         doubleCounts={doubleCounts}
         {...(isCurrent ? { actualFor: (row: VarianceRow) => actualToDateFor(row, current.remainLines) } : {})}
-        {...(typicalPlanFor && onPlanChange
-          ? { planEdit: { typicalPlanFor, onPlanChange, ...(planNotes ? { notes: planNotes } : {}) } }
+        {...(typicalPlanFor && onPlanChange && onOpenPlan
+          ? { planEdit: { typicalPlanFor, onPlanChange, onOpen: onOpenPlan, ...(hasPlanNotes ? { hasNotes: hasPlanNotes } : {}) } }
           : {})}
         pinnedKeys={new Set(placements.map((future) => pinKey(future.category)))}
         {...(isCurrent && onOpenActual ? { onOpenActual } : {})}
@@ -397,9 +400,8 @@ function PlanVsForecastList({
         {toMonthEnd
           ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds those signed differences as you go down.'
           : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds those signed differences as you go down.'}{' '}
-        {planEdit && `Click a Plan figure to change that category's plan from ${monthName(month)} on, with a note on why; earlier months keep theirs. `}
-        {planEdit?.notes && 'The note mark beside a Plan figure shows why it is what it is. '}
-        {onOpenActual && 'Click an Actual to today figure to see its transactions. '}
+        {planEdit && 'Click a Plan figure to see that category month by month — plan beside spent and forecast — and to change its plan, with a note on why (✎ marks a category with notes). '}
+        {onOpenActual && 'Click an Actual to today figure for the same view, with this month’s transactions. '}
         {onOpenForecast && 'Click a Forecast figure to see how it was worked out. '}
         Ignore a line if you expect to hit Plan there anyway — that gap leaves
         Forecast; Plan does not change. Raise adds an amount to the category's
@@ -602,25 +604,14 @@ function CompareRow({
   onOpenForecast?: (row: { key: string; label: string }) => void
 }) {
   const pinDefault = pinAmountFor(row)
-  // One panel under the row at a time: Raise, the plan form, or its notes.
-  const [panel, setPanel] = useState<'raise' | 'plan' | 'notes' | null>(
-    planEdit?.notes?.openKey === row.key ? 'plan' : null,
-  )
-  const open = panel === 'raise'
-  const setOpen = (value: boolean | ((was: boolean) => boolean)) =>
-    setPanel((was) => ((typeof value === 'function' ? value(was === 'raise') : value) ? 'raise' : null))
+  const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState(pinDefault)
   const [why, setWhy] = useState<PlanNoteDraft>({ text: '' })
   useEffect(() => {
     setAmount(pinDefault)
     setWhy({ text: '' })
-    if (panel === 'raise') setPanel(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setOpen(false)
   }, [row.key, pinDefault])
-  useEffect(() => {
-    if (planEdit?.notes?.openKey === row.key) setPanel('plan')
-  }, [planEdit?.notes?.openKey, row.key])
-  const columnsAfter = actual !== undefined ? 7 : 6
 
   const muted = ignored ? 'text-ink-400' : 'text-ink-900'
 
@@ -654,8 +645,7 @@ function CompareRow({
               row={row}
               edit={planEdit}
               month={month}
-              onOpen={() => setPanel((was) => (was === 'plan' ? null : 'plan'))}
-              onOpenNotes={() => setPanel((was) => (was === 'notes' ? null : 'notes'))}
+              onOpen={() => planEdit.onOpen({ key: row.key, label: row.label })}
             />
           ) : (
             amountIn(row.plan, 'CAD')
@@ -749,30 +739,6 @@ function CompareRow({
           </td>
         </tr>
       )}
-      {panel === 'plan' && planEdit && (
-        <tr className={ignored ? 'bg-sand-50/60' : undefined}>
-          <td />
-          <td colSpan={columnsAfter} className="pb-3 pr-3">
-            <PlanForm
-              row={row}
-              month={month}
-              edit={planEdit}
-              onDone={() => {
-                setPanel(null)
-                planEdit.notes?.onOpened?.()
-              }}
-            />
-          </td>
-        </tr>
-      )}
-      {panel === 'notes' && planEdit?.notes && (
-        <tr className={ignored ? 'bg-sand-50/60' : undefined}>
-          <td />
-          <td colSpan={columnsAfter} className="pb-3 pr-3">
-            <NotesPanel row={row} month={month} notes={planEdit.notes} onClose={() => setPanel(null)} />
-          </td>
-        </tr>
-      )}
     </>
   )
 }
@@ -783,7 +749,7 @@ const raiseNote = (why: PlanNoteDraft): Pick<PinRequest, 'notes' | 'reviewBy'> =
 })
 
 /** The optional "Why?" and "Review by" beside a plan change. */
-function WhyFields({
+export function WhyFields({
   draft,
   onChange,
   month,
@@ -1068,58 +1034,42 @@ function Figure({
 interface PlanEdit {
   typicalPlanFor: (key: string) => number
   onPlanChange: (change: PlanChangeRequest) => void
-  notes?: PlanNotesEdit
-}
-
-export interface PlanNotesEdit {
-  storyFor: (key: string) => PlanStory
-  has: (key: string) => boolean
-  onChangeNote: (row: { key: string; label: string }, month: string, draft: PlanNoteDraft) => void
-  onStandingNote: (row: { key: string; label: string }, draft: PlanNoteDraft) => void
-  /** A category whose plan form opens on arrival — "Change plan" from Assumptions to revisit. */
-  openKey?: string
-  onOpened?: () => void
+  /** Opens the category's month-by-month plan (CategoryPlanModal). */
+  onOpen: (row: { key: string; label: string }) => void
+  /** Whether the category has notes, for the mark beside its Plan figure. */
+  hasNotes?: (key: string) => boolean
 }
 
 /**
- * The Plan figure. Clicking it opens the plan form under the row; what is
- * edited is the category's typical-month plan — a pin on this month still
- * adds on top and is shown beside it. The note mark opens why.
+ * The Plan figure. Tapping it — or the note mark beside it — opens the
+ * category month by month; a pin on this month is shown as included.
  */
 function PlanCell({
   row,
   month,
   edit,
   onOpen,
-  onOpenNotes,
 }: {
   row: VarianceRow
   month: string
   edit: PlanEdit
   onOpen: () => void
-  onOpenNotes: () => void
 }) {
   const typical = edit.typicalPlanFor(row.key)
   const pinned = Math.round((row.plan - typical) * 100) / 100
-  const noted = edit.notes?.has(row.key) ?? false
+  const noted = edit.hasNotes?.(row.key) ?? false
   return (
     <span className="inline-flex items-start justify-end gap-1">
-      {edit.notes && (
-        <button
-          type="button"
-          onClick={onOpenNotes}
-          className={`mt-0.5 rounded px-0.5 text-xs leading-none hover:bg-sand-100 ${noted ? 'text-tide-600' : 'text-ink-300'}`}
-          title={noted ? `Why the ${row.label} plan is what it is` : `Add a note on the ${row.label} plan`}
-          aria-label={noted ? `Notes on the ${row.label} plan` : `Add a note on the ${row.label} plan`}
-        >
-          {noted ? '✎' : '+'}
-        </button>
+      {noted && (
+        <span className="mt-0.5 text-xs leading-none text-tide-600" title={`${row.label} has notes`} aria-hidden="true">
+          ✎
+        </span>
       )}
       <button
         type="button"
         onClick={onOpen}
         className="rounded px-1 tabular-nums underline decoration-dotted decoration-ink-300 underline-offset-4 hover:bg-sand-100 hover:text-ink-900"
-        title={`Change the plan for ${row.label} from ${monthName(month)} on`}
+        title={`${row.label} month by month — change the plan from ${monthName(month)}`}
       >
         {amountIn(row.plan, 'CAD')}
         {pinned !== 0 && <span className="block text-[10px] text-ink-400">incl. pin {amountIn(pinned, 'CAD')}</span>}
@@ -1128,127 +1078,8 @@ function PlanCell({
   )
 }
 
-function PlanForm({ row, month, edit, onDone }: { row: VarianceRow; month: string; edit: PlanEdit; onDone: () => void }) {
-  const typical = edit.typicalPlanFor(row.key)
-  const [draft, setDraft] = useState(String(typical))
-  const [why, setWhy] = useState<PlanNoteDraft>({ text: '' })
-  const value = Number.parseFloat(draft.replace(/[$,\s]/g, ''))
-  const amount = Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : undefined
-  const save = () => {
-    if (amount === undefined) return
-    const note = why.text.trim() || why.reviewBy ? { note: why } : {}
-    if (amount !== typical) edit.onPlanChange({ key: row.key, label: row.label, month, amount, ...note })
-    else if (note.note && edit.notes) edit.notes.onChangeNote(row, month, why)
-    onDone()
-  }
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        save()
-      }}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-ink-500">
-          Plan from {monthName(month)} on
-          <input
-            autoFocus
-            onFocus={(event) => event.currentTarget.select()}
-            className="field mt-1 block w-28 py-1.5 text-right text-sm tabular-nums"
-            inputMode="decimal"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') onDone()
-            }}
-          />
-        </label>
-        <button type="submit" className="btn-primary text-xs" disabled={amount === undefined}>
-          Save
-        </button>
-        <button type="button" className="btn-quiet text-xs" onClick={onDone}>
-          Cancel
-        </button>
-      </div>
-      <WhyFields draft={why} onChange={setWhy} month={month} />
-      <p className="mt-2 text-xs text-ink-400">
-        Earlier months keep their plan. Set $0 to skip the category; it stays in this table so you can plan it again.
-      </p>
-    </form>
-  )
-}
-
-/** This month's story for one category: the standing note, the change behind this month's amount, and the history. */
-function NotesPanel({
-  row,
-  month,
-  notes,
-  onClose,
-}: {
-  row: VarianceRow
-  month: string
-  notes: PlanNotesEdit
-  onClose: () => void
-}) {
-  const story = notes.storyFor(row.key)
-  const [showHistory, setShowHistory] = useState(false)
-  const change = story.change
-  return (
-    <div className="space-y-3 rounded-2xl bg-sand-100/60 p-4 text-sm">
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-medium text-ink-900">Why the {row.label} plan is {amountIn(row.plan, 'CAD')} in {monthName(month)}</p>
-        <button type="button" className="btn-quiet text-xs" onClick={onClose}>
-          Close
-        </button>
-      </div>
-
-      <NoteLine
-        heading="About this category"
-        note={story.standing}
-        empty="No standing note — e.g. “Seasonal: higher Jun–Sep”."
-        month={month}
-        onSave={(draft) => notes.onStandingNote(row, draft)}
-      />
-
-      {change ? (
-        <NoteLine
-          heading={`${change.month === month ? 'Changed this month' : `Since ${monthName(change.month)}`}: ${amountIn(change.from, 'CAD')} → ${amountIn(change.to, 'CAD')}`}
-          note={change.note}
-          empty="No note yet."
-          month={month}
-          onSave={(draft) => notes.onChangeNote(row, change.month, draft)}
-        />
-      ) : (
-        <p className="text-xs text-ink-500">The plan hasn’t changed since plan history began; it is the Budget amount.</p>
-      )}
-
-      {story.history.length > (change ? 1 : 0) && (
-        <div>
-          <button type="button" className="btn-quiet text-xs" onClick={() => setShowHistory((value) => !value)}>
-            {showHistory ? 'Hide' : 'Full'} history ({story.history.length} change{story.history.length === 1 ? '' : 's'})
-          </button>
-          {showHistory && (
-            <ul className="mt-2 space-y-2">
-              {story.history.map((item) => (
-                <li key={item.month}>
-                  <NoteLine
-                    heading={`${monthName(item.month)}: ${amountIn(item.from, 'CAD')} → ${amountIn(item.to, 'CAD')}`}
-                    note={item.note}
-                    empty="No note yet."
-                    month={month}
-                    onSave={(draft) => notes.onChangeNote(row, item.month, draft)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function NoteLine({
+/** One note — a plan change's or the category's standing one — with Add or Edit. */
+export function NoteLine({
   heading,
   note,
   empty,

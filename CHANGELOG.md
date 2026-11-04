@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.40 — 2026-11-04
+
+### Added
+- Forecast → Plan vs forecast: tapping a category's **Plan** figure opens **<Category> by month** — a strip of the timeline's months with the plan beside what was spent (past, and this month so far) or forecast (ahead). • marks where a plan change starts, ✎ a change with a note.
+- Tap a month in the strip to see it. This month and later can be changed — **From <month> on** or **<month> only** — with **Why?** and **Review by**. Past months are the record and can't be changed there.
+- Each month (past or this one) can show its transactions; tapping **Actual to today** opens the same window on this month with its transactions listed.
+- The category's standing note and every change to its plan, each with its note, sit at the bottom. *Change plan* under Assumptions to revisit opens this window.
+
+### Changed
+- The plan form and note panel that opened under a row are replaced by this window; ✎ beside a Plan figure still marks a category with notes. Raise stays as the quick way to add to a month.
+
 ## 0.13.39 — 2026-11-04
 
 ### Added

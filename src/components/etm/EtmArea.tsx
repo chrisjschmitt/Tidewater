@@ -383,6 +383,13 @@ export default function EtmArea({
                   }
                 }}
                 onEdit={(t) => setEditingId(t.id.split('#')[0]!)}
+                onPlanForMonth={async ({ note, ...change }: PlanChangeRequest) => {
+                  await data.saveForecastSettings({
+                    ...data.forecastConfig,
+                    planHistory: withPlanForMonth(budget, data.forecastConfig.planHistory, change),
+                    ...notesFor(data.forecastConfig.planNotes, change, note, false),
+                  })
+                }}
                 {...(onExpensesChange
                   ? {
                       onPlanChange: async ({ note, ...change }: PlanChangeRequest) => {

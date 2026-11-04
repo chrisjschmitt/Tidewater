@@ -30,7 +30,6 @@ import { planAmountAt, planKey } from '../../lib/forecast/planHistory'
 import {
   dueReviews,
   hasNotes,
-  planStory,
   withChangeNote,
   withReviewed,
   withStandingNote,
@@ -38,7 +37,7 @@ import {
   type PlanChangeRequest,
   type PlanNoteDraft,
 } from '../../lib/forecast/planNotes'
-import type { PlanNotesEdit } from './ForecastMonthCard'
+import CategoryPlanModal from './CategoryPlanModal'
 
 interface Props {
   transactions: Transaction[]
@@ -53,6 +52,8 @@ interface Props {
   onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
   /** Changes a category's plan from a month on (planHistory.ts). */
   onPlanChange?: (change: PlanChangeRequest) => void
+  /** Sets a category's plan for one month only; the months around it keep theirs. */
+  onPlanForMonth?: (change: PlanChangeRequest) => void
   /** Raises a category's plan for one month, or from that month on (`onward`). */
   onPlanRaise?: (raise: { key: string; label: string; month: string; amount: number; onward: boolean; note?: PlanNoteDraft }) => void
   /** Opens the shared editor on a TD or manual row from a drill-in. */
@@ -71,6 +72,7 @@ export default function ForecastPanel({
   onNotice,
   onApplyHouseholdContribution,
   onPlanChange,
+  onPlanForMonth,
   onPlanRaise,
   onEdit,
 }: Props) {
@@ -80,7 +82,10 @@ export default function ForecastPanel({
   const [openCategory, setOpenCategory] = useState<string | null>(null)
   const [openActual, setOpenActual] = useState<{ key: string; label: string; month: string } | null>(null)
   const [openExplain, setOpenExplain] = useState<{ key: string; label: string; month: string } | null>(null)
-  const [openPlanKey, setOpenPlanKey] = useState<string | null>(null)
+  // The category open month by month (CategoryPlanModal).
+  const [openPlan, setOpenPlan] = useState<{ key: string; label: string; month: string; showTransactions?: boolean } | null>(
+    null,
+  )
   // Whether the full timeline is on screen; when it isn't, the sticky bar
   // carries a slim month strip instead.
   const [timelineInView, setTimelineInView] = useState(true)
@@ -165,23 +170,11 @@ export default function ForecastPanel({
     : []
   const gapsCopy = taggingGapsCopy(gaps.uncategorizedHousehold, gaps.parentOnlyReimbursable)
 
-  const notesFor = (month: string): PlanNotesEdit => ({
-    storyFor: (key) => planStory(budget, config.planHistory, config.planNotes, key, month),
-    has: (key) => hasNotes(config.planNotes, key),
-    onChangeNote: (row, changeMonth, draft) =>
-      onConfigChange({ ...config, planNotes: withChangeNote(config.planNotes, { ...row, month: changeMonth, ...draft }) }),
-    onStandingNote: (row, draft) =>
-      onConfigChange({ ...config, planNotes: withStandingNote(config.planNotes, { ...row, ...draft }) }),
-    ...(openPlanKey && month === currentMonth ? { openKey: openPlanKey } : {}),
-    onOpened: () => setOpenPlanKey(null),
-  })
   const reviews = dueReviews(config.planNotes, currentMonth)
   const changePlanFor = (review: DueReview) => {
     // Acting on it answers the review; the new change can carry its own note.
     onConfigChange({ ...config, planNotes: withReviewed(config.planNotes, review) })
-    setFocusedMonth(currentMonth)
-    setOpenPlanKey(review.key)
-    jumpTo('forecast-compare')
+    setOpenPlan({ key: review.key, label: review.label, month: currentMonth })
   }
 
   const placeKnownFuture = (draft: PinRequest) => {
@@ -338,7 +331,8 @@ export default function ForecastPanel({
                 ? {
                     onPlanChange,
                     typicalPlanFor: (key: string) => planAmountAt(budget, config.planHistory, key, focused.month),
-                    planNotes: notesFor(focused.month),
+                    onOpenPlan: (row: { key: string; label: string }) => setOpenPlan({ ...row, month: focused.month }),
+                    hasPlanNotes: (key: string) => hasNotes(config.planNotes, key),
                   }
                 : {})}
               onPlace={(row) => placeKnownFuture(row)}
@@ -348,7 +342,7 @@ export default function ForecastPanel({
               onIgnore={(key, ignored) =>
                 onConfigChange(withIgnoredCompare(config, focused.month, key, ignored))
               }
-              onOpenActual={(row) => setOpenActual({ ...row, month: currentMonth })}
+              onOpenActual={(row) => setOpenPlan({ ...row, month: currentMonth, showTransactions: true })}
               onOpenForecast={(row) => setOpenExplain({ ...row, month: focused.month })}
             />
           </div>
@@ -364,6 +358,37 @@ export default function ForecastPanel({
               }
               onOpenMonth={(month) => setOpenActual({ key: explanation.key, label: explanation.label, month })}
               onClose={() => setOpenExplain(null)}
+            />
+          )}
+          {openPlan && !openActual && (
+            <CategoryPlanModal
+              key={openPlan.key}
+              category={openPlan}
+              initialMonth={openPlan.month}
+              currentMonth={currentMonth}
+              calendar={household.calendar}
+              budget={budget}
+              config={config}
+              resolvedConfig={resolvedConfig}
+              transactions={transactions}
+              reimbursableParentTag={reimbursableParentTag}
+              {...(openPlan.showTransactions ? { showTransactions: true } : {})}
+              {...(onPlanChange ? { onPlanChange } : {})}
+              {...(onPlanForMonth ? { onPlanForMonth } : {})}
+              onChangeNote={(month, draft) =>
+                onConfigChange({
+                  ...config,
+                  planNotes: withChangeNote(config.planNotes, { key: openPlan.key, label: openPlan.label, month, ...draft }),
+                })
+              }
+              onStandingNote={(draft) =>
+                onConfigChange({
+                  ...config,
+                  planNotes: withStandingNote(config.planNotes, { key: openPlan.key, label: openPlan.label, ...draft }),
+                })
+              }
+              {...(onEdit ? { onEdit } : {})}
+              onClose={() => setOpenPlan(null)}
             />
           )}
           {openActual && (
