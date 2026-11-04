@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.44 — 2026-11-04
+
+### Fixed
+- Transactions → *Also show TD copies*: a TD copy now always shows under its Monarch row when that row is shown, even when the rules filed it differently (e.g. Transfer, with *Include transfers* off, or a category filter that only matches Monarch's category). Pairing now looks at the whole period, so a copy can't pair with a lookalike just because its real partner is filtered out.
+
+## 0.13.43 — 2026-11-04
+
+### Changed
+- Transactions → *Also show TD copies*: each TD copy sits directly under the Monarch row (or split rows) it matches, marked "↳ TD copy of the row above · not counted". Copies with no Monarch partner keep their place by date. Uses the same matching as Review → Rules vs Monarch.
+
+## 0.13.42 — 2026-11-04
+
+### Added
+- Transactions: *Also show TD copies (not counted until the switch-over)* lists the TD rows next to Monarch's, each with **Edit** (category, tags, split, comment).
+- The transaction editor shows the rules of yours that already cover the bank text, highlights one that files it differently, and offers to leave the rules, update that rule, or make a new one.
+
 ## 0.13.41 — 2026-11-04
 
 ### Added

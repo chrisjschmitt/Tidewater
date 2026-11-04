@@ -71,16 +71,25 @@ export default function TransactionsPanel({
       z.date.localeCompare(a.date) || a.merchant.localeCompare(z.merchant) || a.id.localeCompare(z.id)
     const base = filterTransactions(transactions, period, filters).sort(order)
     if (!showCopies || comparisonRows.length === 0) return { rows: base, partnered: new Set<string>() }
-    const copies = filterTransactions(comparisonRows, period, filters)
-    const pairs = pairFeeds(copies, base.filter((t) => t.source === 'monarch'))
+    // Pair over the whole period, not just the rows the filters leave: a copy
+    // the rules filed differently (Transfer vs Monarch's category) still
+    // belongs under its partner, and must not pair with a lookalike instead.
+    const everything = { ...noFilters(), includeInternal: true }
+    const copies = filterTransactions(comparisonRows, period, everything)
+    const pairs = pairFeeds(
+      copies,
+      filterTransactions(transactions, period, everything).filter((t) => t.source === 'monarch'),
+    )
+    const shown = new Set(filterTransactions(comparisonRows, period, filters).map((t) => t.id))
     const position = new Map(base.map((t, i) => [t.id, i]))
-    // Each matched copy follows the last of its Monarch rows in the list.
+    // Each matched copy follows the last of its Monarch rows in the list,
+    // whenever that row is shown; otherwise the filters decide.
     const after = new Map<number, Transaction[]>()
     const loose: Transaction[] = []
     for (const copy of copies) {
       const anchors = (pairs.get(copy.id) ?? []).map((m) => position.get(m.id)).filter((i): i is number => i !== undefined)
       if (anchors.length === 0) {
-        loose.push(copy)
+        if (shown.has(copy.id)) loose.push(copy)
         continue
       }
       const at = Math.max(...anchors)
