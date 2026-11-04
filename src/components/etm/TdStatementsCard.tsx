@@ -307,7 +307,7 @@ function StatementFolderReviewTable({
           <span className="block font-medium text-ink-900">Pending card charges — counted until they post</span>
           <span className="block text-xs text-ink-500">
             {review.pending.accounts
-              .map((a) => `${a.label}: ${a.charges.length} ${a.charges.length === 1 ? 'charge' : 'charges'}, ${amountIn(-a.total, 'CAD')}`)
+              .map((a) => `${a.label}: ${a.charges.length} ${a.charges.length === 1 ? 'charge' : 'charges'}, ${amountIn(a.total, 'CAD')}`)
               .join(' · ')}
           </span>
           <span className="block text-[11px] text-ink-400">

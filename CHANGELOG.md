@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.48 — 2026-11-04
+
+### Fixed
+- Import → TD statements: the pending card charges line showed totals as negative ("−$432.36"); it now reads "$432.36".
+
 ## 0.13.47 — 2026-11-04
 
 ### Added
