@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.39 — 2026-11-04
+
+### Added
+- Forecast: the bar at the top always says which month you're looking at — **"Showing January 2027 · not this month"**, with ‹ › to step a month and **Back to <this month>**. Once the household timeline scrolls out of view, a slim strip of all 24 months appears in the bar to jump between them.
+
+### Fixed
+- The Forecast bar no longer slides under the Expenses header when the header wraps onto two lines (iPad); it now sits just below it.
+
 ## 0.13.38 — 2026-10-31
 
 ### Fixed

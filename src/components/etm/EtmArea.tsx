@@ -92,6 +92,20 @@ export default function EtmArea({
   onKeyChanged,
 }: Props) {
   const [tab, setTab] = useState<Tab>('budget')
+  // The header wraps to two lines on narrower screens (the iPad); bars that
+  // stick below it read its height from --etm-header.
+  const areaRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const header = headerRef.current
+    const area = areaRef.current
+    if (!header || !area || typeof ResizeObserver === 'undefined') return
+    const update = () => area.style.setProperty('--etm-header', `${header.offsetHeight}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [])
   const [editingId, setEditingId] = useState<string | null>(null)
   const safeguards = useSafeguards(budget)
   // After an import or a review session, back up to the chosen folder — a
@@ -180,8 +194,8 @@ export default function EtmArea({
   )
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-sand-50 animate-fade">
-      <header className="sticky top-0 z-10 border-b border-sand-200/70 bg-sand-50/80 backdrop-blur-md">
+    <div ref={areaRef} className="fixed inset-0 z-40 overflow-y-auto bg-sand-50 animate-fade">
+      <header ref={headerRef} className="sticky top-0 z-10 border-b border-sand-200/70 bg-sand-50/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-4 px-6 py-3.5">
           <div className="flex flex-wrap items-center gap-6">
             <div>

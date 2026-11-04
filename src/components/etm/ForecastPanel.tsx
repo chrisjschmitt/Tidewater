@@ -6,6 +6,7 @@ import ForecastExplainModal from './ForecastExplainModal'
 import ForecastMonthCard from './ForecastMonthCard'
 import ForecastMonthEnd from './ForecastMonthEnd'
 import ForecastTimeline from './ForecastTimeline'
+import ForecastMonthStrip from './ForecastMonthStrip'
 import ForecastVacationCard from './ForecastVacationCard'
 import { taggingGapsCopy } from './forecastCopy'
 import { amountIn } from '../../lib/etm/format'
@@ -80,6 +81,21 @@ export default function ForecastPanel({
   const [openActual, setOpenActual] = useState<{ key: string; label: string; month: string } | null>(null)
   const [openExplain, setOpenExplain] = useState<{ key: string; label: string; month: string } | null>(null)
   const [openPlanKey, setOpenPlanKey] = useState<string | null>(null)
+  // Whether the full timeline is on screen; when it isn't, the sticky bar
+  // carries a slim month strip instead.
+  const [timelineInView, setTimelineInView] = useState(true)
+  useEffect(() => {
+    const target = document.getElementById('forecast-timeline')
+    if (!target || typeof IntersectionObserver === 'undefined') return
+    // The sticky header and this page's bar cover the top of the screen.
+    const covered = (document.querySelector('[style*="--etm-header"]') as HTMLElement | null)?.style.getPropertyValue('--etm-header')
+    const observer = new IntersectionObserver(
+      ([entry]) => setTimelineInView(Boolean(entry?.isIntersecting)),
+      { rootMargin: `-${(Number.parseInt(covered ?? '', 10) || 56) + 80}px 0px 0px 0px` },
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [transactions.length === 0])
   const resolvedConfig = useMemo(() => withForecastDefaults(config), [config])
 
   const lookback = useMemo(
@@ -230,7 +246,8 @@ export default function ForecastPanel({
       {!empty && (
         <nav
           aria-label="On this Forecast page"
-          className="sticky top-14 z-[9] -mx-6 flex flex-wrap items-center gap-1 border-b border-sand-200/70 bg-sand-50/90 px-6 py-2 backdrop-blur-md"
+          className="sticky z-[9] -mx-6 flex flex-wrap items-center gap-1 border-b border-sand-200/70 bg-sand-50/90 px-6 py-2 backdrop-blur-md"
+          style={{ top: 'var(--etm-header, 3.5rem)' }}
         >
           <Jump href="#forecast-timeline">Timeline</Jump>
           <button type="button" onClick={showCurrentMonth} className="btn-quiet text-xs">
@@ -241,6 +258,17 @@ export default function ForecastPanel({
           {lastVariance && <Jump href="#forecast-last-month">Last month</Jump>}
           <Jump href="#forecast-categories">Categories</Jump>
           <span className="ml-auto text-[11px] uppercase tracking-wider text-ink-400">{label}</span>
+          {focused && (
+            <div className="mt-1 w-full border-t border-sand-200/70 pt-2">
+              <ForecastMonthStrip
+                calendar={household.calendar}
+                selected={focused.month}
+                currentMonth={currentMonth}
+                showStrip={!timelineInView}
+                onSelect={setFocusedMonth}
+              />
+            </div>
+          )}
         </nav>
       )}
 
