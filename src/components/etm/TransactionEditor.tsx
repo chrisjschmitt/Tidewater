@@ -7,6 +7,7 @@ import { statementKey } from '../../lib/etm/rules/normalize'
 import type { UserRule } from '../../lib/etm/rules/types'
 import type { SplitLine, Transaction } from '../../lib/etm/types'
 import { uid } from '../../lib/format'
+import { LAYER_WORDS } from './ReviewPanel'
 
 /**
  * One form for one transaction: merchant, comment, and its category and tags —
@@ -47,6 +48,14 @@ export default function TransactionEditor({
     })),
   )
   const [remember, setRemember] = useState<'none' | 'merchant' | 'amount'>('none')
+  // The rules that already cover this bank text: yours for the merchant, and
+  // for the merchant at this amount (this account's or any account's).
+  const ruleKey = row.source === 'td' ? statementKey(row.originalStatement) : ''
+  const ownRules = data.rules.settings.userRules.filter(
+    (r) => r.key === ruleKey && (!r.accountId || r.accountId === row.accountId),
+  )
+  const merchantRule = ownRules.find((r) => r.amount === undefined)
+  const amountRule = ownRules.find((r) => r.amount === row.amount)
   const [busy, setBusy] = useState(false)
 
   const categories = useMemo(() => {
@@ -236,21 +245,16 @@ export default function TransactionEditor({
         </span>
       </div>
       {row.source === 'td' && (
-        <div className="flex flex-wrap items-center gap-3 text-xs text-ink-500">
-          Remember for next time:
-          {(
-            [
-              ['none', 'No, just this one'],
-              ['merchant', 'This merchant'],
-              ['amount', 'This merchant at this amount'],
-            ] as const
-          ).map(([id, label]) => (
-            <label key={id} className="flex items-center gap-1">
-              <input type="radio" checked={remember === id} onChange={() => setRemember(id)} />
-              {label}
-            </label>
-          ))}
-        </div>
+        <RuleChoice
+          ruleKey={ruleKey}
+          amount={row.amount}
+          {...(merchantRule ? { merchantRule } : {})}
+          {...(amountRule ? { amountRule } : {})}
+          {...(row.prediction?.layer ? { filedBy: LAYER_WORDS[row.prediction.layer] ?? row.prediction.layer } : {})}
+          category={lines.length > 1 ? `split: ${lines.map((l) => l.category || '?').join(' + ')}` : (lines[0]?.category ?? '')}
+          remember={remember}
+          onRemember={setRemember}
+        />
       )}
       <div className="flex gap-2">
         <button disabled={busy || !valid} className="btn-primary text-xs disabled:opacity-50" onClick={() => void save()}>
@@ -259,6 +263,80 @@ export default function TransactionEditor({
         <button className="btn-ghost text-xs" onClick={onDone}>
           Cancel
         </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What happens next time this bank text comes in: the rules of yours that
+ * already cover it, and whether to keep them, update one to this filing, or
+ * make a new one.
+ */
+function RuleChoice({
+  ruleKey,
+  amount,
+  merchantRule,
+  amountRule,
+  filedBy,
+  category,
+  remember,
+  onRemember,
+}: {
+  ruleKey: string
+  amount: number
+  merchantRule?: UserRule
+  amountRule?: UserRule
+  /** How the rules filed this row, in words. */
+  filedBy?: string
+  /** What it is being filed as now. */
+  category: string
+  remember: 'none' | 'merchant' | 'amount'
+  onRemember: (choice: 'none' | 'merchant' | 'amount') => void
+}) {
+  const describe = (rule: UserRule) =>
+    `${rule.outcome.split && rule.outcome.split.length > 1 ? `split: ${rule.outcome.split.map((l) => l.category).join(' + ')}` : rule.outcome.category}${
+      rule.outcome.tags.length > 0 ? ` · ${rule.outcome.tags.join(', ')}` : ''
+    }`
+  const differs = (rule?: UserRule) =>
+    Boolean(rule && category && !category.startsWith('split') && rule.outcome.category !== category)
+  const money = Math.abs(amount).toFixed(2)
+  const options: Array<['none' | 'merchant' | 'amount', string]> = [
+    ['none', merchantRule || amountRule ? 'Leave the rules as they are — just this one' : 'No rule — just this one'],
+    ['merchant', merchantRule ? 'Update the rule for this merchant' : 'New rule: this merchant, any amount'],
+    ['amount', amountRule ? `Update the rule at $${money}` : `New rule: this merchant at $${money} only`],
+  ]
+  return (
+    <div className="space-y-2 rounded-xl bg-sand-100/60 px-3 py-2 text-xs text-ink-600">
+      <p className="font-medium text-ink-700">Next time “{ruleKey}” comes in</p>
+      {merchantRule || amountRule ? (
+        <ul className="space-y-0.5">
+          {merchantRule && (
+            <li className={differs(merchantRule) ? 'text-shell-600' : undefined}>
+              Your rule for this merchant files it as {describe(merchantRule)}
+              {differs(merchantRule) && ` — not ${category}. Update it below if this is the new normal.`}
+            </li>
+          )}
+          {amountRule && (
+            <li className={differs(amountRule) ? 'text-shell-600' : undefined}>
+              Your rule at ${money} files it as {describe(amountRule)}
+              {differs(amountRule) && ` — not ${category}. Update it below if this is the new normal.`}
+            </li>
+          )}
+        </ul>
+      ) : (
+        <p className="text-ink-500">
+          No rule of yours covers it{filedBy ? `; the rules filed this one ${filedBy}` : ''}. Make one to be sure it’s
+          filed this way every time.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {options.map(([id, label]) => (
+          <label key={id} className="flex items-center gap-1">
+            <input type="radio" checked={remember === id} onChange={() => onRemember(id)} />
+            {label}
+          </label>
+        ))}
       </div>
     </div>
   )

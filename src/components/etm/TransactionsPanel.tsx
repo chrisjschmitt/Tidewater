@@ -21,6 +21,11 @@ import type { GroupId } from '../../lib/types'
 interface Props {
   accounts: Account[]
   transactions: Transaction[]
+  /**
+   * TD rows that don't count yet (before the switch-over, Monarch's copy
+   * does): listed on request, marked, editable, and never in a total.
+   */
+  comparisonRows?: Transaction[]
   period: Period
   /** Marked, never hidden: this view is the whole record (§5). */
   reimbursableTag: string
@@ -38,6 +43,7 @@ const PAGE = 250
 export default function TransactionsPanel({
   accounts,
   transactions,
+  comparisonRows = [],
   period,
   reimbursableTag,
   groups,
@@ -47,6 +53,8 @@ export default function TransactionsPanel({
   onCreateAccount,
 }: Props) {
   const [filters, setFilters] = useState<TransactionFilters>(noFilters)
+  const [showCopies, setShowCopies] = useState(false)
+  const copyIds = useMemo(() => new Set(comparisonRows.map((t) => t.id)), [comparisonRows])
   const [shown, setShown] = useState(PAGE)
   const [adding, setAdding] = useState(false)
 
@@ -57,11 +65,13 @@ export default function TransactionsPanel({
   // Budget so far column adds up in.
   const rows = useMemo(
     () =>
-      filterTransactions(transactions, period, filters).sort(
+      filterTransactions(showCopies ? [...transactions, ...comparisonRows] : transactions, period, filters).sort(
         (a, z) => z.date.localeCompare(a.date) || a.merchant.localeCompare(z.merchant) || a.id.localeCompare(z.id),
       ),
-    [transactions, period, filters],
+    [transactions, comparisonRows, showCopies, period, filters],
   )
+  // Totals are the counted rows only; TD copies shown for comparison never add in.
+  const counted = useMemo(() => (copyIds.size === 0 ? rows : rows.filter((t) => !copyIds.has(t.id))), [rows, copyIds])
 
   // The Budget tab's “spent”, row by row, added from the bottom of the list
   // up — the order shown, newest first — so each figure is that row plus
@@ -69,19 +79,19 @@ export default function TransactionsPanel({
   const budgetRunning = useMemo(() => {
     const running = new Map<string, number>()
     let sum = 0
-    for (const t of [...rows].reverse()) {
+    for (const t of [...counted].reverse()) {
       if (t.currency !== 'CAD' || !countsAsBudgetSpend(t, reimbursableTag, accounts)) continue
       sum = Math.round((sum - t.amount) * 100) / 100
       running.set(t.id, sum)
     }
     return { running, total: sum }
-  }, [rows, reimbursableTag, accounts])
+  }, [counted, reimbursableTag, accounts])
 
   const totals = useMemo(() => {
-    const inbound = sumOf(rows.filter((t) => t.amount > 0))
-    const outbound = sumOf(rows.filter((t) => t.amount < 0))
-    return { inbound, outbound: negate(outbound), net: sumOf(rows) }
-  }, [rows])
+    const inbound = sumOf(counted.filter((t) => t.amount > 0))
+    const outbound = sumOf(counted.filter((t) => t.amount < 0))
+    return { inbound, outbound: negate(outbound), net: sumOf(counted) }
+  }, [counted])
 
   const set = <K extends keyof TransactionFilters>(field: K, value: TransactionFilters[K]) => {
     setFilters((f) => ({ ...f, [field]: value }))
@@ -195,6 +205,23 @@ export default function TransactionsPanel({
             />
             Include transfers and card payments
           </label>
+          {comparisonRows.length > 0 && (
+            <label
+              className="flex cursor-pointer items-center gap-2 text-xs text-ink-600"
+              title="Before the switch-over Monarch's copy of each transaction counts; TD's copy is kept for comparison and can be edited here"
+            >
+              <input
+                type="checkbox"
+                checked={showCopies}
+                onChange={(e) => {
+                  setShowCopies(e.target.checked)
+                  setShown(PAGE)
+                }}
+                className="h-4 w-4 rounded border-sand-300 text-tide-600 focus:ring-tide-500/30"
+              />
+              Also show TD copies (not counted until the switch-over)
+            </label>
+          )}
           {touched && (
             <button
               onClick={() => {
@@ -234,7 +261,7 @@ export default function TransactionsPanel({
                   {rows.slice(0, shown).map((t) => {
                     const heldOut = reimbursableChip(t, reimbursableTag)
                     return (
-                    <tr key={t.id} className="transition hover:bg-sand-100/50">
+                    <tr key={t.id} className={`transition hover:bg-sand-100/50 ${copyIds.has(t.id) ? 'bg-sand-50/80 text-ink-500' : ''}`}>
                       <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-xs text-ink-500">
                         {t.date}
                         {t.bankDate && (
@@ -247,7 +274,8 @@ export default function TransactionsPanel({
                         <span className="flex items-center gap-2 truncate text-ink-900">
                           {t.merchant || t.originalStatement || t.category}
                           {t.source === 'manual' && <Tag>Manual</Tag>}
-                          {t.source === 'td' && <Tag>TD</Tag>}
+                          {t.source === 'td' && <Tag>{copyIds.has(t.id) ? 'TD copy · not counted' : 'TD'}</Tag>}
+                          {copyIds.has(t.id) && t.split && t.split.length > 1 && <Tag>Split in {t.split.length}</Tag>}
                           {t.splitOf && (
                             <Tag>
                               Split {t.splitOf.part} of {t.splitOf.parts}

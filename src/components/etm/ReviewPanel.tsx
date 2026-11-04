@@ -23,7 +23,7 @@ const needsLook = (row: Transaction) =>
   (row.category === 'Uncategorized' || row.prediction?.layer === 'review' || (row.prediction?.reviewReasons.length ?? 0) > 0)
 
 /** The rule layer that filed a row, in plain words. */
-const LAYER_WORDS: Record<string, string> = {
+export const LAYER_WORDS: Record<string, string> = {
   fixed: 'by a fixed rule',
   user: 'by your rule',
   learned: 'from history',

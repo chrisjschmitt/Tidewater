@@ -175,6 +175,11 @@ export default function EtmArea({
     void data.saveForecastSettings(moved)
   }, [budget, data.forecastConfig, data.saveForecastSettings])
   const editingRow = editingId ? data.allRows.find((row) => row.id === editingId) : undefined
+  // TD rows that don't count yet (Monarch's copy does, before the switch-over).
+  const tdCopies = useMemo(() => {
+    const counted = new Set(data.transactions.map((t) => t.id.split('#')[0]))
+    return data.allRows.filter((row) => row.source === 'td' && !row.duplicateOf && !counted.has(row.id))
+  }, [data.transactions, data.allRows])
   const [incomingFile, setIncomingFile] = useState<File | null>(null)
   const rememberWatchName = useCallback(
     (name: string | undefined) => data.saveSettings({ ...data.config, watchFolderName: name }),
@@ -420,6 +425,7 @@ export default function EtmArea({
               <TransactionsPanel
                 accounts={data.accounts}
                 transactions={data.transactions}
+                comparisonRows={tdCopies}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
                 groups={data.config.categoryGroups}
