@@ -179,6 +179,8 @@ export interface Transaction {
   bankDate?: string
   /** Set when the user judged this TD row a duplicate of another (that row's id): it no longer counts. */
   duplicateOf?: string
+  /** A card charge still pending at TD (never stored): counts in the budget until its posted copy arrives. */
+  pending?: boolean
   /** Set on the ledger's parts of a split row (never stored): which part, of how many, of which row. */
   splitOf?: { part: number; parts: number; parentId: string }
 }

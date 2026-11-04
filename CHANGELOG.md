@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.47 — 2026-11-04
+
+### Added
+- **Pending card charges.** TD's export holds posted transactions only, so card purchases went missing for the day or three they're pending. td-downloader 0.3.0 reads each card's *Pending Transactions* list off its EasyWeb page into `TD-pending-<date>.json` (and `npm run pending` refreshes just that). Import → TD statements reads it with the transactions file ("Pending card charges — counted until they post"), and the pending charges — filed by the same rules as TD rows — count in the dashboard, Budget, Forecast and Transactions (tagged "Pending at TD · counts until it posts", no Edit). They never count in balances or the month-end reconciliation. Each drops away by itself when its posted copy comes in; a reading older than the latest download is ignored. Only from the switch-over.
+
 ## 0.13.46 — 2026-11-04
 
 ### Added

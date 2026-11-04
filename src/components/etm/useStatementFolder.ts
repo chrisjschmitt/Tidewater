@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { planTdImport, type ImportPlan, type TdCategorizer } from '../../lib/etm/importer'
 import { parseStatementCsv, StatementFormatError } from '../../lib/etm/statement'
 import { newestCombined, parseTdCombinedCsv, pseudoFileName, TdFileError, type TdAccountBlock } from '../../lib/etm/td'
+import { newestPending, parsePendingFile, type PendingSnapshot } from '../../lib/etm/pending'
 import type { GroupId } from '../../lib/types'
 import {
   balanceAnchors,
@@ -45,6 +46,8 @@ export interface StatementFolderReview {
    * Brought in with the balances unless the user unticks it.
    */
   feed?: { plan: ImportPlan & { unmatchedBlocks: unknown[] }; fileName: string; include: boolean }
+  /** The cards' pending charges (TD-pending-<date>.json), saved on confirm. */
+  pending?: PendingSnapshot
 }
 
 /** What the combined file's rows need to become a TD import alongside the balances. */
@@ -54,6 +57,8 @@ export interface FeedOptions {
   groups?: Record<string, GroupId>
   categorize?: TdCategorizer
   onImport: (plan: ImportPlan) => Promise<void>
+  /** Keeps the latest pending-charges reading. */
+  onPending?: (snapshot: PendingSnapshot) => Promise<void>
 }
 
 export interface StatementFolderState {
@@ -134,6 +139,14 @@ export function useStatementFolder(
       let feed: StatementFolderReview['feed']
       const blockNames = new Map<string, TdAccountBlock>()
       const combined = newestCombined(listed.map((file) => file.name))
+      // The cards' pending charges, when the downloader read them — unless
+      // they are older than the transactions file being read.
+      let pending: PendingSnapshot | undefined
+      const pendingName = newestPending(listed.map((file) => file.name))
+      if (pendingName && (!combined || pendingName.date >= combined.date)) {
+        const source = listed.find((file) => file.name.trim() === pendingName.name)!
+        pending = parsePendingFile(await source.text(), pendingName.name, accounts) ?? undefined
+      }
       if (combined) {
         const source = listed.find((file) => file.name === combined.name)!
         const blocks = parseTdCombinedCsv(await source.text())
@@ -196,8 +209,9 @@ export function useStatementFolder(
         // whole folder is right, and the point of the step is not to retype it.
         checked: new Set(rows.filter(isReadable).map((row) => row.account.id)),
         ...(feed ? { feed } : {}),
+        ...(pending ? { pending } : {}),
       })
-      return match.byAccount.size + (feed?.plan.rowsRead ?? 0)
+      return match.byAccount.size + (feed?.plan.rowsRead ?? 0) + (pending?.accounts.length ?? 0)
     },
     [accounts, balances, month, feedOptions],
   )
@@ -306,6 +320,7 @@ export function useStatementFolder(
       if (review.feed?.include && review.feed.plan.added.length > 0 && feedOptions) {
         await feedOptions.onImport(review.feed.plan)
       }
+      if (review.pending && feedOptions?.onPending) await feedOptions.onPending(review.pending)
       for (const row of review.rows) {
         if (!review.checked.has(row.account.id)) continue
         // Reuse the id of any balance already recorded for this month, so a

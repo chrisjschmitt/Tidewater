@@ -1,5 +1,6 @@
 import type { GroupId } from '../types'
 import type { RuleSettings } from './rules/types'
+import type { PendingSnapshot } from './pending'
 import { asFingerprint, type ExportFingerprint } from './watchFolder'
 
 /**
@@ -75,6 +76,8 @@ export interface EtmConfig {
    * covered; later ones are still to reimburse and carry into next month.
    */
   reimbursedOn?: Record<string, string>
+  /** The latest reading of the cards' pending charges (TD-pending-<date>.json). */
+  pending?: PendingSnapshot
 }
 
 export interface TdCutover {
@@ -111,6 +114,7 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   rules: stored?.rules && typeof stored.rules === 'object' ? stored.rules : undefined,
   monthCutoffs: stored?.monthCutoffs && typeof stored.monthCutoffs === 'object' ? stored.monthCutoffs : undefined,
   reimbursedOn: stored?.reimbursedOn && typeof stored.reimbursedOn === 'object' ? stored.reimbursedOn : undefined,
+  pending: stored?.pending && typeof stored.pending === 'object' && Array.isArray(stored.pending.accounts) ? stored.pending : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/

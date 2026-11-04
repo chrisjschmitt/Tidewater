@@ -1,14 +1,15 @@
 {
   "name": "td-downloader",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "module",
   "description": "Attaches to an already-authenticated Chrome session and triggers TD EasyWeb CSV exports, one account at a time.",
   "scripts": {
     "download": "tsx src/index.ts",
     "inspect": "tsx src/inspect.ts",
     "typecheck": "tsc --noEmit",
-    "combine": "tsx src/combine-cli.ts"
+    "combine": "tsx src/combine-cli.ts",
+    "pending": "tsx src/pending-cli.ts"
   },
   "dependencies": {
     "playwright": "^1.48.0"

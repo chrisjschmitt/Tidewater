@@ -6,7 +6,8 @@ import { lastFullMonth, refreshSnapshotActuals, snapshotsEqual } from '../../lib
 import { DEFAULT_FORECAST_CONFIG, type ForecastConfig, type ForecastSnapshot } from '../../lib/forecast/types'
 import type { ImportPlan } from '../../lib/etm/importer'
 import { ledgerView } from '../../lib/etm/ledger'
-import { historyRows } from '../../lib/etm/rules/apply'
+import { historyRows, rulesCategorizer } from '../../lib/etm/rules/apply'
+import { pendingRows } from '../../lib/etm/pending'
 import type { RuleContext } from '../../lib/etm/rules/engine'
 import { buildModel } from '../../lib/etm/rules/model'
 import { withRuleDefaults } from '../../lib/etm/rules/types'
@@ -50,6 +51,13 @@ export interface EtmData {
   transactions: Transaction[]
   /** Every stored row from every feed, shadow included — for dedup and comparison. */
   allRows: Transaction[]
+  /**
+   * What the budget, forecast and Transactions count: the ledger plus card
+   * charges still pending at TD. Balances and reconciliation use `transactions`.
+   */
+  budgetRows: Transaction[]
+  /** The pending charges in `budgetRows` (split parts where a rule splits them). */
+  pending: Transaction[]
   /** The rules engine, learned afresh from history whenever it changes. */
   rules: RuleContext
   batches: ImportBatch[]
@@ -110,6 +118,17 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     })
     return { model, settings, accounts, reimbursableTag: config.reimbursableTag }
   }, [accounts, allRows, config.reimbursableTag, config.rules])
+  const pending = useMemo(
+    () =>
+      pendingRows(config.pending, allRows, {
+        accounts,
+        categorize: rulesCategorizer(rules),
+        ...(config.tdCutover ? { cutover: config.tdCutover } : {}),
+        ...(config.categoryGroups ? { groups: config.categoryGroups } : {}),
+      }),
+    [accounts, allRows, config.categoryGroups, config.pending, config.tdCutover, rules],
+  )
+  const budgetRows = useMemo(() => (pending.length > 0 ? [...transactions, ...pending] : transactions), [pending, transactions])
   const [notice, setNotice] = useState('')
 
   const reload = useCallback(async () => {
@@ -339,6 +358,8 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     accounts,
     transactions,
     allRows,
+    budgetRows,
+    pending,
     rules,
     batches,
     balances,

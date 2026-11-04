@@ -89,7 +89,7 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                 </td>
                 {onEdit && (
                   <td className="py-2 text-right">
-                    {(row.source === 'td' || row.source === 'manual') && (
+                    {!row.pending && (row.source === 'td' || row.source === 'manual') && (
                       <button
                         type="button"
                         className="btn-quiet text-xs"

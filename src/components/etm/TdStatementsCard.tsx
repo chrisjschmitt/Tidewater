@@ -10,6 +10,7 @@ import {
   type DownloadWatch,
 } from './useDownloadProgress'
 import { amountIn } from '../../lib/etm/format'
+import type { PendingSnapshot } from '../../lib/etm/pending'
 import { monthName } from '../../lib/etm/period'
 import { isReadable } from '../../lib/etm/statementFolder'
 import { rulesCategorizer } from '../../lib/etm/rules/apply'
@@ -29,6 +30,7 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
       groups: data.config.categoryGroups,
       categorize: rulesCategorizer(data.rules),
       onImport: (plan: Parameters<EtmData['applyImport']>[0]) => data.applyImport(plan),
+      onPending: (snapshot: PendingSnapshot) => data.saveSettings({ ...data.config, pending: snapshot }),
     }),
     [data],
   )
@@ -69,6 +71,13 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
           </select>
         </label>
       </div>
+      {data.config.pending && (
+        <p className="px-1 text-xs text-ink-500">
+          {data.pending.length > 0
+            ? `Counting ${data.pending.length} pending card ${data.pending.length === 1 ? 'charge' : 'charges'} (${amountIn(data.pending.reduce((sum, t) => sum - t.amount, 0), 'CAD')}) read ${data.config.pending.date} — each drops away when it posts.`
+            : `No pending card charges counted (last read ${data.config.pending.date}).`}
+        </p>
+      )}
       {canDownload && (
         <DownloadFromTd
           watch={download}
@@ -92,7 +101,7 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
         onDrop={(event) => {
           event.preventDefault()
           setDragging(false)
-          const files = Array.from(event.dataTransfer.files).filter((file) => /\.csv$/i.test(file.name))
+          const files = Array.from(event.dataTransfer.files).filter((file) => /\.(csv|json)$/i.test(file.name))
           if (files.length > 0) void folder.readFiles(files)
         }}
       >
@@ -137,7 +146,7 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
                 ref={filePicker}
                 type="file"
                 multiple
-                accept=".csv,text/csv"
+                accept=".csv,text/csv,.json,application/json"
                 className="hidden"
                 onChange={(event) => {
                   const files = Array.from(event.target.files ?? [])
@@ -293,6 +302,21 @@ function StatementFolderReviewTable({
         </p>
       )}
 
+      {review.pending && (
+        <div className="rounded-xl bg-sand-100/60 px-3 py-2 text-sm">
+          <span className="block font-medium text-ink-900">Pending card charges — counted until they post</span>
+          <span className="block text-xs text-ink-500">
+            {review.pending.accounts
+              .map((a) => `${a.label}: ${a.charges.length} ${a.charges.length === 1 ? 'charge' : 'charges'}, ${amountIn(-a.total, 'CAD')}`)
+              .join(' · ')}
+          </span>
+          <span className="block text-[11px] text-ink-400">
+            From {review.pending.fileName}. Kept with this read; they count in spent and the forecast (not in balances)
+            until their posted copies come in.
+          </span>
+        </div>
+      )}
+
       {feed && (
         <label className="flex items-start gap-3 rounded-xl bg-sand-100/60 px-2 py-2">
           <input
@@ -323,10 +347,12 @@ function StatementFolderReviewTable({
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onConfirm}
-          disabled={busy || (chosen === 0 && !bringing)}
+          disabled={busy || (chosen === 0 && !bringing && !review.pending)}
           className="btn-primary text-xs disabled:opacity-50"
         >
-          {chosen === 0 && bringing
+          {chosen === 0 && !bringing
+            ? 'Keep the pending charges'
+            : chosen === 0 && bringing
             ? `Bring in ${feedNew.toLocaleString()} TD rows`
             : `Record ${chosen} balance${chosen === 1 ? '' : 's'}${bringing ? ` and ${feedNew.toLocaleString()} TD rows` : ''}`}
         </button>

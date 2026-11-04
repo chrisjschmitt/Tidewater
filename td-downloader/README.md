@@ -77,6 +77,7 @@ fixed contract, because Tidewater reads these files by name:
 ```
 TD-transactions-<YYYY-MM-DD>.csv                    ← every account in one file; import this
 raw/TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv     ← each account's export, kept for checking
+TD-pending-<YYYY-MM-DD>.json                        ← cards' pending charges (see below)
 
 TD-transactions-2026-10-07.csv
 raw/TD-expense-account-1001-2026-10-07.csv
@@ -111,6 +112,28 @@ interrupted run never leaves a partial file under a real name.
 A re-run on the same day overwrites its own files and rebuilds the combined
 file from everything downloaded that day (including files already in `raw/`).
 Files from other days are never touched.
+
+### Pending card charges
+
+TD's exports hold posted transactions only. While the run is on each credit
+card's page it also reads the card's **Pending Transactions** list (date,
+description, amount, and EasyWeb's own total — the list must add up to that
+total or it isn't saved). Reading only: no clicks, nothing typed. They go to
+
+```
+TD-pending-<YYYY-MM-DD>.json      ← each card's pending charges, as of the run
+```
+
+Tidewater reads it with the combined file and counts the charges in the
+budget until their posted copies arrive. A card whose list can't be read is
+reported and the download carries on. To refresh just the pending charges —
+mid-week, or after a run that skipped cards already downloaded today:
+
+```bash
+npm run pending
+```
+
+It visits each card's page the way a download does and updates today's file.
 
 To rebuild the combined file by hand, for example after saving one account's
 export yourself under its per-account name:

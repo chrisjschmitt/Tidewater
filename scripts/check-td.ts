@@ -15,6 +15,8 @@ import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
 import { planTdImport } from '../src/lib/etm/importer.ts'
 import { budgetDateOf, counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
 import { dailyCompare } from '../src/lib/etm/dailyCompare.ts'
+import { isPendingFileName, newestPending, parsePendingFile, pendingRows } from '../src/lib/etm/pending.ts'
+import { uncategorized } from '../src/lib/etm/importer.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
 import { downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
 import {
@@ -215,6 +217,38 @@ console.log('=== TD vs Monarch, day by day ===')
   check('a Monarch row TD lacks (pending) is Monarch only', nov4.lines.length === 1 && nov4.lines[0]!.kind === 'monarchOnly')
   const nov3 = days.find((d) => d.date === '2026-11-03')!
   check('hand-entered and no-TD-feed rows are shared, same on both sides', nov3.lines.filter((l) => l.kind === 'shared').length === 2 && nov3.monarchSpend === nov3.tdSpend)
+}
+
+console.log('=== Pending card charges ===')
+{
+  check('pending file name recognised', isPendingFileName('TD-pending-2026-11-04.json') && !isPendingFileName('TD-transactions-2026-11-04.csv'))
+  check('newest pending file wins', newestPending(['TD-pending-2026-11-01.json', 'TD-pending-2026-11-04.json', 'x.csv'])?.date === '2026-11-04')
+  const file = JSON.stringify({
+    date: '2026-11-04',
+    accounts: [
+      { label: 'Visa', lastFour: '2222', readAt: '2026-11-04T23:10:00Z', total: 80.5, charges: [
+        { date: '2026-11-03', description: 'BOOK SHOP', amount: -30 },
+        { date: '2026-11-04', description: 'CAFE', amount: -50.5 },
+      ] },
+      { label: 'Not ours', lastFour: '9999', readAt: '2026-11-04T23:10:00Z', total: 5, charges: [] },
+    ],
+  })
+  const snap = parsePendingFile(file, 'TD-pending-2026-11-04.json', accounts)!
+  check('pending file read, unknown cards left out', snap.accounts.length === 1 && snap.accounts[0]!.charges.length === 2)
+  check('not a pending file → null', parsePendingFile('nope', 'x.json', accounts) === null)
+  const switched = { global: '2026-11-01', perAccount: {} }
+  const tdVisa = (id: string, date: string, amount: number, feedFile: string): Transaction => ({
+    ...base(id, 'td', date, visa.id), amount, originalStatement: 'BOOK SHOP', feedFile, category: 'Books', internal: false,
+  })
+  const stored = [tdVisa('v1', '2026-11-02', -12, 'TD-transactions-2026-11-04.csv')]
+  const rows = pendingRows(snap, stored, { accounts, cutover: switched, categorize: uncategorized })
+  check('pending charges become budget rows after the switch-over', rows.length === 2 && rows.every((r) => r.pending && r.id.startsWith('pending|')))
+  check('… signed as charges', rows.reduce((s, r) => s + r.amount, 0) === -80.5)
+  check('before the switch-over they do not count', pendingRows(snap, stored, { accounts, categorize: uncategorized }).length === 0)
+  const posted = [...stored, tdVisa('v2', '2026-11-05', -30, 'TD-transactions-2026-11-04.csv')]
+  check('a charge drops away once its posted copy is in', pendingRows(snap, posted, { accounts, cutover: switched, categorize: uncategorized }).length === 1)
+  const later = [...stored, tdVisa('v3', '2026-11-06', -7, 'TD-transactions-2026-11-07.csv')]
+  check('a later download without a fresh reading makes it stale', pendingRows(snap, later, { accounts, cutover: switched, categorize: uncategorized }).length === 0)
 }
 
 console.log('=== Splits ===')

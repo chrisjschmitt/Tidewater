@@ -4,6 +4,7 @@
  *
  *     TD-transactions-<YYYY-MM-DD>.csv           every account, one file (what Tidewater imports)
  *     raw/TD-<label-slug>-<lastFour>-<YYYY-MM-DD>.csv   each account's export, kept for checking
+ *     TD-pending-<YYYY-MM-DD>.json               each card's pending charges, read off its page
  *
  * Per-account files are first saved next to the combined one and moved into
  * `raw/` once combine.ts has folded them in.
@@ -32,6 +33,10 @@ export const RAW_DIR_NAME = 'raw'
 
 export function combinedFilename(dateStamp: string): string {
   return `TD-transactions-${dateStamp}.csv`
+}
+
+export function pendingFilename(dateStamp: string): string {
+  return `TD-pending-${dateStamp}.json`
 }
 
 export function outputFilename(label: string, lastFour: string, dateStamp: string): string {

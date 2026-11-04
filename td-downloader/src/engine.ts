@@ -11,6 +11,7 @@ import { RunLog, alreadyOkToday, resumeKey } from './manifest.js'
 import { localDateStamp, outputFilename, partialFilename } from './naming.js'
 import { Pacer } from './pacing.js'
 import { checkSession } from './session-guard.js'
+import { describePending, readPending, savePending, type PendingReading } from './pending.js'
 import type { AccountConfig, AccountResult, ExportStep, RunConfig } from './types.js'
 
 /**
@@ -92,6 +93,7 @@ export async function runDownloads(
   let sessionBlocked = false
   /** True once an account has actually driven the page, so pauses only go between real work. */
   let touchedPage = false
+  const pendingReadings: PendingReading[] = []
 
   try {
     if (actionable.length > 0) {
@@ -165,7 +167,9 @@ export async function runDownloads(
       let result: AccountResult
       touchedPage = true
       try {
-        result = await runOneAccount(page, account, config, dateStamp, halt, pacer, log)
+        result = await runOneAccount(page, account, config, dateStamp, halt, pacer, log, (reading) => {
+          pendingReadings.push(reading)
+        })
       } catch (error) {
         // A session problem surfaced inside this account. It is recorded here,
         // where we still know whose account it was, before it ends the run.
@@ -213,6 +217,10 @@ export async function runDownloads(
 
   if (haltReason) await markRemaining(runLog, config, `not attempted — ${haltReason}`)
 
+  // Pending charges read along the way go next to the combined file.
+  const pendingFile = await savePending(config.outputDir, dateStamp, pendingReadings).catch(() => null)
+  if (pendingFile) log(`  Pending charges saved: ${pendingReadings.map((r) => `${r.label} ${describePending(r)}`).join('; ')}`)
+
   await closeConnection(browser)
   removeSigintHandler()
   await runLog.finish()
@@ -227,7 +235,7 @@ export async function runDownloads(
   return outcome
 }
 
-async function connect(cdpUrl: string): Promise<Browser> {
+export async function connect(cdpUrl: string): Promise<Browser> {
   try {
     return await chromium.connectOverCDP(cdpUrl)
   } catch {
@@ -247,7 +255,7 @@ async function connect(cdpUrl: string): Promise<Browser> {
  * driven or closed — the run needs a page of its own precisely so it cannot
  * disturb whatever they were doing.
  */
-async function openRunPage(browser: Browser): Promise<Page> {
+export async function openRunPage(browser: Browser): Promise<Page> {
   const context = browser.contexts()[0]
   if (!context) {
     throw new RunAbort(
@@ -267,6 +275,7 @@ async function runOneAccount(
   halt: HaltRequest,
   pacer: Pacer,
   log: (message: string) => void,
+  onPending: (reading: PendingReading) => void = () => undefined,
 ): Promise<AccountResult> {
   log(`  ...   ${account.label} (…${account.lastFour})`)
 
@@ -274,7 +283,17 @@ async function runOneAccount(
   const finalPath = join(config.outputDir, finalName)
   const partialPath = join(config.outputDir, partialFilename(finalName))
 
-  const work = downloadAccount(page, account, config, pacer, finalPath, partialPath)
+  // A card's page lists its pending charges, which the export leaves out:
+  // read them while the run is there. Never allowed to fail the download.
+  const onOpened =
+    account.kind === 'credit'
+      ? async (opened: Page) => {
+          const reading = await readPending(opened, account.label, account.lastFour).catch(() => null)
+          if (reading) onPending(reading)
+          else log(`  !     ${account.label}: couldn't read its pending charges (the download carries on)`)
+        }
+      : undefined
+  const work = downloadAccount(page, account, config, pacer, finalPath, partialPath, onOpened)
 
   // The in-flight account races the grace period rather than being cancelled
   // outright: a download two seconds from done is worth waiting for, a wedged
@@ -329,8 +348,9 @@ async function downloadAccount(
   pacer: Pacer,
   finalPath: string,
   partialPath: string,
+  onOpened?: (page: Page) => Promise<void>,
 ): Promise<string> {
-  const current = await exportOnce(page, account, account.exportSteps, config, pacer, partialPath)
+  const current = await exportOnce(page, account, account.exportSteps, config, pacer, partialPath, onOpened)
 
   if (!account.previousPeriodSteps) {
     if (!current) throw new Error(CANCELLED_MESSAGE)
@@ -374,19 +394,10 @@ async function exportOnce(
   config: RunConfig,
   pacer: Pacer,
   savePath: string,
+  onOpened?: (page: Page) => Promise<void>,
 ): Promise<boolean> {
-  // Back to the summary each time. Starting every export from the same known
-  // page means one half-finished navigation cannot mislead the next.
-  await pacer.beforeAction()
-  await page.goto(config.easywebHomeUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS })
-  await guard(page)
-
-  // Think time before the click as well as before the navigation: the pause a
-  // person takes finding a link on a page they just loaded.
-  await pacer.beforeAction()
-  await page.click(account.accountLink, { timeout: STEP_TIMEOUT_MS })
-  await page.waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT_MS }).catch(() => undefined)
-  await guard(page)
+  await openAccount(page, account, config, pacer)
+  if (onOpened) await onOpened(page)
 
   // The listener is armed before the steps run, because the download can start
   // on the very click that finishes the sequence. Its budget therefore has to
@@ -421,6 +432,24 @@ async function exportOnce(
   // timed-out session to surface.
   await guard(page)
   return true
+}
+
+/**
+ * From the EasyWeb summary to the account's own page. Back to the summary
+ * each time: starting from the same known page means one half-finished
+ * navigation cannot mislead the next.
+ */
+export async function openAccount(page: Page, account: AccountConfig, config: RunConfig, pacer: Pacer): Promise<void> {
+  await pacer.beforeAction()
+  await page.goto(config.easywebHomeUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS })
+  await guard(page)
+
+  // Think time before the click as well as before the navigation: the pause a
+  // person takes finding a link on a page they just loaded.
+  await pacer.beforeAction()
+  await page.click(account.accountLink, { timeout: STEP_TIMEOUT_MS })
+  await page.waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT_MS }).catch(() => undefined)
+  await guard(page)
 }
 
 /**
@@ -481,7 +510,7 @@ async function markRemaining(runLog: RunLog, config: RunConfig, reason: string):
  * is navigated away as cleanup, and nothing logs out. The window is left
  * exactly as the user left it, still signed in.
  */
-async function closeConnection(browser: Browser | null): Promise<void> {
+export async function closeConnection(browser: Browser | null): Promise<void> {
   if (!browser) return
   await browser.close().catch(() => undefined)
 }

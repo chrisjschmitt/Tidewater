@@ -350,7 +350,7 @@ export default function EtmArea({
               <BudgetPanel
                 budget={budgetOver(budget, data.forecastConfig.planHistory, monthKeys(period))}
                 accounts={data.accounts}
-                transactions={data.transactions}
+                transactions={data.budgetRows}
                 reconciliations={data.reconciliations}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
@@ -359,7 +359,7 @@ export default function EtmArea({
 
             {tab === 'forecast' && (
               <ForecastPanel
-                transactions={data.transactions}
+                transactions={data.budgetRows}
                 budget={budget}
                 config={data.forecastConfig}
                 reimbursableParentTag={data.config.reimbursableTag}
@@ -427,7 +427,7 @@ export default function EtmArea({
             {tab === 'transactions' && (
               <TransactionsPanel
                 accounts={data.accounts}
-                transactions={data.transactions}
+                transactions={data.budgetRows}
                 comparisonRows={tdCopies}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}

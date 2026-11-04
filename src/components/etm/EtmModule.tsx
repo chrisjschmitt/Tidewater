@@ -128,17 +128,17 @@ function Unlocked({
   const actuals = useMemo(
     () =>
       period
-        ? aggregate(data.transactions, period, {
+        ? aggregate(data.budgetRows, period, {
             excludeAccountIds: excluded,
             reimbursableTag,
           })
         : null,
-    [data.transactions, period, excluded, reimbursableTag],
+    [data.budgetRows, period, excluded, reimbursableTag],
   )
 
   const forecastResult = useMemo(
-    () => forecast(data.transactions, budget, data.forecastConfig, today(), reimbursableTag),
-    [data.transactions, budget, data.forecastConfig, reimbursableTag],
+    () => forecast(data.budgetRows, budget, data.forecastConfig, today(), reimbursableTag),
+    [data.budgetRows, budget, data.forecastConfig, reimbursableTag],
   )
 
   const chatSnapshot = useMemo(() => {
@@ -148,10 +148,10 @@ function Unlocked({
       actuals,
       periodLabel: periodLabel(period),
       forecast: forecastResult,
-      transactions: data.transactions,
+      transactions: data.budgetRows,
       reimbursableTag,
     })
-  }, [actuals, budget, forecastResult, period, data.transactions, reimbursableTag])
+  }, [actuals, budget, forecastResult, period, data.budgetRows, reimbursableTag])
 
   useEffect(() => {
     onActuals(actuals && period ? dashboardActuals(actuals, periodLabel(period)) : null)
@@ -182,7 +182,7 @@ function Unlocked({
     <CategoryModal
       category={openCategory}
       period={period}
-      transactions={data.transactions}
+      transactions={data.budgetRows}
       excluded={excluded}
       reimbursableTag={reimbursableTag}
       onClose={onCloseCategory}
