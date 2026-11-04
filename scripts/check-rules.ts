@@ -6,7 +6,7 @@
  * Every account, merchant and amount here is invented.
  */
 import { reapplyPlan, rulesCategorizer } from '../src/lib/etm/rules/apply.ts'
-import { matchFeeds } from '../src/lib/etm/rules/compare.ts'
+import { matchFeeds, pairFeeds } from '../src/lib/etm/rules/compare.ts'
 import { applyShape, categorize, type RuleContext } from '../src/lib/etm/rules/engine.ts'
 import { buildModel, type HistoryRow } from '../src/lib/etm/rules/model.ts'
 import { counterAccount, statementKey } from '../src/lib/etm/rules/normalize.ts'
@@ -240,6 +240,11 @@ check('same text, amount, two days apart: matched', compared.pairs.some((p) => p
 check('disagreement noticed', compared.pairs.find((p) => p.td.id === 't1')?.agrees === false)
 check('a Monarch split matches its TD total', compared.pairs.find((p) => p.td.id === 't2')?.monarch.length === 2)
 check('unmatched on each side reported', compared.tdOnly.map((r) => r.id).join() === 't3' && compared.monarchOnly.map((r) => r.id).join() === 'm4')
+const paired = pairFeeds(tdRows, monarchRows)
+check(
+  'pairing alone (Transactions puts a TD copy under its Monarch row): single, split, none',
+  paired.get('t1')?.map((m) => m.id).join() === 'm1' && paired.get('t2')?.length === 2 && !paired.has('t3'),
+)
 
 console.log('=== Re-applying rules ===')
 const stored = [

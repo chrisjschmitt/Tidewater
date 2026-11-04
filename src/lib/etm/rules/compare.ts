@@ -34,12 +34,12 @@ const near = (a: string, z: string) => Math.abs(Date.parse(a) - Date.parse(z)) <
 const cents = (n: number) => Math.round(n * 100)
 const textOf = (row: Transaction) => collapse(row.originalStatement).toUpperCase()
 
-export function matchFeeds(
-  td: Transaction[],
-  monarch: Transaction[],
-  options: { accounts: Account[]; model: RuleModel; settings: RuleSettings; reimbursableTag: string },
-): FeedComparison {
-  const cards = new Set(options.accounts.filter((a) => a.kind === 'credit').map((a) => a.id))
+/**
+ * TD row id → the Monarch row (or split rows) for the same purchase: same
+ * account, same bank text, amounts that agree (a split counts as its total),
+ * dates within three days, nearest first. Each Monarch row pairs once.
+ */
+export function pairFeeds(td: Transaction[], monarch: Transaction[]): Map<string, Transaction[]> {
   const claimed = new Set<string>()
 
   // Monarch's split rows travel together.
@@ -50,8 +50,7 @@ export function matchFeeds(
     groups.set(id, [...(groups.get(id) ?? []), row])
   }
 
-  const pairs: FeedPair[] = []
-  const tdOnly: Transaction[] = []
+  const out = new Map<string, Transaction[]>()
   for (const row of [...td].sort((a, z) => a.date.localeCompare(z.date))) {
     const text = textOf(row)
     const candidates = monarch
@@ -71,11 +70,29 @@ export function matchFeeds(
         }
       }
     }
+    if (!match) continue
+    for (const m of match) claimed.add(m.id)
+    out.set(row.id, match)
+  }
+  return out
+}
+
+export function matchFeeds(
+  td: Transaction[],
+  monarch: Transaction[],
+  options: { accounts: Account[]; model: RuleModel; settings: RuleSettings; reimbursableTag: string },
+): FeedComparison {
+  const cards = new Set(options.accounts.filter((a) => a.kind === 'credit').map((a) => a.id))
+  const matched = pairFeeds(td, monarch)
+
+  const pairs: FeedPair[] = []
+  const tdOnly: Transaction[] = []
+  for (const row of [...td].sort((a, z) => a.date.localeCompare(z.date))) {
+    const match = matched.get(row.id)
     if (!match) {
       tdOnly.push(row)
       continue
     }
-    for (const m of match) claimed.add(m.id)
 
     const card = cards.has(row.accountId)
     const label = (r: Transaction) =>
@@ -97,6 +114,7 @@ export function matchFeeds(
     })
   }
 
+  const claimed = new Set([...matched.values()].flat().map((m) => m.id))
   const monarchOnly = monarch.filter((m) => !claimed.has(m.id))
   return { pairs, tdOnly, monarchOnly }
 }

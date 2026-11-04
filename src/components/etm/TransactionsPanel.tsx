@@ -11,6 +11,7 @@ import {
   type TransactionFilters,
 } from '../../lib/etm/aggregate'
 import { reimbursableChip } from '../../lib/etm/tags'
+import { pairFeeds } from '../../lib/etm/rules/compare'
 import { amountIn } from '../../lib/etm/format'
 import { createManualTransaction } from '../../lib/etm/manual'
 import { countsAsBudgetSpend } from '../../lib/etm/review'
@@ -62,14 +63,44 @@ export default function TransactionsPanel({
   const choices = useMemo(() => optionsFrom(transactions), [transactions])
 
   // Newest first, then by merchant: the order shown and the order the
-  // Budget so far column adds up in.
-  const rows = useMemo(
-    () =>
-      filterTransactions(showCopies ? [...transactions, ...comparisonRows] : transactions, period, filters).sort(
-        (a, z) => z.date.localeCompare(a.date) || a.merchant.localeCompare(z.merchant) || a.id.localeCompare(z.id),
-      ),
-    [transactions, comparisonRows, showCopies, period, filters],
-  )
+  // Budget so far column adds up in. A TD copy sits right under the Monarch
+  // row (or split rows) it matches — the two name things differently, so by
+  // merchant they would land apart.
+  const { rows, partnered } = useMemo(() => {
+    const order = (a: Transaction, z: Transaction) =>
+      z.date.localeCompare(a.date) || a.merchant.localeCompare(z.merchant) || a.id.localeCompare(z.id)
+    const base = filterTransactions(transactions, period, filters).sort(order)
+    if (!showCopies || comparisonRows.length === 0) return { rows: base, partnered: new Set<string>() }
+    const copies = filterTransactions(comparisonRows, period, filters)
+    const pairs = pairFeeds(copies, base.filter((t) => t.source === 'monarch'))
+    const position = new Map(base.map((t, i) => [t.id, i]))
+    // Each matched copy follows the last of its Monarch rows in the list.
+    const after = new Map<number, Transaction[]>()
+    const loose: Transaction[] = []
+    for (const copy of copies) {
+      const anchors = (pairs.get(copy.id) ?? []).map((m) => position.get(m.id)).filter((i): i is number => i !== undefined)
+      if (anchors.length === 0) {
+        loose.push(copy)
+        continue
+      }
+      const at = Math.max(...anchors)
+      after.set(at, [...(after.get(at) ?? []), copy])
+    }
+    const placed: Transaction[] = []
+    base.forEach((t, i) => {
+      placed.push(t)
+      placed.push(...(after.get(i) ?? []))
+    })
+    // Copies with no Monarch partner in view take their place by date.
+    const merged: Transaction[] = []
+    const rest = loose.sort(order)
+    for (const t of placed) {
+      while (rest.length > 0 && rest[0]!.date > t.date) merged.push(rest.shift()!)
+      merged.push(t)
+    }
+    merged.push(...rest)
+    return { rows: merged, partnered: new Set([...after.values()].flat().map((t) => t.id)) }
+  }, [transactions, comparisonRows, showCopies, period, filters])
   // Totals are the counted rows only; TD copies shown for comparison never add in.
   const counted = useMemo(() => (copyIds.size === 0 ? rows : rows.filter((t) => !copyIds.has(t.id))), [rows, copyIds])
 
@@ -274,7 +305,11 @@ export default function TransactionsPanel({
                         <span className="flex items-center gap-2 truncate text-ink-900">
                           {t.merchant || t.originalStatement || t.category}
                           {t.source === 'manual' && <Tag>Manual</Tag>}
-                          {t.source === 'td' && <Tag>{copyIds.has(t.id) ? 'TD copy · not counted' : 'TD'}</Tag>}
+                          {t.source === 'td' && (
+                            <Tag>
+                              {copyIds.has(t.id) ? (partnered.has(t.id) ? '↳ TD copy of the row above · not counted' : 'TD copy · not counted') : 'TD'}
+                            </Tag>
+                          )}
                           {copyIds.has(t.id) && t.split && t.split.length > 1 && <Tag>Split in {t.split.length}</Tag>}
                           {t.splitOf && (
                             <Tag>
