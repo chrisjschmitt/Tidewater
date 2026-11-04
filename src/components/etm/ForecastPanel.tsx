@@ -37,7 +37,7 @@ import {
   type PlanChangeRequest,
   type PlanNoteDraft,
 } from '../../lib/forecast/planNotes'
-import CategoryPlanModal from './CategoryPlanModal'
+import CategoryPlanModal, { isTyping } from './CategoryPlanModal'
 
 interface Props {
   transactions: Transaction[]
@@ -170,6 +170,23 @@ export default function ForecastPanel({
     : []
   const gapsCopy = taggingGapsCopy(gaps.uncategorizedHousehold, gaps.parentOnlyReimbursable)
 
+  // ← → step the page a month, when no window is open and no field is in use.
+  const calendarMonths = household.calendar.map((point) => point.month)
+  const windowOpen = Boolean(openPlan || openActual || openExplain || openCategory)
+  useEffect(() => {
+    if (windowOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      if (isTyping(event.target) || event.metaKey || event.altKey || event.ctrlKey) return
+      const at = calendarMonths.indexOf(focused?.month ?? currentMonth)
+      const next = calendarMonths[at + (event.key === 'ArrowLeft' ? -1 : 1)]
+      if (!next) return
+      event.preventDefault()
+      setFocusedMonth(next)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
   const reviews = dueReviews(config.planNotes, currentMonth)
   const changePlanFor = (review: DueReview) => {
     // Acting on it answers the review; the new change can carry its own note.

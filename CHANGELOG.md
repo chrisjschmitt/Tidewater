@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.41 — 2026-11-04
+
+### Added
+- Plan lines (spending and income) can be paid **every N weeks** — every week up to every 8 weeks — not only every two weeks: storage billed every 4 weeks, allowances every 2. In the Budget, *Paid every few weeks?* → **Every [N] weeks** and **A payment date**; the amount is per payment, and each month counts its own payment dates. Lines already paid every two weeks carry on unchanged.
+- Forecast → <Category> by month: a line paid every few weeks shows its schedule at the top, and the editor asks for the amount **per payment**, with the month worked out beside it ("$350.00 × 1 payment in February = $350.00 · about $379.17 in an average month").
+- **← →** step between months: in the by-month window, and on the Forecast page when no window is open (not while typing in a field).
+
+### Fixed
+- Changing the plan of a line paid every few weeks — from a month on, or one month only — now keeps the earlier (and surrounding) months' own payments; before, they were flattened to the monthly average.
+- The dashboard's note about an extra payment now works for any spacing (e.g. two payments in a month for something billed every 4 weeks).
+
 ## 0.13.40 — 2026-11-04
 
 ### Added

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { lineAmountIn, paydaysIn, withEveryTwoWeeks, type GroupSummary } from '../lib/budget'
+import { lineAmountIn, paydaysIn, perPaymentFor, scheduleLabel, scheduleWeeks, withEveryTwoWeeks, type GroupSummary } from '../lib/budget'
 import { money, moneyPrecise, uid } from '../lib/format'
 import type { ExpenseLine } from '../lib/types'
 import type { CategorySpend, DashboardActuals } from '../lib/etm/aggregate'
@@ -138,7 +138,7 @@ export default function GroupDetail({
   const remove = (id: string) => onChange(lines.filter((l) => l.id !== id))
 
   /** Switches a line between a monthly amount and a payment every two weeks. */
-  const setSchedule = (id: string, schedule: { perPayment: number; firstPayday: string } | null) =>
+  const setSchedule = (id: string, schedule: { perPayment: number; firstPayday: string; weeks?: number } | null) =>
     onChange(lines.map((l) => (l.id === id ? withEveryTwoWeeks(l, schedule) : l)))
 
   const add = () => {
@@ -206,7 +206,8 @@ export default function GroupDetail({
                   <p className="truncate text-sm font-medium text-ink-900">{line.name}</p>
                   {line.everyTwoWeeks ? (
                     <p className="text-[11px] text-ink-400">
-                      Every two weeks · {paydaysIn(line.everyTwoWeeks, thisMonth)} payments this month (
+                      {scheduleLabel(line.everyTwoWeeks)} · {paydaysIn(line.everyTwoWeeks, thisMonth)} payment
+                      {paydaysIn(line.everyTwoWeeks, thisMonth) === 1 ? '' : 's'} this month (
                       {money(lineAmountIn(line, thisMonth))}) · about {money(line.amount)} in an average month
                     </p>
                   ) : line.essential ? (
@@ -272,6 +273,25 @@ export default function GroupDetail({
               {line.everyTwoWeeks ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
                   <label className="flex items-center gap-1.5">
+                    Every
+                    <select
+                      className="field py-0.5 text-xs"
+                      value={scheduleWeeks(line.everyTwoWeeks)}
+                      onChange={(e) => {
+                        // Keep the monthly average; the payment follows the new spacing.
+                        const weeks = Number(e.target.value)
+                        setSchedule(line.id, { ...line.everyTwoWeeks!, weeks, perPayment: perPaymentFor(line.amount, weeks) })
+                      }}
+                      aria-label={`Weeks between ${line.name} payments`}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                        <option key={n} value={n}>
+                          {n === 1 ? 'week' : `${n} weeks`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-1.5">
                     A payment date
                     <input
                       type="date"
@@ -317,13 +337,13 @@ export default function GroupDetail({
                 className="mt-1 text-[11px] text-ink-400 underline decoration-dotted underline-offset-4 hover:text-ink-700"
                 onClick={() =>
                   setSchedule(line.id, {
-                    perPayment: Math.round((line.amount * 12) / 26),
+                    perPayment: perPaymentFor(line.amount, 2),
                     firstPayday: today(),
                   })
                 }
-                title="For something paid every other week — a biweekly allowance, payroll or mortgage"
+                title="For something paid every few weeks — a biweekly allowance or payroll, storage billed every 4 weeks"
               >
-                Paid every two weeks?
+                Paid every few weeks?
               </button>
               </>
               )}

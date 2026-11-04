@@ -100,7 +100,8 @@ export function balanceTone(b: Budget): {
   }
 }
 
-// --- Every two weeks --------------------------------------------------------
+// --- Every N weeks ---------------------------------------------------------
+// (Named for every two weeks, the first and most common schedule.)
 
 /** Paydays in a year for a line paid every two weeks. */
 export const PAYDAYS_PER_YEAR = 26
@@ -112,49 +113,84 @@ const utc = (iso: string) => {
   return Date.UTC(y!, m! - 1, d ?? 1)
 }
 
-/** The monthly average of a payment made every two weeks. */
-export const everyTwoWeeksMonthly = (perPayment: number): number => round2((perPayment * PAYDAYS_PER_YEAR) / 12)
+/** Weeks between payments: 1–8, two when the schedule doesn't say. */
+export const scheduleWeeks = (schedule: Pick<EveryTwoWeeks, 'weeks'>): number => {
+  const weeks = Math.round(schedule.weeks ?? 2)
+  return weeks >= 1 && weeks <= 8 ? weeks : 2
+}
 
-/** How many paydays fall in `month` (`YYYY-MM`) — two in most months, three in two a year. */
-export function paydaysIn(schedule: Pick<EveryTwoWeeks, 'firstPayday'>, month: string): number {
+/** Payments in a year: 26 every two weeks, 13 every four, 52 every week. */
+export const paymentsPerYear = (weeks: number): number => 52 / weeks
+
+/** "Every week", "Every two weeks", "Every 4 weeks". */
+export const scheduleLabel = (schedule: Pick<EveryTwoWeeks, 'weeks'>): string => {
+  const weeks = scheduleWeeks(schedule)
+  return weeks === 1 ? 'Every week' : weeks === 2 ? 'Every two weeks' : `Every ${weeks} weeks`
+}
+
+/** The monthly average of a payment made every `weeks` weeks. */
+export const everyTwoWeeksMonthly = (perPayment: number, weeks = 2): number =>
+  round2((perPayment * paymentsPerYear(weeks)) / 12)
+
+/** The payment that gives `monthly` on average, every `weeks` weeks. */
+export const perPaymentFor = (monthly: number, weeks = 2): number => round2((monthly * 12) / paymentsPerYear(weeks))
+
+/** How many payment dates fall in `month` (`YYYY-MM`) — e.g. every two weeks: two in most months, three in two a year. */
+export function paydaysIn(schedule: Pick<EveryTwoWeeks, 'firstPayday' | 'weeks'>, month: string): number {
+  const period = scheduleWeeks(schedule) * 7
   const start = utc(`${month}-01`)
   const [y, m] = month.split('-').map(Number)
   const end = Date.UTC(y!, m!, 1)
   const offset = Math.round((start - utc(schedule.firstPayday)) / DAY_MS)
-  const first = start + (((14 - (offset % 14)) % 14) * DAY_MS)
+  const first = start + ((((period - (offset % period)) % period) + period) % period) * DAY_MS
   let count = 0
-  for (let day = first; day < end; day += 14 * DAY_MS) count++
+  for (let day = first; day < end; day += period * DAY_MS) count++
   return count
 }
 
-/** What a line plans for one month: its amount, or each payday's payment for a line paid every two weeks. */
+/** The usual number of payments in a month: two every two weeks, one every four, four every week. */
+export const usualPayments = (schedule: Pick<EveryTwoWeeks, 'weeks'>): number =>
+  Math.floor(paymentsPerYear(scheduleWeeks(schedule)) / 12)
+
+/** What a line plans for one month: its amount, or each payment date's payment for a line paid every few weeks. */
 export function lineAmountIn(line: Pick<ExpenseLine | IncomeLine, 'amount' | 'everyTwoWeeks'>, month: string): number {
   if (!line.everyTwoWeeks) return line.amount || 0
   return round2(line.everyTwoWeeks.perPayment * paydaysIn(line.everyTwoWeeks, month))
 }
 
-/** Sets or clears the every-two-weeks schedule, keeping `amount` as the monthly average. */
+/** Sets or clears the schedule, keeping `amount` as the monthly average. */
 export function withEveryTwoWeeks<T extends ExpenseLine | IncomeLine>(line: T, schedule: EveryTwoWeeks | null): T {
   if (!schedule) {
     const { everyTwoWeeks: _gone, ...rest } = line
     return rest as T
   }
   const perPayment = Math.max(0, round2(schedule.perPayment))
-  return { ...line, everyTwoWeeks: { perPayment, firstPayday: schedule.firstPayday }, amount: everyTwoWeeksMonthly(perPayment) }
+  const weeks = scheduleWeeks(schedule)
+  return {
+    ...line,
+    everyTwoWeeks: { perPayment, firstPayday: schedule.firstPayday, ...(weeks !== 2 ? { weeks } : {}) },
+    amount: everyTwoWeeksMonthly(perPayment, weeks),
+  }
 }
 
-/** Lines whose month differs from their average because of an extra payday (or a short one), for a note. */
+/** Lines whose month has more (or fewer) payments than usual, for a note. */
 export function paydayExtras(
   lines: Array<Pick<ExpenseLine | IncomeLine, 'name' | 'amount' | 'everyTwoWeeks'>>,
   month: string,
-): Array<{ name: string; paydays: number; amount: number; difference: number }> {
+): Array<{ name: string; paydays: number; usual: number; amount: number; difference: number }> {
   return lines
     .filter((line) => line.everyTwoWeeks && line.everyTwoWeeks.perPayment > 0)
     .map((line) => {
       const amount = lineAmountIn(line, month)
-      return { name: line.name, paydays: paydaysIn(line.everyTwoWeeks!, month), amount, difference: round2(amount - line.amount) }
+      return {
+        name: line.name,
+        paydays: paydaysIn(line.everyTwoWeeks!, month),
+        usual: usualPayments(line.everyTwoWeeks!),
+        amount,
+        difference: round2(amount - line.amount),
+      }
     })
-    .filter((extra) => extra.paydays !== 2)
+    .filter((extra) => extra.paydays !== extra.usual)
 }
 
 /**

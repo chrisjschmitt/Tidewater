@@ -19,17 +19,20 @@ export interface Group {
 }
 
 /**
- * A line paid every two weeks rather than monthly — a biweekly payroll, an
- * allowance paid every other Thursday, an accelerated mortgage. `perPayment`
- * goes out (or comes in) on each payday, counted forwards and backwards from
- * `firstPayday`. Most months have two paydays and two a year have three, so
- * the line's `amount` holds the monthly average (26 paydays ÷ 12), and a
- * single month's figure comes from counting its paydays.
+ * A line paid every few weeks rather than monthly — a biweekly payroll or
+ * allowance, a storage unit billed every four weeks, a weekly delivery.
+ * `perPayment` goes out (or comes in) on each payment date, counted forwards
+ * and backwards from `firstPayday` every `weeks` weeks (two when unset — the
+ * name dates from when every two weeks was the only choice). The line's
+ * `amount` holds the monthly average (52 ÷ weeks payments a year ÷ 12), and a
+ * single month's figure comes from counting its payment dates.
  */
 export interface EveryTwoWeeks {
   perPayment: number
-  /** Any payday, `YYYY-MM-DD`. */
+  /** Any payment date, `YYYY-MM-DD`. */
   firstPayday: string
+  /** Weeks between payments, 1–8; two when unset. */
+  weeks?: number
 }
 
 export interface ExpenseLine {

@@ -1,6 +1,6 @@
-import { lineAmountIn, PAYDAYS_PER_YEAR } from '../budget'
+import { lineAmountIn, paydaysIn, perPaymentFor, scheduleWeeks } from '../budget'
 import { groupForCategory, isEssentialCategory } from '../categories'
-import type { Budget, ExpenseLine } from '../types'
+import type { Budget, EveryTwoWeeks, ExpenseLine } from '../types'
 import { withChangeNote } from './planNotes'
 import type { ForecastConfig } from './types'
 
@@ -19,6 +19,12 @@ export interface PlanEra {
   /** First month this amount no longer applies to, `YYYY-MM`. */
   until: string
   amount: number
+  /**
+   * The line was paid every few weeks then: each month's plan is this
+   * payment times that month's payment dates, not the flat `amount` (which
+   * holds the average).
+   */
+  schedule?: EveryTwoWeeks
 }
 
 export interface PlanHistoryEntry {
@@ -50,8 +56,22 @@ export function budgetAmountIn(budget: Budget, key: string, month: string): numb
 /** The plan for one category in one month. */
 export function planAmountAt(budget: Budget, history: PlanHistory | undefined, key: string, month: string): number {
   const era = eraFor(history?.[key], month)
-  return era ? era.amount : budgetAmountIn(budget, key, month)
+  return era ? eraAmountIn(era, month) : budgetAmountIn(budget, key, month)
 }
+
+/** An entry's plan for one month: its payments that month when it was paid every few weeks. */
+function eraAmountIn(era: PlanEra, month: string): number {
+  return era.schedule ? round2(era.schedule.perPayment * paydaysIn(era.schedule, month)) : era.amount
+}
+
+/** What the budget itself plans for a category, as an entry: with its schedule when paid every few weeks. */
+function budgetSource(budget: Budget, key: string): Omit<PlanEra, 'until'> {
+  const schedule = budget.expenses.find((line) => planKey(line.name) === key && line.everyTwoWeeks)?.everyTwoWeeks
+  return { amount: budgetAmount(budget, key), ...(schedule ? { schedule } : {}) }
+}
+
+const sameSource = (a: Omit<PlanEra, 'until'>, z: Omit<PlanEra, 'until'>): boolean =>
+  a.amount === z.amount && JSON.stringify(a.schedule ?? null) === JSON.stringify(z.schedule ?? null)
 
 function eraFor(entry: PlanHistoryEntry | undefined, month: string): PlanEra | undefined {
   if (!entry) return undefined
@@ -77,7 +97,7 @@ export function budgetAt(budget: Budget, history: PlanHistory | undefined, month
   for (const [key, entry] of Object.entries(history ?? {})) {
     const era = eraFor(entry, month)
     if (!era) continue
-    expenses = withAmount(expenses, key, entry.label, era.amount)
+    expenses = withAmount(expenses, key, entry.label, eraAmountIn(era, month))
   }
   return expenses === budget.expenses ? budget : { ...budget, expenses }
 }
@@ -118,25 +138,29 @@ export function budgetOver(budget: Budget, history: PlanHistory | undefined, mon
 export function withPlanChange(
   budget: Budget,
   history: PlanHistory | undefined,
-  change: { key: string; label: string; month: string; amount: number },
+  change: { key: string; label: string; month: string; amount: number; perPayment?: number },
 ): { budget: Budget; history: PlanHistory } {
   const { key, label, month } = change
   const amount = round2(Math.max(0, change.amount))
   const eras = [...(history?.[key]?.eras ?? [])].sort((a, z) => a.until.localeCompare(z.until))
   const kept = eras.filter((era) => era.until < month)
-  const coveringBefore = eras.find((era) => era.until >= month)?.amount ?? budgetAmount(budget, key)
+  const covering = eras.find((era) => era.until >= month)
+  const coveringBefore: Omit<PlanEra, 'until'> = covering
+    ? { amount: covering.amount, ...(covering.schedule ? { schedule: covering.schedule } : {}) }
+    : budgetSource(budget, key)
   const lastKept = kept.at(-1)?.until
   // Months between the last kept entry and `month` exist only if `month` is
-  // after it; record what they had unless it already equals the new amount.
-  const needsEra = coveringBefore !== amount && (!lastKept || lastKept < month)
-  const nextEras = needsEra ? [...kept, { until: month, amount: coveringBefore }] : kept
+  // after it; record what they had unless it already equals the new amount
+  // (a line paid every few weeks is always recorded: its months vary).
+  const needsEra = (coveringBefore.schedule || coveringBefore.amount !== amount) && (!lastKept || lastKept < month)
+  const nextEras = needsEra ? [...kept, { until: month, ...coveringBefore }] : kept
 
   const nextHistory: PlanHistory = { ...(history ?? {}) }
   if (nextEras.length > 0) nextHistory[key] = { label, eras: nextEras }
   else delete nextHistory[key]
 
   return {
-    budget: { ...budget, expenses: withAmount(budget.expenses, key, label, amount) },
+    budget: { ...budget, expenses: withAmount(budget.expenses, key, label, amount, change.perPayment) },
     history: nextHistory,
   }
 }
@@ -154,19 +178,25 @@ export function withPlanForMonth(
   const { key, label, month } = change
   const amount = round2(Math.max(0, change.amount))
   const after = shiftMonth(month, 1)
-  const at = (m: string) => (m === month ? amount : planAmountAt(budget, history, key, m))
-  // Each boundary ends a stretch of months with one amount: the stretch
+  // What a stretch of months held: the month itself takes the new amount;
+  // others keep their entry, or the budget's own line (schedule and all).
+  const sourceAt = (m: string): Omit<PlanEra, 'until'> => {
+    if (m === month) return { amount }
+    const era = eraFor(history?.[key], m)
+    return era ? { amount: era.amount, ...(era.schedule ? { schedule: era.schedule } : {}) } : budgetSource(budget, key)
+  }
+  // Each boundary ends a stretch of months with one source: the stretch
   // before the first boundary, then each boundary up to the next.
   const bounds = [...new Set([...(history?.[key]?.eras ?? []).map((era) => era.until), month, after])].sort()
   const eras: PlanEra[] = []
   bounds.forEach((until, i) => {
-    const stretchAmount = at(i === 0 ? shiftMonth(until, -1) : bounds[i - 1]!)
+    const source = sourceAt(i === 0 ? shiftMonth(until, -1) : bounds[i - 1]!)
     const last = eras.at(-1)
-    if (last && last.amount === stretchAmount) last.until = until
-    else eras.push({ until, amount: stretchAmount })
+    if (last && sameSource(last, source)) last.until = until
+    else eras.push({ until, ...source })
   })
-  const going = budgetAmount(budget, key)
-  while (eras.length > 0 && eras.at(-1)!.amount === going) eras.pop()
+  const going = budgetSource(budget, key)
+  while (eras.length > 0 && sameSource(eras.at(-1)!, going)) eras.pop()
 
   const next: PlanHistory = { ...(history ?? {}) }
   if (eras.length > 0) next[key] = { label, eras }
@@ -213,17 +243,25 @@ function shiftMonth(month: string, by: number): string {
 }
 
 /** First line of the category carries the amount; any others are zeroed. A missing category gets a line. */
-function withAmount(expenses: ExpenseLine[], key: string, label: string, amount: number): ExpenseLine[] {
+function withAmount(
+  expenses: ExpenseLine[],
+  key: string,
+  label: string,
+  amount: number,
+  /** For a line paid every few weeks: the payment itself, so no cent is lost converting from the average. */
+  perPayment?: number,
+): ExpenseLine[] {
   let placed = false
   const next = expenses.map((line) => {
     if (planKey(line.name) !== key) return line
     if (placed) return line.amount === 0 ? line : { ...line, amount: 0 }
     placed = true
-    if (line.amount === amount) return line
+    if (line.amount === amount && (perPayment === undefined || line.everyTwoWeeks?.perPayment === perPayment)) return line
     // A line paid every two weeks keeps its schedule: the new monthly
     // average becomes a new payment per payday.
     if (line.everyTwoWeeks) {
-      return { ...line, amount, everyTwoWeeks: { ...line.everyTwoWeeks, perPayment: round2((amount * 12) / PAYDAYS_PER_YEAR) } }
+      const payment = perPayment ?? perPaymentFor(amount, scheduleWeeks(line.everyTwoWeeks))
+      return { ...line, amount, everyTwoWeeks: { ...line.everyTwoWeeks, perPayment: Math.max(0, payment) } }
     }
     return { ...line, amount }
   })

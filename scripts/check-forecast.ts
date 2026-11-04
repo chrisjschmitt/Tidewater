@@ -75,7 +75,7 @@ import {
   withReviewed,
   withStandingNote,
 } from '../src/lib/forecast/planNotes.ts'
-import { freeAfterExpenses, groupSummaries, inMonth, lineAmountIn, paydayExtras, paydaysIn, totalExpenses, unallocated, withEveryTwoWeeks } from '../src/lib/budget.ts'
+import { freeAfterExpenses, groupSummaries, inMonth, lineAmountIn, paydayExtras, paydaysIn, perPaymentFor, scheduleLabel, totalExpenses, unallocated, withEveryTwoWeeks } from '../src/lib/budget.ts'
 import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
 import type { Currency, Transaction } from '../src/lib/etm/types.ts'
@@ -1396,6 +1396,56 @@ check(
   'APP_VERSION matches package.json',
   versionSource.includes(`'${pkg.version}'`) || versionSource.includes(`"${pkg.version}"`),
 )
+
+console.log('\n=== Paid every N weeks ===')
+{
+  // Storage billed every 4 weeks from Nov 19, 2026: Jan 2027 has Jan 14 only… and Dec has Dec 17;
+  // a 4-week schedule has one payment in most months and two in one month a year.
+  const storage = withEveryTwoWeeks(
+    { id: 'st', name: 'Storage', groupId: 'home' as const, amount: 0, essential: false },
+    { perPayment: 40, firstPayday: '2026-11-19', weeks: 4 },
+  )
+  check('every 4 weeks: the label says so', scheduleLabel(storage.everyTwoWeeks!) === 'Every 4 weeks')
+  check('every 4 weeks: 13 payments a year average to $43.33 a month', storage.amount === 43.33, String(storage.amount))
+  const counts = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08', '2027-09', '2027-10'].map(
+    (m) => paydaysIn(storage.everyTwoWeeks!, m),
+  )
+  check('every 4 weeks: one payment in most months', counts.filter((c) => c === 1).length >= 10 && counts.every((c) => c === 1 || c === 2), counts.join(','))
+  check('every 4 weeks: a payment falls on its own date', paydaysIn({ firstPayday: '2026-11-19', weeks: 4 }, '2026-11') === 1)
+  const two = counts.findIndex((c) => c === 2)
+  const extras = paydayExtras([storage], ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08', '2027-09', '2027-10'][two]!)
+  check('a month with two of them is flagged as extra, against one usual', two < 0 || (extras[0]?.paydays === 2 && extras[0]?.usual === 1))
+  check('a month with the usual count is not flagged', paydayExtras([storage], '2026-11').length === 0)
+  const weekly = { firstPayday: '2026-11-02', weeks: 1 }
+  check('every week: four or five payments a month', [4, 5].includes(paydaysIn(weekly, '2026-11')) && paydaysIn(weekly, '2026-11') === 5)
+  check('an unset spacing stays every two weeks', paydaysIn({ firstPayday: '2026-11-05' }, '2026-11') === 2 && scheduleLabel({}) === 'Every two weeks')
+  check('per payment from a monthly average', perPaymentFor(105, 2) === 48.46 && perPaymentFor(43.33, 4) === 40)
+
+  // A plan change carries the exact payment, so nothing drifts by a cent.
+  const plan = {
+    version: 1 as const,
+    profile: { name: 'Test', household: 'couple', stage: 'retired' } as never,
+    income: [],
+    expenses: [storage],
+    goals: [],
+    updatedAt: '2026-11-04T00:00:00.000Z',
+    source: 'onboarding' as const,
+  }
+  const changed = withPlanChange(plan, undefined, { key: planKey('Storage'), label: 'Storage', month: '2027-01', amount: 47.67, perPayment: 44 })
+  const line = changed.budget.expenses.find((l) => l.name === 'Storage')!
+  check('a change from a month on keeps the schedule and takes the payment as typed', line.everyTwoWeeks?.perPayment === 44 && line.everyTwoWeeks?.weeks === 4)
+  check('earlier months keep their plan', planAmountAt(changed.budget, changed.history, planKey('Storage'), '2026-12') === lineAmountIn(storage, '2026-12'))
+  const twoPayments = ['2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08', '2027-09', '2027-10'].find(
+    (m) => paydaysIn(storage.everyTwoWeeks!, m) === 2,
+  )!
+  const oneMonth = withPlanForMonth(plan, undefined, { key: planKey('Storage'), label: 'Storage', month: '2027-01', amount: 100 })
+  const at = (m: string) => planAmountAt(plan, oneMonth, planKey('Storage'), m)
+  check(
+    'one month changed: the months around it keep their own payments',
+    at('2027-01') === 100 && at('2026-12') === 40 && at(twoPayments) === 80,
+    `${at('2026-12')} ${at('2027-01')} ${at(twoPayments)}`,
+  )
+}
 
 console.log('\n=== Paid every two weeks ===')
 {

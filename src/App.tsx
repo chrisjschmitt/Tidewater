@@ -352,8 +352,8 @@ export default function App() {
   const goalMoney = totalGoalContributions(budget)
   const left = unallocated(monthBudget) - adjusted
   const averageLeft = unallocated(budget)
-  const extraOut = paydayExtras(budget.expenses, thisMonth).filter((extra) => extra.paydays > 2)
-  const extraIn = paydayExtras(budget.income, thisMonth).filter((extra) => extra.paydays > 2)
+  const extraOut = paydayExtras(budget.expenses, thisMonth).filter((extra) => extra.paydays > extra.usual)
+  const extraIn = paydayExtras(budget.income, thisMonth).filter((extra) => extra.paydays > extra.usual)
   const tone = balanceTone({
     ...monthBudget,
     expenses: [
@@ -935,8 +935,8 @@ function ExtraPaydayNote({
   const extraIn = arriving.reduce((sum, extra) => sum + extra.difference, 0)
   const names = (list: Array<{ name: string }>) => list.map((extra) => extra.name).join(' and ')
   const parts: React.ReactNode[] = []
-  if (out.length > 0) parts.push(<>a third payment for {names(out)} ({money(more)} more going out than an average month)</>)
-  if (arriving.length > 0) parts.push(<>a third payday for {names(arriving)} ({money(extraIn)} more coming in)</>)
+  if (out.length > 0) parts.push(<>an extra payment for {names(out)} ({money(more)} more going out than an average month)</>)
+  if (arriving.length > 0) parts.push(<>an extra payday for {names(arriving)} ({money(extraIn)} more coming in)</>)
   const raises = adjustments.filter((item) => item.kind === 'raise')
   const dated = adjustments.filter((item) => item.kind === 'dated')
   const list = (items: MonthPlanAdjustment[]) =>

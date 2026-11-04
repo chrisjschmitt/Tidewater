@@ -6,7 +6,9 @@ import { shortMonth } from './forecastCopy'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import type { Transaction } from '../../lib/etm/types'
-import { planAmountAt } from '../../lib/forecast/planHistory'
+import { planAmountAt, planKey } from '../../lib/forecast/planHistory'
+import { everyTwoWeeksMonthly, paydaysIn, scheduleLabel, scheduleWeeks } from '../../lib/budget'
+import type { EveryTwoWeeks } from '../../lib/types'
 import { planChanges, type PlanChangeRequest, type PlanNoteDraft } from '../../lib/forecast/planNotes'
 import type { ForecastConfig, MonthPoint } from '../../lib/forecast/types'
 import { householdRowsIn } from '../../lib/forecast/universe'
@@ -56,6 +58,8 @@ export default function CategoryPlanModal({
 }) {
   const { key, label } = category
   const [month, setMonth] = useState(initialMonth)
+  // A line paid every few weeks is planned per payment.
+  const schedule = budget.expenses.find((line) => planKey(line.name) === key && line.everyTwoWeeks)?.everyTwoWeeks
   const changes = planChanges(budget, config.planHistory, config.planNotes, key)
   const changeMonths = new Set(changes.map((c) => c.month))
   const notedMonths = new Set((config.planNotes?.[key]?.changes ?? []).map((c) => c.month))
@@ -79,6 +83,23 @@ export default function CategoryPlanModal({
   const isPast = selected.point.kind === 'past'
   const editable = !isPast && Boolean(onPlanChange)
 
+  // ← → step through the months, unless a field is being typed in.
+  const months = calendar.map((point) => point.month)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      if (isTyping(event.target)) return
+      event.preventDefault()
+      setMonth((current) => {
+        const at = months.indexOf(current)
+        const next = months[at + (event.key === 'ArrowLeft' ? -1 : 1)]
+        return next ?? current
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [months.join()])
+
   const chosen = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     chosen.current?.scrollIntoView({ block: 'nearest', inline: 'center' })
@@ -93,9 +114,16 @@ export default function CategoryPlanModal({
       onClose={onClose}
       width="max-w-4xl"
       title={`${label} by month`}
-      subtitle="Plan beside what was spent, and ahead what is forecast. Tap a month to see it; this month and later can be changed."
+      subtitle="Plan beside what was spent, and ahead what is forecast. Tap a month (or use ← →) to see it; this month and later can be changed."
     >
       <div className="space-y-4">
+        {schedule && (
+          <p className="rounded-xl bg-sand-100/70 px-3 py-2 text-xs text-ink-700">
+            {scheduleLabel(schedule)} from {schedule.firstPayday} · {amountIn(schedule.perPayment, 'CAD')} a payment · about{' '}
+            {amountIn(everyTwoWeeksMonthly(schedule.perPayment, scheduleWeeks(schedule)), 'CAD')} in an average month.{' '}
+            <span className="text-ink-500">How often and the payment date are set on the line in your Budget.</span>
+          </p>
+        )}
         <div className="flex gap-1 overflow-x-auto pb-2" role="list" aria-label={`${label} plan by month`}>
           {columns.map((c) => {
             const isSelected = c.point.month === selected.point.month
@@ -175,14 +203,15 @@ export default function CategoryPlanModal({
               key={`edit|${key}|${selected.point.month}`}
               month={selected.point.month}
               typical={selected.typical}
-              onSave={(amount, scope, note) => {
-                const change = { key, label, month: selected.point.month, amount, ...(note ? { note } : {}) }
-                if (amount === selected.typical) {
+              {...(schedule ? { schedule } : {})}
+              onSave={({ monthAmount, average, perPayment }, scope, note) => {
+                const base = { key, label, month: selected.point.month, ...(note ? { note } : {}) }
+                if (monthAmount === selected.typical) {
                   if (note) onChangeNote(selected.point.month, note)
                   return
                 }
-                if (scope === 'month' && onPlanForMonth) onPlanForMonth(change)
-                else onPlanChange!(change)
+                if (scope === 'month' && onPlanForMonth) onPlanForMonth({ ...base, amount: monthAmount })
+                else onPlanChange!({ ...base, amount: average, ...(perPayment !== undefined ? { perPayment } : {}) })
               }}
             />
           ) : (
@@ -248,18 +277,41 @@ export default function CategoryPlanModal({
   )
 }
 
+/** Arrow keys belong to a field while one is being typed in. */
+export const isTyping = (target: EventTarget | null): boolean => {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
 const whole = (amount: number): string => `$${Math.round(amount).toLocaleString()}`
 
 function MonthEditor({
   month,
   typical,
+  schedule,
   onSave,
 }: {
   month: string
   typical: number
-  onSave: (amount: number, scope: 'month' | 'onward', note?: PlanNoteDraft) => void
+  /** The line is paid every few weeks: the figure typed is one payment. */
+  schedule?: EveryTwoWeeks
+  onSave: (
+    amounts: { monthAmount: number; average: number; perPayment?: number },
+    scope: 'month' | 'onward',
+    note?: PlanNoteDraft,
+  ) => void
 }) {
-  const [draft, setDraft] = useState(String(typical))
+  const payments = schedule ? paydaysIn(schedule, month) : 1
+  const weeks = schedule ? scheduleWeeks(schedule) : 0
+  // This month's payment: its planned amount over its payment dates.
+  const startPayment = schedule
+    ? payments > 0
+      ? Math.round((typical / payments) * 100) / 100
+      : schedule.perPayment
+    : typical
+  const [draft, setDraft] = useState(String(startPayment))
   const [scope, setScope] = useState<'month' | 'onward'>('onward')
   const [why, setWhy] = useState<PlanNoteDraft>({ text: '' })
   const [saved, setSaved] = useState(false)
@@ -272,13 +324,20 @@ function MonthEditor({
       onSubmit={(event) => {
         event.preventDefault()
         if (amount === undefined) return
-        onSave(amount, scope, why.text.trim() || why.reviewBy ? why : undefined)
+        const amounts = schedule
+          ? {
+              monthAmount: Math.round(amount * payments * 100) / 100,
+              average: everyTwoWeeksMonthly(amount, weeks),
+              perPayment: amount,
+            }
+          : { monthAmount: amount, average: amount }
+        onSave(amounts, scope, why.text.trim() || why.reviewBy ? why : undefined)
         setSaved(true)
       }}
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs text-ink-500">
-          Plan
+          {schedule ? 'Per payment' : 'Plan'}
           <input
             className="field mt-1 block w-28 py-1.5 text-right text-sm tabular-nums"
             inputMode="decimal"
@@ -305,6 +364,13 @@ function MonthEditor({
         </button>
         {saved && <span className="text-xs text-tide-700">Saved</span>}
       </div>
+      {schedule && amount !== undefined && (
+        <p className="mt-2 text-xs text-ink-700">
+          {amountIn(amount, 'CAD')} × {payments} payment{payments === 1 ? '' : 's'} in {name} ={' '}
+          <span className="font-medium">{amountIn(Math.round(amount * payments * 100) / 100, 'CAD')}</span> · about{' '}
+          {amountIn(everyTwoWeeksMonthly(amount, weeks), 'CAD')} in an average month
+        </p>
+      )}
       <WhyFields draft={why} onChange={setWhy} month={month} />
       <p className="mt-2 text-[11px] text-ink-400">
         {scope === 'onward'

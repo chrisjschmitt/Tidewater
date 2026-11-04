@@ -43,6 +43,8 @@ export interface PlanChangeRequest {
   label: string
   month: string
   amount: number
+  /** A line paid every few weeks: the new payment (amount is then its monthly average). */
+  perPayment?: number
   note?: PlanNoteDraft
 }
 

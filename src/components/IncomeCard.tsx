@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { lineAmountIn, paydaysIn, withEveryTwoWeeks } from '../lib/budget'
+import { lineAmountIn, paydaysIn, perPaymentFor, scheduleLabel, scheduleWeeks, withEveryTwoWeeks } from '../lib/budget'
 import { money, uid } from '../lib/format'
 import type { IncomeLine } from '../lib/types'
 
@@ -16,7 +16,7 @@ export default function IncomeCard({ income, onChange }: Props) {
 
   const update = (id: string, amount: number) =>
     onChange(income.map((l) => (l.id === id ? { ...l, amount: Math.max(0, amount) } : l)))
-  const setSchedule = (id: string, schedule: { perPayment: number; firstPayday: string } | null) =>
+  const setSchedule = (id: string, schedule: { perPayment: number; firstPayday: string; weeks?: number } | null) =>
     onChange(income.map((l) => (l.id === id ? withEveryTwoWeeks(l, schedule) : l)))
   const today = localToday()
 
@@ -89,9 +89,28 @@ export default function IncomeCard({ income, onChange }: Props) {
             {line.everyTwoWeeks ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 pl-1 text-[11px] text-ink-400">
                 <span>
-                  Every two weeks · {paydaysIn(line.everyTwoWeeks, thisMonth)} paydays this month (
+                  {scheduleLabel(line.everyTwoWeeks)} · {paydaysIn(line.everyTwoWeeks, thisMonth)} payday
+                  {paydaysIn(line.everyTwoWeeks, thisMonth) === 1 ? '' : 's'} this month (
                   {money(lineAmountIn(line, thisMonth))}) · about {money(line.amount)} in an average month
                 </span>
+                <label className="flex items-center gap-1">
+                  every
+                  <select
+                    className="field py-0.5 text-xs"
+                    value={scheduleWeeks(line.everyTwoWeeks)}
+                    onChange={(e) => {
+                      const weeks = Number(e.target.value)
+                      setSchedule(line.id, { ...line.everyTwoWeeks!, weeks, perPayment: perPaymentFor(line.amount, weeks) })
+                    }}
+                    aria-label={`Weeks between ${line.name} paydays`}
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                      <option key={n} value={n}>
+                        {n === 1 ? 'week' : `${n} weeks`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="flex items-center gap-1">
                   a payday
                   <input
@@ -110,10 +129,10 @@ export default function IncomeCard({ income, onChange }: Props) {
             ) : (
               <button
                 className="mt-0.5 pl-1 text-[11px] text-ink-400 underline decoration-dotted underline-offset-4 hover:text-ink-700"
-                onClick={() => setSchedule(line.id, { perPayment: Math.round((line.amount * 12) / 26), firstPayday: today })}
-                title="For pay that arrives every other week"
+                onClick={() => setSchedule(line.id, { perPayment: perPaymentFor(line.amount, 2), firstPayday: today })}
+                title="For pay that arrives every few weeks"
               >
-                Paid every two weeks?
+                Paid every few weeks?
               </button>
             )}
             </div>
