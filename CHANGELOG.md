@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.45 — 2026-11-04
+
+### Fixed
+- Transactions → *Also show TD copies*: a TD copy you split in Tidewater shows its parts (e.g. $200.00 Cash for spending and $48.54 Groceries), each marked "Split 1 of 2", "Split 2 of 2", instead of one row for the whole amount.
+
+### Added
+- With *Also show TD copies* ticked, a line shows how many TD copies each account has in the period, so a missing account's TD file stands out.
+
 ## 0.13.44 — 2026-11-04
 
 ### Fixed

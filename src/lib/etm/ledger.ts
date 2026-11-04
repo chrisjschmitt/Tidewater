@@ -143,27 +143,27 @@ export function ledgerView(
     if (!counts(original, cutover, settled)) continue
     const effective = budgetDateOf(original, settled.cutoffs)
     const row = effective === original.date ? original : { ...original, date: effective, bankDate: original.date }
-    if (!row.split || row.split.length === 0) {
-      out.push(row)
-      continue
-    }
-    row.split.forEach((line, index) => {
-      out.push({
-        ...row,
-        id: `${row.id}#${index + 1}`,
-        amount: line.amount,
-        category: line.category,
-        groupId: etmGroupFor(line.category, groups),
-        internal: isInternalCategory(line.category),
-        tags: line.tags,
-        merchant: line.merchant ?? row.merchant,
-        notes: line.notes?.trim() ? line.notes : row.notes,
-        split: undefined,
-        splitOf: { part: index + 1, parts: row.split!.length, parentId: row.id },
-      })
-    })
+    out.push(...splitParts(row, groups))
   }
   return out
+}
+
+/** A row as the list shows it: itself, or its split parts (`<id>#1`, `<id>#2`, …). */
+export function splitParts(row: Transaction, groups?: Record<string, GroupId>): Transaction[] {
+  if (!row.split || row.split.length === 0) return [row]
+  return row.split.map((line, index) => ({
+    ...row,
+    id: `${row.id}#${index + 1}`,
+    amount: line.amount,
+    category: line.category,
+    groupId: etmGroupFor(line.category, groups),
+    internal: isInternalCategory(line.category),
+    tags: line.tags,
+    merchant: line.merchant ?? row.merchant,
+    notes: line.notes?.trim() ? line.notes : row.notes,
+    split: undefined,
+    splitOf: { part: index + 1, parts: row.split!.length, parentId: row.id },
+  }))
 }
 
 /** Rows kept for comparison only: the feed that does not count for its date. */

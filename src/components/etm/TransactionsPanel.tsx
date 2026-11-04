@@ -12,10 +12,11 @@ import {
 } from '../../lib/etm/aggregate'
 import { reimbursableChip } from '../../lib/etm/tags'
 import { pairFeeds } from '../../lib/etm/rules/compare'
+import { splitParts } from '../../lib/etm/ledger'
 import { amountIn } from '../../lib/etm/format'
 import { createManualTransaction } from '../../lib/etm/manual'
 import { countsAsBudgetSpend } from '../../lib/etm/review'
-import { periodLabel, type Period } from '../../lib/etm/period'
+import { includes, periodLabel, type Period } from '../../lib/etm/period'
 import type { Account, Transaction } from '../../lib/etm/types'
 import type { GroupId } from '../../lib/types'
 
@@ -108,10 +109,23 @@ export default function TransactionsPanel({
       merged.push(t)
     }
     merged.push(...rest)
-    return { rows: merged, partnered: new Set([...after.values()].flat().map((t) => t.id)) }
-  }, [transactions, comparisonRows, showCopies, period, filters])
+    // A copy split in Tidewater shows its parts, like Monarch's split rows.
+    const expanded = merged.flatMap((t) => (copyIds.has(t.id) ? splitParts(t, groups) : [t]))
+    return { rows: expanded, partnered: new Set([...after.values()].flat().map((t) => t.id)) }
+  }, [transactions, comparisonRows, copyIds, groups, showCopies, period, filters])
+  // How many TD copies each account has in the period — shows at a glance
+  // which accounts' TD files are in.
+  const copiesByAccount = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const t of comparisonRows) {
+      if (!includes(period, t.date)) continue
+      counts.set(t.accountId, (counts.get(t.accountId) ?? 0) + 1)
+    }
+    return [...counts].map(([id, n]) => `${accountsById.get(id)?.nickname ?? 'Unknown account'} ${n}`).sort()
+  }, [comparisonRows, period, accountsById])
   // Totals are the counted rows only; TD copies shown for comparison never add in.
-  const counted = useMemo(() => (copyIds.size === 0 ? rows : rows.filter((t) => !copyIds.has(t.id))), [rows, copyIds])
+  const isCopy = (t: Transaction) => copyIds.has(t.id.split('#')[0]!)
+  const counted = useMemo(() => (copyIds.size === 0 ? rows : rows.filter((t) => !copyIds.has(t.id.split('#')[0]!))), [rows, copyIds])
 
   // The Budget tab's “spent”, row by row, added from the bottom of the list
   // up — the order shown, newest first — so each figure is that row plus
@@ -262,6 +276,11 @@ export default function TransactionsPanel({
               Also show TD copies (not counted until the switch-over)
             </label>
           )}
+          {showCopies && (
+            <span className="text-xs text-ink-500">
+              TD copies this period: {copiesByAccount.length > 0 ? copiesByAccount.join(' · ') : 'none'}
+            </span>
+          )}
           {touched && (
             <button
               onClick={() => {
@@ -301,7 +320,7 @@ export default function TransactionsPanel({
                   {rows.slice(0, shown).map((t) => {
                     const heldOut = reimbursableChip(t, reimbursableTag)
                     return (
-                    <tr key={t.id} className={`transition hover:bg-sand-100/50 ${copyIds.has(t.id) ? 'bg-sand-50/80 text-ink-500' : ''}`}>
+                    <tr key={t.id} className={`transition hover:bg-sand-100/50 ${isCopy(t) ? 'bg-sand-50/80 text-ink-500' : ''}`}>
                       <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-xs text-ink-500">
                         {t.date}
                         {t.bankDate && (
@@ -316,11 +335,10 @@ export default function TransactionsPanel({
                           {t.source === 'manual' && <Tag>Manual</Tag>}
                           {t.source === 'td' && (
                             <Tag>
-                              {copyIds.has(t.id) ? (partnered.has(t.id) ? '↳ TD copy of the row above · not counted' : 'TD copy · not counted') : 'TD'}
+                              {isCopy(t) ? (partnered.has(t.id.split('#')[0]!) ? '↳ TD copy of the row above · not counted' : 'TD copy · not counted') : 'TD'}
                             </Tag>
                           )}
-                          {copyIds.has(t.id) && t.split && t.split.length > 1 && <Tag>Split in {t.split.length}</Tag>}
-                          {t.splitOf && (
+                                                    {t.splitOf && (
                             <Tag>
                               Split {t.splitOf.part} of {t.splitOf.parts}
                             </Tag>
