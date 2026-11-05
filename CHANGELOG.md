@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.9 — 2026-11-05
+
+### Added
+- **EasyWeb’s card balance, beside the export’s.** The downloader (0.4.1) now reads each card’s current balance and last payment with its pending charges. When EasyWeb’s balance differs from the one in the export, Read statement folder says so on the card’s row — naming the payment when that is the reason (a payment TD has applied but not yet exported). The balance recorded stays the one the card’s rows explain.
+- **Month end’s travel transfer uses EasyWeb’s card balance** from a reading taken on the month’s last day or within a week after, less card charges posted after the month — so a payment made before the month ended but posted after it is counted. Pending charges are added as before.
+
 ## 0.14.8 — 2026-11-04
 
 ### Changed

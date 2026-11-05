@@ -10,7 +10,7 @@ import {
   type DownloadWatch,
 } from './useDownloadProgress'
 import { amountIn } from '../../lib/etm/format'
-import type { PendingSnapshot } from '../../lib/etm/pending'
+import { easywebBalanceNote, type PendingSnapshot } from '../../lib/etm/pending'
 import { monthName } from '../../lib/etm/period'
 import { isReadable } from '../../lib/etm/statementFolder'
 import { rulesCategorizer } from '../../lib/etm/rules/apply'
@@ -273,6 +273,25 @@ function StatementFolderReviewTable({
                         ? 'Not recorded: this account has no last four digits, so nothing in the file could be matched to it. Add them on the Accounts tab, then read the file again.'
                         : `Nothing in the file for …${row.account.lastFour}. TD skips an account with no transactions in the period; enter its balance by hand if so.`}
                 </span>
+                {(() => {
+                  // EasyWeb's own balance beside the export's, when they differ — shown, not recorded.
+                  if (!ready || row.account.kind !== 'credit' || row.heldBack || row.carriedFrom || !review.pending) return null
+                  if (review.pending.date < row.file.date) return null
+                  const note = easywebBalanceNote(
+                    review.pending.accounts.find((a) => a.accountId === row.account.id),
+                    row.balance,
+                  )
+                  if (!note) return null
+                  return (
+                    <span className="mt-0.5 block text-[11px] text-ink-500">
+                      EasyWeb showed {amountIn(note.current, row.account.currency)} on {review.pending.date}.{' '}
+                      {note.payment
+                        ? `The ${note.payment.date} payment of ${amountIn(note.payment.amount, row.account.currency)} isn’t in the card’s rows yet — TD adds it to the export once it posts, and the balance here catches up.`
+                        : 'The difference is activity TD hasn’t put in the export yet.'}{' '}
+                      The balance recorded stays the one the card’s rows explain; Month end’s transfer uses EasyWeb’s.
+                    </span>
+                  )
+                })()}
                 {row.heldBack && (
                   <span className="mt-0.5 block text-[11px] text-ink-500">
                     The balance before {row.heldBack.rows} row{row.heldBack.rows === 1 ? '' : 's'} TD dated{' '}

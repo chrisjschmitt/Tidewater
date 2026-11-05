@@ -13,7 +13,7 @@ import {
   type Reconciliation,
   type Savings,
 } from '../../lib/etm/workflow'
-import { monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../../lib/etm/monthEnd'
+import { cardOwedAtMonthEnd, monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../../lib/etm/monthEnd'
 import { bucketName, owedBy } from '../../lib/etm/config'
 import type { StepState } from '../../lib/etm/routine'
 import { StepList } from './WeeklyCheckIn'
@@ -63,9 +63,20 @@ export default function WorkflowPanel({
 
   const asOf = endOf(month)
   const pending = useMemo(() => pendingAtMonthEnd(data.config.pending, month), [data.config.pending, month])
+  const cardOwed = useMemo(
+    () => cardOwedAtMonthEnd(data.config.pending, month, data.transactions),
+    [data.config.pending, month, data.transactions],
+  )
   const savings = useMemo(
-    () => computeSavings(data.accounts, data.balances, asOf, (id) => pending.get(id)),
-    [data.accounts, data.balances, asOf, pending],
+    () =>
+      computeSavings(
+        data.accounts,
+        data.balances,
+        asOf,
+        (id) => pending.get(id),
+        (id) => cardOwed.get(id),
+      ),
+    [data.accounts, data.balances, asOf, pending, cardOwed],
   )
   // Rows skipped on Tidy (fine as they are) stay off its lists.
   const skippedIds = useMemo(() => new Set(data.config.tidySkipped ?? []), [data.config.tidySkipped])
@@ -678,7 +689,14 @@ function SavingsStep({ savings, accounts }: { savings: Savings; accounts: Accoun
           >
             <span className="text-ink-500">
               {describe(part.kind)} · {part.nickname}
-              {part.asOf && <span className="text-ink-400"> as of {part.asOf}</span>}
+              {part.source === 'easyweb' ? (
+                <span className="text-ink-400">
+                  {' '}
+                  from EasyWeb’s balance on {part.asOf}, less charges posted after the month (counts payments not yet in the export)
+                </span>
+              ) : (
+                part.asOf && <span className="text-ink-400"> as of {part.asOf}</span>
+              )}
               {part.missing && <span className="text-shell-500"> · no balance recorded</span>}
             </span>
             <span className="tabular-nums text-ink-900">

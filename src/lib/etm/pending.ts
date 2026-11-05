@@ -33,6 +33,14 @@ export interface PendingAccount {
   readAt: string
   total: number
   charges: PendingCharge[]
+  /**
+   * EasyWeb's current balance for the card, read with the pending list:
+   * owed as a positive figure. It counts a payment as soon as TD applies it,
+   * a day or two before the payment reaches the CSV export.
+   */
+  currentBalance?: number
+  /** The card's last payment as EasyWeb showed it. */
+  lastPayment?: { date: string; amount: number }
 }
 
 export interface PendingSnapshot {
@@ -77,14 +85,20 @@ export function parsePendingFile(text: string, fileName: string, accounts: Accou
     const charges = (item.charges as Array<Record<string, unknown>>)
       .filter((c) => typeof c.date === 'string' && typeof c.description === 'string' && isNumber(c.amount))
       .map((c) => ({ date: c.date as string, description: c.description as string, amount: c.amount as number }))
-    out.push({
+    const reading: PendingAccount = {
       accountId: account.id,
       lastFour,
       label: String(item.label ?? account.nickname),
       readAt: String(item.readAt ?? file.date),
       total: item.total,
       charges,
-    })
+    }
+    if (isNumber(item.currentBalance)) reading.currentBalance = item.currentBalance
+    const paid = item.lastPayment as { date?: unknown; amount?: unknown } | undefined
+    if (paid && typeof paid.date === 'string' && isNumber(paid.amount)) {
+      reading.lastPayment = { date: paid.date, amount: paid.amount }
+    }
+    out.push(reading)
   }
   return { date: file.date, fileName, accounts: out }
 }
@@ -162,4 +176,25 @@ export function pendingRows(snapshot: PendingSnapshot | undefined, all: Transact
 /** Total of the charges counted, for the notice (money out as a positive figure). */
 export function pendingTotal(rows: Transaction[]): number {
   return Math.round(rows.reduce((s, r) => s - r.amount, 0) * 100) / 100
+}
+
+const sameCents = (a: number, b: number) => Math.abs(a - b) < 0.005
+
+/**
+ * What EasyWeb's own current balance says beside the one the card's export
+ * gives — shown, never recorded: the recorded balance stays the one the
+ * card's posted rows explain. Undefined when the two agree or EasyWeb's was
+ * not read. The usual difference is a payment TD has applied but not yet
+ * exported, which the card's last payment names.
+ */
+export function easywebBalanceNote(
+  reading: PendingAccount | undefined,
+  /** The balance from the export, owed as a positive figure. */
+  exported: number,
+): { current: number; payment?: { date: string; amount: number } } | undefined {
+  if (!reading || reading.currentBalance === undefined || sameCents(reading.currentBalance, exported)) return undefined
+  const paid = reading.lastPayment
+  return paid && sameCents(exported - reading.currentBalance, paid.amount)
+    ? { current: reading.currentBalance, payment: paid }
+    : { current: reading.currentBalance }
 }

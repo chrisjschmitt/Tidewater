@@ -97,8 +97,9 @@ import { asFreshness, compareFreshness, deviceName, digest, freshnessInBackup, n
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 import { latestTdRead, monarchInUse, weeklySteps } from '../src/lib/etm/routine.ts'
-import { checkKey, monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../src/lib/etm/monthEnd.ts'
+import { cardOwedAtMonthEnd, checkKey, monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../src/lib/etm/monthEnd.ts'
 import type { ImportBatch } from '../src/lib/etm/types.ts'
+import { easywebBalanceNote } from '../src/lib/etm/pending.ts'
 
 let failures = 0
 
@@ -1378,6 +1379,36 @@ console.log('\n=== Month end ===')
   const snap = { date: '2026-11-04', accounts: [{ accountId: 'visa', charges: [{ date: '2026-10-31', amount: -25 }, { date: '2026-11-02', amount: -94.12 }] }] }
   check('pending at month end: only charges dated in the month', pendingAtMonthEnd(snap, '2026-10').get('visa') === 25)
   check('a reading taken long after the month end is not used', pendingAtMonthEnd({ ...snap, date: '2026-11-20' }, '2026-10').size === 0)
+
+  // EasyWeb's current balance: a payment applied before it is exported.
+  const live = { date: '2026-11-03', accounts: [{ accountId: 'visa', currentBalance: 150 }] }
+  const after = [
+    r('p1', 'visa', '2026-11-02', -40, []),
+    r('p2', 'visa', '2026-11-01', 10, []),
+    r('p3', 'visa', '2026-11-02', 500, [], { internal: true }),
+    r('p4', 'visa', '2026-10-30', -5, []),
+    r('p5', 'cheq', '2026-11-02', -60, []),
+  ]
+  const owed = cardOwedAtMonthEnd(live, '2026-10', after).get('visa')
+  check('card owed at month end: EasyWeb now, less card charges posted after the month (payments kept in)', owed?.owed === 120 && owed.readOn === '2026-11-03', JSON.stringify(owed))
+  check('a reading from before the month ended is not used', cardOwedAtMonthEnd({ ...live, date: '2026-10-29' }, '2026-10', after).size === 0)
+  check('a reading over a week after is not used', cardOwedAtMonthEnd({ ...live, date: '2026-11-09' }, '2026-10', after).size === 0)
+  const withEasyweb = computeSavings(
+    [{ ...visa, mainCard: true } as Account],
+    [],
+    '2026-10-31',
+    () => 25,
+    () => ({ owed: 180, readOn: '2026-11-03' }),
+  )
+  const card = withEasyweb.parts.find((p) => p.kind === 'card')
+  check('transfer uses EasyWeb’s card owed, plus pending, and does not call the card missing', card?.effect === -180 && card.source === 'easyweb' && withEasyweb.missing.length === 0 && withEasyweb.parts.some((p) => p.kind === 'pending' && p.effect === -25), JSON.stringify(withEasyweb))
+
+  const reading = { accountId: 'visa', lastFour: '0000', label: 'Visa', readAt: '2026-11-05', total: 0, charges: [], currentBalance: 199.66, lastPayment: { date: '2026-11-04', amount: 1000 } }
+  const note = easywebBalanceNote(reading, 1199.66)
+  check('EasyWeb lower by the last payment → the note names the payment', note?.current === 199.66 && note.payment?.date === '2026-11-04', JSON.stringify(note))
+  check('a difference that isn’t the payment → plain note', easywebBalanceNote(reading, 1250)?.payment === undefined && easywebBalanceNote(reading, 1250)?.current === 199.66)
+  check('balances agree → no note', easywebBalanceNote(reading, 199.66) === undefined)
+  check('no EasyWeb balance read → no note', easywebBalanceNote({ ...reading, currentBalance: undefined }, 1199.66) === undefined)
 }
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)

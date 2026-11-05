@@ -150,3 +150,42 @@ export function pendingAtMonthEnd(
   }
   return out
 }
+
+/**
+ * What each card owed at the end of a month, from EasyWeb's current balance —
+ * which, unlike the export, already counts a payment made before the month
+ * ended but posted after it. Only a reading taken on the month's last day or
+ * within a week after is used, and the card's own spending posted after the
+ * month (up to the reading) is taken back out, so the figure is the month's.
+ * Payments and transfers are left in: a payment that left the bank in the
+ * month is exactly what this is here to count.
+ */
+export function cardOwedAtMonthEnd(
+  snapshot:
+    | { date: string; accounts: Array<{ accountId: string; currentBalance?: number }> }
+    | undefined,
+  month: string,
+  transactions: Transaction[],
+): Map<string, { owed: number; readOn: string }> {
+  const out = new Map<string, { owed: number; readOn: string }>()
+  if (!snapshot) return out
+  const [y, m] = month.split('-').map(Number)
+  const end = new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10)
+  const days = (Date.parse(snapshot.date) - Date.parse(end)) / 86_400_000
+  if (days < 0 || days > 7) return out
+  for (const reading of snapshot.accounts) {
+    if (reading.currentBalance === undefined) continue
+    const after = transactions.filter(
+      (t) =>
+        t.accountId === reading.accountId &&
+        !t.pending &&
+        !t.internal &&
+        t.date > end &&
+        t.date <= snapshot.date,
+    )
+    // Charges are negative: owed at month end = owed now less what was charged since.
+    const owed = cents(reading.currentBalance + after.reduce((s, t) => s + t.amount, 0))
+    out.set(reading.accountId, { owed, readOn: snapshot.date })
+  }
+  return out
+}

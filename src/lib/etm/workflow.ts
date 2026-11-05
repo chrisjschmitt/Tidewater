@@ -32,6 +32,8 @@ export interface SavingsPart {
   missing: boolean
   /** The date of the snapshot used, so a stale one is visible. */
   asOf?: string
+  /** Card owed taken from EasyWeb's current balance rather than the recorded one. */
+  source?: 'easyweb'
 }
 
 export interface Savings {
@@ -53,6 +55,12 @@ export function computeSavings(
   asOf: string,
   /** Pending charges read from TD for a card, used when none was typed with its balance. */
   pendingFor?: (accountId: string) => number | undefined,
+  /**
+   * What the card owed at the date from EasyWeb's current balance, which
+   * already counts a payment the export hasn't caught up with. Used in place
+   * of the recorded balance when given.
+   */
+  cardOwedFor?: (accountId: string) => { owed: number; readOn: string } | undefined,
 ): Savings {
   const total = zeroMoney()
   const parts: SavingsPart[] = []
@@ -66,7 +74,7 @@ export function computeSavings(
   for (const account of accounts) {
     if (!account.funding && !account.mainCard) continue
     const snapshot = latestSnapshot(balances, account.id, asOf)
-    if (!snapshot) missing.push(account.nickname)
+    if (!snapshot && !(account.mainCard && !account.funding && cardOwedFor?.(account.id))) missing.push(account.nickname)
 
     const base = {
       accountId: account.id,
@@ -82,11 +90,17 @@ export function computeSavings(
     }
 
     if (account.mainCard) {
-      // A card balance is entered as what is owed, so it always subtracts.
-      add({ ...base, kind: 'card', effect: -Math.abs(snapshot?.balance ?? 0) })
+      const easyweb = cardOwedFor?.(account.id)
+      if (easyweb) {
+        // EasyWeb's figure keeps its sign: a credit balance adds.
+        add({ ...base, missing: false, asOf: easyweb.readOn, kind: 'card', effect: -easyweb.owed, source: 'easyweb' })
+      } else {
+        // A card balance is entered as what is owed, so it always subtracts.
+        add({ ...base, kind: 'card', effect: -Math.abs(snapshot?.balance ?? 0) })
+      }
       const pending = snapshot?.pending || pendingFor?.(account.id)
       if (pending) {
-        add({ ...base, kind: 'pending', effect: -Math.abs(pending) })
+        add({ ...base, ...(easyweb ? { missing: false } : {}), kind: 'pending', effect: -Math.abs(pending) })
       }
     }
   }
