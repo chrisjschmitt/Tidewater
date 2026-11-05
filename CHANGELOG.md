@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.10 — 2026-11-05
+
+### Fixed
+- **A card’s month-end balance from a later download.** Reading a past month’s closing balances from a file that runs past the month now closes a card on its last row in the month — as bank accounts already did — when the file’s running balances chain row to row (checked, not assumed). Before, a card always took the file’s latest balance and was flagged “outside the month”, so October could only be read from a download taken right at month end, which can miss the last days’ charges (October’s Aeroplan was $123.45 short: four charges from Oct 30–31 posted after the Oct 31 download). A card file whose balances don’t chain still warns.
+
 ## 0.14.9 — 2026-11-05
 
 ### Added

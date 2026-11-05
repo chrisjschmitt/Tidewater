@@ -319,7 +319,24 @@ check('November takes the whole file', novClose.balance === 1041.75 && !novClose
 const weekendCard = reviewRows(accounts, new Map([[visa.id, { file: weekendFile, reading: weekend }]]), '2026-10', { balances: [] }).find(
   (r) => r.account.id === visa.id,
 )!
-check('a card file past the month still warns instead', weekendCard.outsideMonth === true && !weekendCard.heldBack)
+check(
+  'a card file whose balances chain closes the month on its last row in it too',
+  weekend.chained === true && weekendCard.balance === 996.25 && weekendCard.heldBack?.rows === 2 && !weekendCard.outsideMonth,
+  JSON.stringify({ chained: weekend.chained, balance: weekendCard.balance, heldBack: weekendCard.heldBack }),
+)
+// Two exports joined badly: the running balance jumps where they meet.
+const brokenCard = parseStatementCsv(
+  [
+    '11/02/2026,FOOD BASICS,94.12,,1200.00',
+    '10/31/2026,FRESHCO,11.74,,980.00',
+    '10/30/2026,LE MOULIN,13.79,,968.26',
+    '10/29/2026,SHOPPERS,22.59,,954.47',
+  ].join('\n'),
+)
+const brokenRow = reviewRows(accounts, new Map([[visa.id, { file: weekendFile, reading: brokenCard }]]), '2026-10', { balances: [] }).find(
+  (r) => r.account.id === visa.id,
+)!
+check('a card file whose balances don’t chain still warns instead', brokenCard.chained === false && brokenRow.outsideMonth === true && !brokenRow.heldBack)
 
 console.log('=== Editing and the budget running total ===')
 const mk = (id: string, amount: number, category: string, extra: Partial<Transaction> = {}): Transaction => ({

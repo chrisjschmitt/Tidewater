@@ -27,6 +27,8 @@ export interface StatementReading {
    * even when the file runs past it (see `readingThrough`).
    */
   byDay?: Array<{ date: string; balance: number; rows: number }>
+  /** Every row's running balance follows from its neighbour's (see balancesChain). */
+  chained?: boolean
 }
 
 export class StatementFormatError extends Error {
@@ -92,6 +94,7 @@ export function parseStatementCsv(text: string): StatementReading {
       const { row, rows } = closingOn(date)
       return { date, balance: row.balance, rows }
     }),
+    chained: balancesChain(readings),
   }
 }
 
@@ -169,7 +172,7 @@ export function parseNumber(raw: string): number | null {
  * first) or leads to it (newest first). Dates decide only when the balances
  * cannot — every row on one day is common enough on a card.
  */
-function fileRunsNewestFirst(readings: Array<{ date: string; balance: number; change: number }>): boolean {
+function chainCounts(readings: Array<{ date: string; balance: number; change: number }>): { ascending: number; descending: number } {
   const close = (a: number, b: number) => Math.abs(a - b) < 0.005
   let ascending = 0
   let descending = 0
@@ -179,6 +182,23 @@ function fileRunsNewestFirst(readings: Array<{ date: string; balance: number; ch
     if (close(here.balance, before.balance + here.change) || close(here.balance, before.balance - here.change)) ascending++
     if (close(before.balance, here.balance + before.change) || close(before.balance, here.balance - before.change)) descending++
   }
+  return { ascending, descending }
+}
+
+function fileRunsNewestFirst(readings: Array<{ date: string; balance: number; change: number }>): boolean {
+  const { ascending, descending } = chainCounts(readings)
   if (ascending !== descending) return descending > ascending
   return readings[0]!.date > readings[readings.length - 1]!.date
+}
+
+/**
+ * Every row's running balance follows from the one beside it, one way or the
+ * other — so a day's closing balance can be trusted as of that day, not just
+ * the file's last. Card files can be joined from two exports; a join that
+ * doesn't chain fails this and the file is only trusted at its end.
+ */
+function balancesChain(readings: Array<{ date: string; balance: number; change: number }>): boolean {
+  if (readings.length < 2) return false
+  const { ascending, descending } = chainCounts(readings)
+  return Math.max(ascending, descending) === readings.length - 1
 }

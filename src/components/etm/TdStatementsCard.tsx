@@ -294,9 +294,9 @@ function StatementFolderReviewTable({
                 })()}
                 {row.heldBack && (
                   <span className="mt-0.5 block text-[11px] text-ink-500">
-                    The balance before {row.heldBack.rows} row{row.heldBack.rows === 1 ? '' : 's'} TD dated{' '}
-                    {row.heldBack.firstDate} — weekend or holiday activity TD posts on the next business day. They
-                    count in {monthName(nextMonthOf(month))}, so {monthName(month).split(' ')[0]}’s rows explain this balance exactly.
+                    {row.account.kind === 'credit'
+                      ? `The balance at the end of ${monthName(month)}, before ${row.heldBack.rows} later row${row.heldBack.rows === 1 ? '' : 's'} (from ${row.heldBack.firstDate}). They count in ${monthName(nextMonthOf(month))}, so ${monthName(month).split(' ')[0]}’s rows explain this balance exactly.`
+                      : `The balance before ${row.heldBack.rows} row${row.heldBack.rows === 1 ? '' : 's'} TD dated ${row.heldBack.firstDate} — weekend or holiday activity TD posts on the next business day. They count in ${monthName(nextMonthOf(month))}, so ${monthName(month).split(' ')[0]}’s rows explain this balance exactly.`}
                   </span>
                 )}
               </span>

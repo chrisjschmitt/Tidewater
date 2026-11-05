@@ -259,10 +259,11 @@ export function reviewRows(
     if (!read.reading) {
       return { account, file: read.file, error: read.error ?? 'That file could not be read.' }
     }
-    // A bank file that runs past the month: close the month on its own last
-    // row. (Card files' running balances don't chain, so they keep the
-    // "outside the month" warning instead.)
-    const through = account.kind === 'credit' ? undefined : readingThrough(read.reading, monthEnd(month))
+    // A file that runs past the month: close the month on its own last row.
+    // A card file only when its running balances chain row to row (checked,
+    // not assumed); otherwise it keeps the "outside the month" warning.
+    const through =
+      account.kind === 'credit' && !read.reading.chained ? undefined : readingThrough(read.reading, monthEnd(month))
     if (through) {
       const reading = through.reading
       const kept = closingBalanceOf(account, reading)
