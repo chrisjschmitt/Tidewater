@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.6 — 2026-11-04
+
+### Changed
+- Month end → Tidy and Closing balances' "Largest rows to check": each row says which account it is on, and its category (e.g. "Chris's account · Financial Fees").
+
 ## 0.14.5 — 2026-11-04
 
 ### Changed

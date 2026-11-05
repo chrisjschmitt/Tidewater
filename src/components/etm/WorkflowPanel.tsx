@@ -146,6 +146,7 @@ export default function WorkflowPanel({
     void data.saveSettings({ ...data.config, reimburseChecked: { ...(data.config.reimburseChecked ?? {}), [month]: [...next] } })
   }
   const cadSavings = savings.total.CAD
+  const accountName = (id: string) => data.accounts.find((a) => a.id === id)?.nickname ?? 'Unknown account'
 
   return (
     <div className="space-y-3">
@@ -169,7 +170,7 @@ export default function WorkflowPanel({
             ...(untidyCount > 0 ? { detail: `${untidyCount} to fix` } : {}),
             body: (
               <div className="space-y-3">
-                <Tidy untidy={untidy} tag={data.config.reimbursableTag} onSkip={skip} {...(onEdit ? { onEdit } : {})} />
+                <Tidy untidy={untidy} tag={data.config.reimbursableTag} onSkip={skip} accountName={accountName} {...(onEdit ? { onEdit } : {})} />
                 {skippedHere.length > 0 && (
                   <p className="text-xs text-ink-400">
                     {skippedHere.length} skipped as fine.{' '}
@@ -228,6 +229,7 @@ export default function WorkflowPanel({
                   reconciliation={reconciliation}
                   tolerance={data.config.tolerance}
                   onToleranceChange={(tolerance) => void data.saveSettings({ ...data.config, tolerance })}
+                  accountName={accountName}
                 />
               </div>
             ),
@@ -565,11 +567,13 @@ function Tidy({
   tag,
   onEdit,
   onSkip,
+  accountName,
 }: {
   untidy: ReturnType<typeof findUntidy>
   tag: string
   onEdit?: (row: Transaction) => void
   onSkip?: (row: Transaction) => void
+  accountName: (accountId: string) => string
 }) {
   const nothing =
     untidy.uncategorized.length === 0 &&
@@ -596,7 +600,7 @@ function Tidy({
           <p className="mb-2 text-xs text-ink-400">
             Edit each to give it a category, or Skip one that is fine as it is.
           </p>
-          <TransactionTable rows={untidy.uncategorized.slice(0, 25)} empty="" editMonarch {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
+          <TransactionTable rows={untidy.uncategorized.slice(0, 25)} empty="" editMonarch accountName={accountName} {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
         </div>
       )}
 
@@ -611,7 +615,7 @@ function Tidy({
             Edit each to tag it “{tag}: …” for the account or person who
             reimburses it — the generic tag alone puts it on no bucket.
           </p>
-          <TransactionTable rows={untidy.parentOnly.slice(0, 25)} empty="" editMonarch {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
+          <TransactionTable rows={untidy.parentOnly.slice(0, 25)} empty="" editMonarch accountName={accountName} {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
         </div>
       )}
 
@@ -627,7 +631,7 @@ function Tidy({
             can say which: Edit to tag it, or Skip a personal one. Accounts you have never claimed
             anything from are not asked about at all.
           </p>
-          <TransactionTable rows={untidy.untaggedCandidates.slice(0, 25)} empty="" editMonarch {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
+          <TransactionTable rows={untidy.untaggedCandidates.slice(0, 25)} empty="" editMonarch accountName={accountName} {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
         </div>
       )}
     </div>
@@ -714,10 +718,12 @@ function Reconcile({
   reconciliation,
   tolerance,
   onToleranceChange,
+  accountName,
 }: {
   reconciliation: Reconciliation
   tolerance: number
   onToleranceChange: (tolerance: number) => void
+  accountName: (accountId: string) => string
 }) {
   const anchored = reconciliation.accounts.filter((a) => a.anchored)
 
@@ -782,7 +788,7 @@ function Reconcile({
             On the accounts that disagree, biggest first. A missing or duplicated
             one of these is the usual cause.
           </p>
-          <TransactionTable rows={reconciliation.unexplained} empty="" />
+          <TransactionTable rows={reconciliation.unexplained} empty="" accountName={accountName} />
         </div>
       )}
 

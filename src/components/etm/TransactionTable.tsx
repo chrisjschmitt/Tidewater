@@ -20,6 +20,8 @@ interface Props {
   editMonarch?: boolean
   /** Offers Skip: leave this row off a to-do list. */
   onSkip?: (row: Transaction) => void
+  /** Names each row's account, for lists that mix accounts. */
+  accountName?: (accountId: string) => string
 }
 
 /**
@@ -28,7 +30,7 @@ interface Props {
  * rows actually say, and a clipped statement sends you off to another tab to
  * find out.
  */
-export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit, editMonarch, onSkip }: Props) {
+export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit, editMonarch, onSkip, accountName }: Props) {
   const actions = Boolean(onEdit || onSkip)
   const totals = useMemo(() => runningTotals(rows), [rows])
   const hidden = useMemo(
@@ -66,6 +68,12 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                   <span className="block break-words text-ink-900">
                     {row.merchant || row.originalStatement || row.category}
                   </span>
+                  {accountName && (
+                    <span className="mt-0.5 block break-words text-ink-600">
+                      {accountName(row.accountId)}
+                      {row.category && row.category !== 'Uncategorized' ? ` · ${row.category}` : ''}
+                    </span>
+                  )}
                   {row.originalStatement && row.originalStatement !== row.merchant && (
                     <span className="mt-0.5 block break-words text-ink-400">
                       {row.originalStatement}
