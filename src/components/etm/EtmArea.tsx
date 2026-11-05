@@ -13,7 +13,7 @@ import Modal from '../Modal'
 import SwitchOverCard from './SwitchOverCard'
 import BackupCard from './BackupCard'
 import KeyCard from './KeyCard'
-import { BACKUP_NUDGE_DAYS, useSafeguards } from './useSafeguards'
+import { useSafeguards } from './useSafeguards'
 import PeriodSelector from './PeriodSelector'
 import ReimbursablePanel from './ReimbursablePanel'
 import SettingsPanel from './SettingsPanel'
@@ -22,7 +22,10 @@ import TransactionsPanel from './TransactionsPanel'
 import FeedCompareCard from './FeedCompareCard'
 import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
-import { monthKeys, monthPeriod, type Period } from '../../lib/etm/period'
+import { monthKeys, monthPeriod, today, type Period } from '../../lib/etm/period'
+import { readWeeklyDone, weeklySteps, writeWeeklyDone } from '../../lib/etm/routine'
+import { findPossibleDuplicates } from '../../lib/etm/duplicates'
+import WeeklyCheckIn from './WeeklyCheckIn'
 import {
   budgetAt,
   budgetOver,
@@ -163,6 +166,27 @@ export default function EtmArea({
     setFreshness(next)
   }, [freshnessInput])
 
+  // Where the weekly check-in stands — its steps and the tab's badge.
+  const [weeklyDone, setWeeklyDone] = useState<string | undefined>(() => readWeeklyDone())
+  const duplicateCount = useMemo(() => {
+    const counting = new Set(data.transactions.map((row) => row.splitOf?.parentId ?? row.id))
+    return findPossibleDuplicates(data.allRows, data.rules.settings.notDuplicates, counting).length
+  }, [data.allRows, data.transactions, data.rules.settings.notDuplicates])
+  const weekly = useMemo(
+    () =>
+      weeklySteps({
+        today: today(),
+        ...(weeklyDone ? { lastDone: weeklyDone } : {}),
+        batches: data.batches,
+        ...(data.config.pending ? { pendingDate: data.config.pending.date } : {}),
+        tdRows: data.allRows.filter((row) => row.source === 'td' && !row.duplicateOf),
+        duplicates: duplicateCount,
+        ...(safeguards.lastBackup ? { lastBackup: safeguards.lastBackup } : {}),
+        ...(freshness?.changedAt ? { changedAt: freshness.changedAt } : {}),
+      }),
+    [weeklyDone, data.batches, data.config.pending, data.allRows, duplicateCount, safeguards.lastBackup, freshness?.changedAt],
+  )
+
   // Plan-only pins from before 0.13.12 become plan changes for their month,
   // once, so every Plan figure agrees.
   const pinsMoved = useRef(false)
@@ -224,6 +248,16 @@ export default function EtmArea({
                   }
                 >
                   {label}
+                  {id === 'weekly' && weekly.needCount > 0 && (
+                    <span
+                      className={`ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
+                        tab === id ? 'bg-white text-tide-700' : 'bg-shell-500 text-white'
+                      }`}
+                      aria-label={`${weekly.needCount} steps need you`}
+                    >
+                      {weekly.needCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -255,36 +289,20 @@ export default function EtmArea({
           <p className="py-16 text-center text-sm text-ink-400">Decrypting your expenses…</p>
         ) : (
           <>
-            {tab !== 'settings' && onRestoreBackup && <FreshnessBar freshness={freshness} onRestore={onRestoreBackup} />}
-            {tab !== 'settings' && safeguards.auto && safeguards.folder && !safeguards.folder.allowed && (
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3">
-                <p className="text-sm text-ink-700">
-                  Automatic backups to {safeguards.folder.name} are waiting for Chrome’s permission.
-                </p>
-                <button onClick={() => void safeguards.allowFolder()} className="btn-primary text-xs">
-                  Allow backups to {safeguards.folder.name}
-                </button>
-              </div>
-            )}
-            {tab !== 'settings' && (safeguards.ageDays === undefined || safeguards.ageDays >= BACKUP_NUDGE_DAYS) && (
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-white/70 px-4 py-3">
-                <p className="text-sm text-ink-700">
-                  {safeguards.ageDays === undefined
-                    ? 'No backup of your expenses yet on this device.'
-                    : `Last backup ${safeguards.ageDays} days ago.`}{' '}
-                  <span className="text-ink-500">Everything lives only in this browser.</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  {safeguards.savedTo && <span className="text-xs text-ink-500">Saved to {safeguards.savedTo}</span>}
-                  <button
-                    disabled={safeguards.busy}
-                    onClick={() => void safeguards.backUp()}
-                    className="btn-primary text-xs disabled:opacity-50"
-                  >
-                    {safeguards.busy ? 'Backing up…' : 'Back up now'}
-                  </button>
-                </div>
-              </div>
+            {tab !== 'settings' && onRestoreBackup && (
+              <FreshnessBar
+                freshness={freshness}
+                onRestore={onRestoreBackup}
+                backup={{
+                  ...(safeguards.ageDays !== undefined ? { ageDays: safeguards.ageDays } : {}),
+                  current: weekly.backup === 'done',
+                  busy: safeguards.busy,
+                  onBackUp: () => void safeguards.backUp(),
+                  ...(safeguards.auto && safeguards.folder && !safeguards.folder.allowed
+                    ? { waitingFor: safeguards.folder.name, onAllow: () => void safeguards.allowFolder() }
+                    : {}),
+                }}
+              />
             )}
             {watch.supported && (
               <input
@@ -432,41 +450,78 @@ export default function EtmArea({
             )}
 
             {tab === 'weekly' && (
-              <div className="space-y-8">
-                <WeeklyStep n={1} title="Download and read the TD statements" hint="Download from TD on the Mac, then read the folder: new transactions, pending card charges and, at month end, closing balances.">
-                  <TdStatementsCard data={data} />
-                </WeeklyStep>
-                <WeeklyStep n={2} title="Possible duplicates" hint="Charges that came in twice (re-dated or re-priced between downloads).">
-                  <DuplicatesCard data={data} />
-                </WeeklyStep>
-                <WeeklyStep n={3} title="File the transactions" hint="Confirm what the rules filed, and fix what they didn't.">
-                  <ReviewPanel data={data} />
-                </WeeklyStep>
-                <WeeklyStep n={4} title="Compare with Monarch" hint="Until Monarch is cancelled on Dec 1: only pending charges should differ.">
-                  <div className="space-y-3">
-                    <FeedCompareCard data={data} period={monthPeriod(new Date().toISOString().slice(0, 7))} />
-                    <RulesCompareCard data={data} />
-                    <ImportPanel
-                      accounts={data.accounts}
-                      transactions={data.allRows}
-                      groups={data.config.categoryGroups}
-                      {...(earliestSwitch(data) ? { switchedFrom: earliestSwitch(data) } : {})}
-                      batches={data.batches}
-                      incomingFile={incomingFile}
-                      onIncomingConsumed={() => setIncomingFile(null)}
-                      onCreateAccount={data.persistAccount}
-                      onCommit={async (plan, fingerprint) => {
-                        await data.applyImport(plan, fingerprint)
-                        watch.dismissOffer()
-                      }}
-                      onUndo={data.revertBatch}
-                    />
-                  </div>
-                </WeeklyStep>
-                <WeeklyStep n={5} title="Back up" hint="Save this week's work; then the iPad can restore it.">
-                  <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />
-                </WeeklyStep>
-              </div>
+              <WeeklyCheckIn
+                status={weekly}
+                {...(weeklyDone ? { lastDone: weeklyDone } : {})}
+                onMarkDone={() => {
+                  const day = today()
+                  writeWeeklyDone(day)
+                  setWeeklyDone(day)
+                }}
+                steps={[
+                  {
+                    key: 'read',
+                    title: 'Download and read the TD statements',
+                    hint: 'Download from TD on the Mac, then read the folder: new transactions, pending card charges and, at month end, closing balances.',
+                    state: weekly.read,
+                    body: <TdStatementsCard data={data} />,
+                  },
+                  {
+                    key: 'duplicates',
+                    title: 'Possible duplicates',
+                    hint: 'Charges that came in twice (re-dated or re-priced between downloads).',
+                    state: weekly.duplicates,
+                    ...(duplicateCount > 0 ? { detail: `${duplicateCount} to check` } : {}),
+                    body: duplicateCount > 0 ? <DuplicatesCard data={data} /> : <p className="text-sm text-ink-500">None this week.</p>,
+                  },
+                  {
+                    key: 'file',
+                    title: 'File the transactions',
+                    hint: 'Confirm what the rules filed, and fix what they didn’t — this month and last.',
+                    state: weekly.file,
+                    ...(weekly.toFile > 0 ? { detail: `${weekly.toFile} to file` } : {}),
+                    body: <ReviewPanel data={data} />,
+                  },
+                  ...(weekly.compare === 'notNeeded'
+                    ? []
+                    : [
+                        {
+                          key: 'compare',
+                          title: 'Compare with Monarch',
+                          hint: 'Until Monarch is cancelled: bring in its export; only pending charges should differ.',
+                          state: weekly.compare,
+                          body: (
+                            <div className="space-y-3">
+                              <FeedCompareCard data={data} period={monthPeriod(today().slice(0, 7))} />
+                              <RulesCompareCard data={data} />
+                              <ImportPanel
+                                accounts={data.accounts}
+                                transactions={data.allRows}
+                                groups={data.config.categoryGroups}
+                                {...(earliestSwitch(data) ? { switchedFrom: earliestSwitch(data) } : {})}
+                                batches={data.batches}
+                                incomingFile={incomingFile}
+                                onIncomingConsumed={() => setIncomingFile(null)}
+                                onCreateAccount={data.persistAccount}
+                                onCommit={async (plan, fingerprint) => {
+                                  await data.applyImport(plan, fingerprint)
+                                  watch.dismissOffer()
+                                }}
+                                onUndo={data.revertBatch}
+                              />
+                            </div>
+                          ),
+                        },
+                      ]),
+                  {
+                    key: 'backup',
+                    title: 'Back up',
+                    hint: 'Save this week’s work, so the iPad can restore it.',
+                    state: weekly.backup,
+                    body: <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />,
+                  },
+                ]}
+              />
             )}
 
             {tab === 'settings' && (
@@ -561,20 +616,3 @@ function notesFor(
   return next ? { planNotes: next } : {}
 }
 
-/** One numbered step of the weekly check-in. */
-function WeeklyStep({ n, title, hint, children }: { n: number; title: string; hint: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <div className="mb-3 flex items-baseline gap-3 px-1">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-tide-600 text-xs font-semibold text-white">
-          {n}
-        </span>
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-ink-900">{title}</h2>
-          <p className="text-sm text-ink-500">{hint}</p>
-        </div>
-      </div>
-      {children}
-    </section>
-  )
-}

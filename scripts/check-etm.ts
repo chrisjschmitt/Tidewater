@@ -96,6 +96,8 @@ import { reimbursableCsv } from '../src/lib/etm/reimbursableExport.ts'
 import { asFreshness, compareFreshness, deviceName, digest, freshnessInBackup, noteData } from '../src/lib/etm/freshness.ts'
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
+import { latestTdRead, monarchInUse, weeklySteps } from '../src/lib/etm/routine.ts'
+import type { ImportBatch } from '../src/lib/etm/types.ts'
 
 let failures = 0
 
@@ -1320,6 +1322,28 @@ console.log('\n=== Which copy is newest ===')
   const file = JSON.stringify({ version: 1, income: [], expenses: [], etm: { version: 1, freshness: first } })
   check('the record is read from a backup file', freshnessInBackup(file)?.signature === 's1' && freshnessInBackup('{not json') === undefined)
   check('a damaged record is ignored', asFreshness({ changedAt: 'yesterday', device: 'x', signature: 'y' }) === undefined)
+}
+
+console.log('\n=== Weekly check-in ===')
+{
+  const batch = (fileName: string, importedAt: string) => ({ id: fileName, fileName, importedAt, firstDate: '', lastDate: '', months: [], addedIds: [], replaced: [] }) as unknown as ImportBatch
+  const td = (id: string, date: string, extra: Partial<Transaction> = {}) =>
+    ({ id, date, source: 'td', reviewed: true, category: 'Groceries', tags: [], ...extra }) as unknown as Transaction
+  const batches = [batch('TD-transactions-2026-11-04.csv', '2026-11-04T11:00:00Z'), batch('Transactions_2026-11-04.csv', '2026-11-04T12:00:00Z'), batch('Review session 2026-11-04', '2026-11-04T13:00:00Z')]
+  check('newest TD read from file names', latestTdRead(batches) === '2026-11-04')
+  check('a later pending reading counts as a read', latestTdRead(batches, '2026-11-06') === '2026-11-06')
+  check('Monarch still in use with a recent export', monarchInUse(batches, '2026-11-10') && !monarchInUse(batches, '2026-12-10'))
+  const base = { today: '2026-11-06', batches, tdRows: [] as Transaction[], duplicates: 0, lastBackup: '2026-11-04T14:00:00Z', changedAt: '2026-11-04T13:30:00Z' }
+  const fresh = weeklySteps(base)
+  check('read this week → done; nothing to file → done; no duplicates → not needed', fresh.read === 'done' && fresh.file === 'done' && fresh.duplicates === 'notNeeded')
+  check('backed up after the last change → done', fresh.backup === 'done' && fresh.needCount === 0, JSON.stringify(fresh))
+  const stale = weeklySteps({ ...base, today: '2026-11-11', lastDone: '2026-11-06' })
+  check('nothing read since the last check-in → read needs you; Monarch not imported since → compare needs you', stale.read === 'needs' && stale.compare === 'needs')
+  const rows = [td('a', '2026-11-05', { reviewed: false, category: 'Uncategorized' }), td('b', '2026-10-30', { reviewed: false, prediction: { layer: 'review', confidence: 'low', reviewReasons: ['x'] } } as Partial<Transaction>), td('c', '2026-08-01', { reviewed: false, category: 'Uncategorized' })]
+  const filing = weeklySteps({ ...base, tdRows: rows, duplicates: 2, changedAt: '2026-11-05T09:00:00Z' })
+  check('rows to file this month and last (older months left alone)', filing.file === 'needs' && filing.toFile === 2, `${filing.toFile}`)
+  check('duplicates and a change since the backup need you; badge counts them', filing.duplicates === 'needs' && filing.backup === 'needs' && filing.needCount === 3, `${filing.needCount}`)
+  check('after Monarch stops, compare is not needed', weeklySteps({ ...base, today: '2026-12-20', lastDone: '2026-12-14' }).compare === 'notNeeded')
 }
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)

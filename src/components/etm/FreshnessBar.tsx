@@ -14,12 +14,26 @@ import { newestBackupInFolder } from '../../lib/etm/storage/safeguards'
  * itself where the browser allows (Chrome on the Mac), or from a backup file
  * you pick (Safari, the iPad).
  */
+export interface BackupStatus {
+  /** Days since the last backup on this device; undefined = never. */
+  ageDays?: number
+  /** Nothing changed here since the last backup. */
+  current: boolean
+  busy: boolean
+  onBackUp: () => void
+  /** Automatic backups are waiting for Chrome's permission to this folder. */
+  waitingFor?: string
+  onAllow?: () => void
+}
+
 export default function FreshnessBar({
   freshness,
   onRestore,
+  backup,
 }: {
   freshness: Freshness | undefined
   onRestore: (file: File) => void
+  backup?: BackupStatus
 }) {
   const [found, setFound] = useState<{ file: File; backup: Freshness | undefined; result: Comparison } | null>(null)
   const [checking, setChecking] = useState(false)
@@ -55,8 +69,27 @@ export default function FreshnessBar({
         <p className="text-sm text-ink-700">
           <span className="font-medium">Data on this {deviceOnly()}:</span>{' '}
           {freshness ? describe(freshness) : 'not yet dated — it will be after the next change or restore.'}
+          {backup && (
+            <span className={backup.current ? 'text-ink-500' : 'text-shell-600'}>
+              {' · '}
+              {backup.ageDays === undefined
+                ? 'never backed up here'
+                : `backed up ${backup.ageDays === 0 ? 'today' : backup.ageDays === 1 ? 'yesterday' : `${backup.ageDays} days ago`}`}
+              {backup.ageDays !== undefined && !backup.current && ', changed since'}
+            </span>
+          )}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {backup?.waitingFor && backup.onAllow && (
+            <button type="button" className="btn-ghost text-xs" onClick={backup.onAllow} title="Automatic backups are waiting for Chrome's permission">
+              Allow backups to {backup.waitingFor}
+            </button>
+          )}
+          {backup && !backup.current && (
+            <button type="button" className="btn-primary text-xs disabled:opacity-50" disabled={backup.busy} onClick={backup.onBackUp}>
+              {backup.busy ? 'Backing up…' : 'Back up now'}
+            </button>
+          )}
           <input
             ref={picker}
             type="file"

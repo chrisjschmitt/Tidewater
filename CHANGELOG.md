@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.3 — 2026-11-04
+
+### Changed
+- **Weekly check-in** shows where each step stands — **Done**, **Needs you** or **Not needed** — with the count beside it ("12 to file", "2 to check"). Steps that need you start open; the rest fold away and open on a tap. A badge on the tab counts the steps that need you. **Done for this week** starts the next check-in from today (remembered on this device).
+  - Read: done once a TD file (or a pending reading) from this week is in.
+  - File: rows needing a look this month and last.
+  - Compare with Monarch: shown only while Monarch exports are still being brought in.
+  - Back up: done when nothing has changed since the last backup.
+- TD statements: balances start **unticked** for a month still in progress, so a weekly read doesn't record mid-month figures as closing balances; pick an ended month and they start ticked as before.
+- One status line at the top of Expenses: "Data on this …", when it was last backed up (and whether it changed since), **Back up now** when it did, and *Allow backups to …* when Chrome is waiting — replacing the separate backup and permission strips.
+
 ## 0.14.2 — 2026-11-04
 
 ### Removed

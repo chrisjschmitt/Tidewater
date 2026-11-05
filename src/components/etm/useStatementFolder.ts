@@ -205,9 +205,13 @@ export function useStatementFolder(
             }
           : {}),
         skipped: match.skipped,
-        // Everything readable starts checked: the common case is that the
-        // whole folder is right, and the point of the step is not to retype it.
-        checked: new Set(rows.filter(isReadable).map((row) => row.account.id)),
+        // Everything readable starts checked once the month has ended — the
+        // point of the step is not to retype it. Mid-month (the weekly read)
+        // they start unticked, so a weekly read doesn't record mid-month
+        // figures as the month's closing balances.
+        checked: new Set(
+          month < new Date().toISOString().slice(0, 7) ? rows.filter(isReadable).map((row) => row.account.id) : [],
+        ),
         ...(feed ? { feed } : {}),
         ...(pending ? { pending } : {}),
       })

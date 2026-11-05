@@ -4,6 +4,7 @@ import TransactionEditor from './TransactionEditor'
 import { settleRow } from '../../lib/etm/review'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
+import { needsLook } from '../../lib/etm/routine'
 import type { UserRule } from '../../lib/etm/rules/types'
 import type { SplitLine, Transaction } from '../../lib/etm/types'
 
@@ -18,9 +19,6 @@ import type { SplitLine, Transaction } from '../../lib/etm/types'
 type Show = 'needs' | 'unconfirmed' | 'confirmed' | 'all'
 
 
-const needsLook = (row: Transaction) =>
-  !row.reviewed &&
-  (row.category === 'Uncategorized' || row.prediction?.layer === 'review' || (row.prediction?.reviewReasons.length ?? 0) > 0)
 
 /** The rule layer that filed a row, in plain words. */
 export const LAYER_WORDS: Record<string, string> = {
