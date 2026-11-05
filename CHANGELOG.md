@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.2 — 2026-11-04
+
+### Removed
+- Overview → the month card's "How that leftover adds up" list (each category's "How was this forecast worked out?" still shows its steps).
+
 ## 0.14.1 — 2026-11-04
 
 ### Changed

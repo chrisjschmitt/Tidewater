@@ -18,7 +18,6 @@ import {
   controlWindowBadge,
   controlWindowDetail,
   doubleCountCopy,
-  remainReasonCopy,
   typeLabel,
 } from './forecastCopy'
 
@@ -178,38 +177,6 @@ export default function ForecastMonthCard({
         </div>
       )}
 
-
-      {isCurrent && current.remainLines.length > 0 && (
-        <div className="mt-4">
-          <p className="text-[11px] uppercase tracking-wider text-ink-400">How that leftover adds up</p>
-          <p className="mt-1 text-sm text-ink-500">
-            Forecast to month-end is actual to today plus these lines. A seasonal
-            month that has started still finishes toward when it is present.
-            Irregular spend that has not started this month stays in Risk until it
-            is pinned.
-          </p>
-          <ul className="mt-2 divide-y divide-sand-200/80">
-            {current.remainLines.map((line) => (
-              <li key={line.key} className="flex items-baseline justify-between gap-4 py-1.5">
-                <span className="min-w-0">
-                  <span className="block truncate text-sm text-ink-900">{line.label}</span>
-                  <span className="text-xs text-ink-400">{remainReasonCopy(line.reason)}</span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block text-sm tabular-nums text-ink-700">
-                    {amountIn(line.remain, 'CAD')}
-                  </span>
-                  <span className="text-[11px] tabular-nums text-ink-400">
-                    {line.actual > 0
-                      ? `${amountIn(line.actual, 'CAD')} spent of ${amountIn(line.typical, 'CAD')}`
-                      : `${amountIn(line.typical, 'CAD')} typical`}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <RiskSection overlay={overlayBreakdown} placeLabel={placeLabel} onPlace={onPlace} />
 
