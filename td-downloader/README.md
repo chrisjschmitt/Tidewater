@@ -39,6 +39,24 @@ On a Mac the same line also arrives as a notification, so you see it even when
 Terminal is behind Tidewater, and Finder opens with the combined file selected —
 drag it onto Tidewater's Closing balances box to read it.
 
+### Logging out at the end
+
+A finished run **logs out of EasyWeb** with one click on EasyWeb's own Log out
+button (and its "are you sure" button, if it asks), then says so:
+`Logged out of EasyWeb. You can quit that Chrome window (⌘Q).` TD does not
+always time the session out on its own, and a signed-in window with a
+debugging port open is one any program on the Mac could drive — so the run
+doesn't leave it that way. If the button can't be found, it says so and you
+log out by hand.
+
+It does **not** log out after a Ctrl+C (so you can carry on) or when the page
+stopped looking logged in (nothing to touch). To stay signed in on purpose —
+say, to run `npm run pending` straight after — add the flag:
+
+```bash
+npm run download -- --stay-signed-in
+```
+
 You do **not** need `npx playwright install`. Playwright's bundled browsers are
 never used — the tool only ever attaches to your real Chrome over CDP, and it
 will never launch a browser itself.
@@ -133,7 +151,9 @@ mid-week, or after a run that skipped cards already downloaded today:
 npm run pending
 ```
 
-It visits each card's page the way a download does and updates today's file.
+It visits each card's page the way a download does, updates today's file, and
+logs out at the end the same way (`npm run pending -- --stay-signed-in` to
+stay signed in).
 
 To rebuild the combined file by hand, for example after saving one account's
 export yourself under its per-account name:
@@ -287,8 +307,9 @@ from the local config at run time.
 - Only navigation clicks and export-trigger clicks/selects. The step vocabulary
   has nothing in it that could submit a payment or a transfer.
 - Stops the whole run on any login, session-expiry, CAPTCHA, or step-up page.
-- Only teardown is disconnecting from Chrome. No page or context is closed,
-  nothing is navigated away as cleanup, nothing logs out.
+- A finished run logs out of EasyWeb (one click on its own Log out button);
+  `--stay-signed-in` skips it. Otherwise the only teardown is disconnecting
+  from Chrome: no page or context is closed, nothing is navigated away.
 - Checkpoints between accounts, never mid-account. One account failing does not
   stop the others.
 

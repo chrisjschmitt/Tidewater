@@ -8,6 +8,7 @@ import { HaltRequest } from './halt.js'
 import { localDateStamp } from './naming.js'
 import { Pacer } from './pacing.js'
 import { describePending, readPending, savePending, type PendingReading } from './pending.js'
+import { STAY_FLAG, describeLogout, logOut, type LogoutResult } from './logout.js'
 
 /**
  * `npm run pending` — refresh only the cards' pending charges, with no
@@ -20,7 +21,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(here, '..')
 
 async function main(): Promise<void> {
-  const configPath = process.argv.slice(2).find((arg) => arg.endsWith('.json')) ?? join(packageRoot, 'accounts.json')
+  const args = process.argv.slice(2)
+  const stayLoggedIn = args.includes(STAY_FLAG)
+  const configPath = args.find((arg) => arg.endsWith('.json')) ?? join(packageRoot, 'accounts.json')
   const config = await loadConfig(configPath)
   const cards = config.accounts.filter((a) => a.kind === 'credit' && !hasPlaceholderSelectors(a))
   if (cards.length === 0) {
@@ -29,6 +32,8 @@ async function main(): Promise<void> {
   }
   const browser = await connect(config.cdpUrl)
   const readings: PendingReading[] = []
+  let logout: LogoutResult | undefined
+  let blocked = false
   try {
     const page = await openRunPage(browser)
     const pacer = new Pacer(config.pacing, new HaltRequest())
@@ -51,14 +56,19 @@ async function main(): Promise<void> {
         }
       } catch (error) {
         console.log(`  ✗ ${card.label} (…${card.lastFour}): ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`)
-        if (error instanceof Error && error.name === 'SessionBlocked') break
+        if (error instanceof Error && error.name === 'SessionBlocked') {
+          blocked = true
+          break
+        }
       }
     }
+    if (!blocked && !stayLoggedIn) logout = await logOut(page)
   } finally {
     await closeConnection(browser)
   }
   const file = await savePending(config.outputDir, localDateStamp(), readings)
   console.log(file ? `\nPending charges saved: ${file}` : '\nNothing saved.')
+  if (!blocked) console.log(`\n${describeLogout(logout, stayLoggedIn)}`)
 }
 
 main().catch((error: unknown) => {

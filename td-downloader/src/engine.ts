@@ -11,6 +11,7 @@ import { RunLog, alreadyOkToday, resumeKey } from './manifest.js'
 import { localDateStamp, outputFilename, partialFilename } from './naming.js'
 import { Pacer } from './pacing.js'
 import { checkSession } from './session-guard.js'
+import { logOut, type LogoutResult } from './logout.js'
 import { describePending, readPending, savePending, type PendingReading } from './pending.js'
 import type { AccountConfig, AccountResult, ExportStep, RunConfig } from './types.js'
 
@@ -51,6 +52,8 @@ export interface RunOutcome {
   haltReason?: string
   /** True when the run ended because the page stopped looking logged in. */
   sessionBlocked?: boolean
+  /** Set when the run tried to log out at the end. */
+  logout?: LogoutResult
 }
 
 export class RunAbort extends Error {
@@ -72,6 +75,7 @@ export async function runDownloads(
   config: RunConfig,
   runsDir: string,
   log: (message: string) => void,
+  options: { stayLoggedIn?: boolean } = {},
 ): Promise<RunOutcome> {
   const dateStamp = localDateStamp()
   const done = await alreadyOkToday(runsDir, dateStamp)
@@ -221,6 +225,13 @@ export async function runDownloads(
   const pendingFile = await savePending(config.outputDir, dateStamp, pendingReadings).catch(() => null)
   if (pendingFile) log(`  Pending charges saved: ${pendingReadings.map((r) => `${r.label} ${describePending(r)}`).join('; ')}`)
 
+  // A finished run logs out, so the session isn't left open behind the
+  // debugging port. A Ctrl+C or a session problem leaves the window as it was:
+  // the first so the person can carry on, the second because it is no longer
+  // a session we should touch.
+  let logout: LogoutResult | undefined
+  if (page && !haltReason && !sessionBlocked && !options.stayLoggedIn) logout = await logOut(page)
+
   await closeConnection(browser)
   removeSigintHandler()
   await runLog.finish()
@@ -232,6 +243,7 @@ export async function runDownloads(
   const outcome: RunOutcome = { results: [...runLog.results], manifestPath: runLog.file, combined }
   if (haltReason !== undefined) outcome.haltReason = haltReason
   if (sessionBlocked) outcome.sessionBlocked = true
+  if (logout) outcome.logout = logout
   return outcome
 }
 
@@ -509,9 +521,9 @@ async function markRemaining(runLog: RunLog, config: RunConfig, reason: string):
 /**
  * `browser.close()` on a connectOverCDP connection **disconnects** Playwright
  * from Chrome; it does not close the user's browser. That asymmetry is the
- * reason this is the only teardown here: no page or context is closed, nothing
- * is navigated away as cleanup, and nothing logs out. The window is left
- * exactly as the user left it, still signed in.
+ * reason this is the only teardown here: no page or context is closed and
+ * nothing is navigated away as cleanup. (Logging out at the end of a finished
+ * run is a separate, deliberate step — see logout.ts.)
  */
 export async function closeConnection(browser: Browser | null): Promise<void> {
   if (!browser) return

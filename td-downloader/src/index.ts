@@ -6,6 +6,7 @@ import { RunAbort, runDownloads } from './engine.js'
 import { RUNS_DIR_NAME } from './manifest.js'
 import { formatCombined, formatReport, formatSummary, notifyMac, revealInFinder } from './report.js'
 import { REAUTH_MESSAGE } from './session-guard.js'
+import { STAY_FLAG, describeLogout } from './logout.js'
 import type { PacingRange } from './types.js'
 
 /**
@@ -21,7 +22,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(here, '..')
 
 async function main(): Promise<void> {
-  const configPath = process.argv[2] ?? join(packageRoot, 'accounts.json')
+  const args = process.argv.slice(2)
+  const stayLoggedIn = args.includes(STAY_FLAG)
+  const configPath = args.find((arg) => !arg.startsWith('--')) ?? join(packageRoot, 'accounts.json')
   const runsDir = join(packageRoot, RUNS_DIR_NAME)
 
   const config = await loadConfig(configPath)
@@ -36,7 +39,7 @@ async function main(): Promise<void> {
   console.log(`  pacing    ${seconds(config.pacing.actionDelayMs)} per action, ${seconds(config.pacing.accountDelayMs)} between accounts`)
   console.log('')
 
-  const outcome = await runDownloads(config, runsDir, (message) => console.log(message))
+  const outcome = await runDownloads(config, runsDir, (message) => console.log(message), { stayLoggedIn })
 
   console.log('')
   console.log(formatReport(outcome.results))
@@ -57,7 +60,11 @@ async function main(): Promise<void> {
   } else if (outcome.haltReason) {
     console.log('')
     console.log(`Run ended early: ${outcome.haltReason}`)
-    console.log('Chrome was left exactly as it was. Re-run to pick up where this stopped.')
+    console.log('Chrome was left exactly as it was, still logged in. Re-run to pick up where this stopped,')
+    console.log('or log out of EasyWeb and quit that Chrome (⌘Q) if you are done.')
+  } else {
+    console.log('')
+    console.log(describeLogout(outcome.logout, stayLoggedIn))
   }
 
   const allOk = outcome.results.every((result) => result.status === 'ok')
