@@ -288,9 +288,12 @@ async function runOneAccount(
   const onOpened =
     account.kind === 'credit'
       ? async (opened: Page) => {
-          const reading = await readPending(opened, account.label, account.lastFour).catch(() => null)
-          if (reading) onPending(reading)
-          else log(`  !     ${account.label}: couldn't read its pending charges (the download carries on)`)
+          const result = await readPending(opened, account.label, account.lastFour).catch((error: unknown) => ({
+            reading: null,
+            why: error instanceof Error ? (error.message.split('\n')[0] ?? 'error') : String(error),
+          }))
+          if (result.reading) onPending(result.reading)
+          else log(`  !     ${account.label}: couldn't read its pending charges — ${result.why} (the download carries on)`)
         }
       : undefined
   const work = downloadAccount(page, account, config, pacer, finalPath, partialPath, onOpened)

@@ -63,11 +63,16 @@ const READ_JS = `(() => {
   for (const row of document.querySelectorAll('${ROWS}')) {
     const date = cell(row, 'transactionDt')
     if (!date) continue
-    const debit = money(cell(row, 'debitedAmount'))
-    const credit = money(cell(row, 'creditedAmount'))
-    charges.push({ date, description: cell(row, 'transactionDescToDisplay'), debit, credit })
+    const debitText = cell(row, 'debitedAmount')
+    const creditText = cell(row, 'creditedAmount')
+    charges.push({ date, description: cell(row, 'transactionDescToDisplay'), debit: money(debitText), credit: money(creditText), debitText, creditText })
   }
-  return { total, charges }
+  return {
+    total,
+    totalText: box ? box.innerText.replace(/\\s+/g, ' ').trim() : null,
+    rowCount: document.querySelectorAll('${ROWS}').length,
+    charges,
+  }
 })()`
 
 const MONTHS: Record<string, string> = {
@@ -82,25 +87,49 @@ export function isoFromEasyWeb(text: string): string | null {
   return m && month ? `${m[3]}-${month}-${m[2]!.padStart(2, '0')}` : null
 }
 
-interface RawReading {
+export interface RawReading {
   total: number | null
-  charges: { date: string; description: string; debit: number | null; credit: number | null }[]
+  totalText?: string | null
+  rowCount?: number
+  charges: {
+    date: string
+    description: string
+    debit: number | null
+    credit: number | null
+    debitText?: string
+    creditText?: string
+  }[]
 }
 
-/** Turns what the page showed into a reading; null when it can't be trusted. */
-export function toReading(raw: RawReading, label: string, lastFour: string, readAt: string): PendingReading | null {
-  if (raw.total === null) return null
+export type ReadResult =
+  | { reading: PendingReading; why?: undefined; raw?: undefined }
+  | { reading: null; why: string; raw?: RawReading }
+
+const cents = (n: number) => Math.round(n * 100) / 100
+
+/** Turns what the page showed into a reading, or says why it can't be trusted. */
+export function toReading(raw: RawReading, label: string, lastFour: string, readAt: string): ReadResult {
+  if (raw.total === null) return { reading: null, why: 'no pending total on the page', raw }
   const charges: PendingCharge[] = []
-  for (const c of raw.charges) {
+  for (const [i, c] of raw.charges.entries()) {
     const date = isoFromEasyWeb(c.date)
-    if (!date || (c.debit === null && c.credit === null)) return null
-    const amount = Math.round(((c.credit ?? 0) - (c.debit ?? 0)) * 100) / 100
+    if (!date) return { reading: null, why: `row ${i + 1}: date "${c.date}" not recognised`, raw }
+    if (c.debit === null && c.credit === null) return { reading: null, why: `row ${i + 1}: no amount`, raw }
+    const amount = cents((c.credit ?? 0) - (c.debit ?? 0))
     charges.push({ date, description: c.description.replace(/\s+/g, ' ').trim(), amount })
   }
   // The list must add up to EasyWeb's own total, or the page was read half-loaded.
-  const debits = Math.round(charges.reduce((s, c) => s + (c.amount < 0 ? -c.amount : 0), 0) * 100) / 100
-  if (Math.abs(debits - raw.total) > 0.005) return null
-  return { label, lastFour, readAt, total: raw.total, charges }
+  // The total is either the charges alone or the charges less pending credits.
+  const debits = cents(charges.reduce((s, c) => s + (c.amount < 0 ? -c.amount : 0), 0))
+  const net = cents(-charges.reduce((s, c) => s + c.amount, 0))
+  if (Math.abs(debits - raw.total) > 0.005 && Math.abs(net - raw.total) > 0.005) {
+    return {
+      reading: null,
+      why: `${charges.length} rows add up to $${debits.toFixed(2)}, the page's total is $${raw.total.toFixed(2)}`,
+      raw,
+    }
+  }
+  return { reading: { label, lastFour, readAt, total: raw.total, charges } }
 }
 
 /**
@@ -108,17 +137,18 @@ export function toReading(raw: RawReading, label: string, lastFour: string, read
  * shows no pending summary (not a card page, or EasyWeb changed) or the list
  * never matched its total — the caller reports it and carries on.
  */
-export async function readPending(page: Page, label: string, lastFour: string): Promise<PendingReading | null> {
+export async function readPending(page: Page, label: string, lastFour: string): Promise<ReadResult> {
   const found = await page.waitForSelector(SUMMARY, { state: 'attached', timeout: 15_000 }).catch(() => null)
-  if (!found) return null
+  if (!found) return { reading: null, why: 'no pending summary on the page' }
   // Up to ~10 s for the list to finish loading and agree with the total.
+  let last: ReadResult = { reading: null, why: 'not read' }
   for (let attempt = 0; attempt < 10; attempt++) {
     const raw = (await page.evaluate(READ_JS)) as RawReading
-    const reading = toReading(raw, label, lastFour, new Date().toISOString())
-    if (reading) return reading
+    last = toReading(raw, label, lastFour, new Date().toISOString())
+    if (last.reading) return last
     await page.waitForTimeout(1000)
   }
-  return null
+  return last
 }
 
 /** Adds readings to the day's file, replacing each account's earlier reading. */

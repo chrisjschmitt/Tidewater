@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -34,11 +35,20 @@ async function main(): Promise<void> {
     for (const card of cards) {
       try {
         await openAccount(page, card, config, pacer)
-        const reading = await readPending(page, card.label, card.lastFour)
-        if (reading) {
-          readings.push(reading)
-          console.log(`  ✓ ${card.label} (…${card.lastFour}): ${describePending(reading)}`)
-        } else console.log(`  ✗ ${card.label} (…${card.lastFour}): couldn't read its pending charges`)
+        const result = await readPending(page, card.label, card.lastFour)
+        if (result.reading) {
+          readings.push(result.reading)
+          console.log(`  ✓ ${card.label} (…${card.lastFour}): ${describePending(result.reading)}`)
+        } else {
+          console.log(`  ✗ ${card.label} (…${card.lastFour}): couldn't read its pending charges — ${result.why}`)
+          if (result.raw) {
+            // What the page showed, to work out why: kept in the git-ignored runs/ folder.
+            const dump = join(packageRoot, 'runs', `pending-debug-${card.lastFour}.json`)
+            await mkdir(dirname(dump), { recursive: true })
+            await writeFile(dump, `${JSON.stringify(result.raw, null, 2)}\n`, 'utf8')
+            console.log(`      what the page showed: ${dump}`)
+          }
+        }
       } catch (error) {
         console.log(`  ✗ ${card.label} (…${card.lastFour}): ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`)
         if (error instanceof Error && error.name === 'SessionBlocked') break
