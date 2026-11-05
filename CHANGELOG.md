@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.7 — 2026-11-04
+
+### Changed
+- Every transaction drill-down names each row's account and category — Budget's groups and categories, the dashboard's category drill-down, Overview's category window and Actual to today, Month end's lists and reimbursements.
+
 ## 0.14.6 — 2026-11-04
 
 ### Changed

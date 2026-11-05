@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { presentIn, runningTotals } from '../../lib/etm/aggregate'
 import { amountIn } from '../../lib/etm/format'
 import type { Transaction } from '../../lib/etm/types'
+import { useAccountName } from './accountNames'
 
 interface Props {
   /** Already filtered and ordered by the caller. */
@@ -30,7 +31,9 @@ interface Props {
  * rows actually say, and a clipped statement sends you off to another tab to
  * find out.
  */
-export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit, editMonarch, onSkip, accountName }: Props) {
+export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit, editMonarch, onSkip, accountName: givenName }: Props) {
+  const fromContext = useAccountName()
+  const accountName = givenName ?? fromContext
   const actions = Boolean(onEdit || onSkip)
   const totals = useMemo(() => runningTotals(rows), [rows])
   const hidden = useMemo(

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { AccountNamesContext } from './accountNames'
 import CategoryModal from './CategoryModal'
 import EtmGate from './EtmGate'
 import EtmOpening from './EtmOpening'
@@ -189,9 +190,11 @@ function Unlocked({
     />
   )
 
+  const nameOf = (id: string) => data.accounts.find((a) => a.id === id)?.nickname ?? 'Unknown account'
+
   if (!open) {
     return (
-      <>
+      <AccountNamesContext.Provider value={nameOf}>
         <EtmStrip
           period={period}
           months={data.months}
@@ -204,12 +207,12 @@ function Unlocked({
           onOpen={onOpen}
         />
         {drillDown}
-      </>
+      </AccountNamesContext.Provider>
     )
   }
 
   return (
-    <>
+    <AccountNamesContext.Provider value={nameOf}>
       <Suspense fallback={<EtmOpening afterUnlock onClose={onClose} />}>
         <EtmArea
           data={data}
@@ -239,6 +242,6 @@ function Unlocked({
         />
       </Suspense>
       {drillDown}
-    </>
+    </AccountNamesContext.Provider>
   )
 }
