@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.5 — 2026-11-04
+
+### Changed
+- Month end → Tidy: every row has **Edit** — Monarch rows too (before the switch-over date they came from Monarch, and only TD rows could be edited) — and **Skip** for one that is fine as it is (e.g. a personal purchase on a card you usually claim from). Skipped rows leave the list and the count; "Show them again" brings back the month's. Editing a Monarch row warns that Monarch's next import puts its own category and tags back unless it's changed there too.
+
 ## 0.14.4 — 2026-11-04
 
 ### Changed

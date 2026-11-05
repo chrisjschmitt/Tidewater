@@ -16,6 +16,10 @@ interface Props {
   spendSoFar?: { running: Map<string, number>; total: number }
   /** Offers Edit on rows the editor can change (TD and manual, not Monarch). */
   onEdit?: (row: Transaction) => void
+  /** Offers Edit on Monarch rows too (the editor warns their next import puts Monarch's back). */
+  editMonarch?: boolean
+  /** Offers Skip: leave this row off a to-do list. */
+  onSkip?: (row: Transaction) => void
 }
 
 /**
@@ -24,7 +28,8 @@ interface Props {
  * rows actually say, and a clipped statement sends you off to another tab to
  * find out.
  */
-export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit }: Props) {
+export default function TransactionTable({ rows, empty, omitTags = [], spendSoFar, onEdit, editMonarch, onSkip }: Props) {
+  const actions = Boolean(onEdit || onSkip)
   const totals = useMemo(() => runningTotals(rows), [rows])
   const hidden = useMemo(
     () => new Set(omitTags.map((t) => t.trim().toLowerCase())),
@@ -44,8 +49,8 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
             <th className="py-1.5 text-left font-medium">What</th>
             <th className="w-24 py-1.5 text-right font-medium">Amount</th>
             <th className="w-24 py-1.5 text-right font-medium">Running</th>
-            {onEdit && (
-              <th className="w-14 py-1.5">
+            {actions && (
+              <th className={`${onSkip ? 'w-28' : 'w-14'} py-1.5`}>
                 <span className="sr-only">Edit</span>
               </th>
             )}
@@ -87,9 +92,9 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                       : '—'
                     : amountIn(totals[i]![row.currency], row.currency)}
                 </td>
-                {onEdit && (
+                {actions && (
                   <td className="py-2 text-right">
-                    {!row.pending && (row.source === 'td' || row.source === 'manual') && (
+                    {onEdit && !row.pending && (row.source === 'td' || row.source === 'manual' || (editMonarch && row.source === 'monarch')) && (
                       <button
                         type="button"
                         className="btn-quiet text-xs"
@@ -97,6 +102,17 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                         aria-label={`Edit ${row.merchant || 'transaction'}`}
                       >
                         Edit
+                      </button>
+                    )}
+                    {onSkip && (
+                      <button
+                        type="button"
+                        className="btn-quiet text-xs"
+                        onClick={() => onSkip(row)}
+                        aria-label={`Skip ${row.merchant || 'transaction'}`}
+                        title="It's fine as it is — leave it off this list"
+                      >
+                        Skip
                       </button>
                     )}
                   </td>
@@ -117,7 +133,7 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                     .map(([currency, value]) => amountIn(value, currency))
                     .join(' · ')}
             </td>
-            {onEdit && <td />}
+            {actions && <td />}
           </tr>
         </tfoot>
       </table>

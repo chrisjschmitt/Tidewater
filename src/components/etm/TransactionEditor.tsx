@@ -256,6 +256,12 @@ export default function TransactionEditor({
           onRemember={setRemember}
         />
       )}
+      {row.source === 'monarch' && (
+        <p className="rounded-xl bg-shell-50 px-3 py-2 text-xs text-shell-700">
+          This row came from Monarch. Change it in Monarch too — otherwise the next Monarch import puts Monarch’s
+          category and tags back.
+        </p>
+      )}
       <div className="flex gap-2">
         <button disabled={busy || !valid} className="btn-primary text-xs disabled:opacity-50" onClick={() => void save()}>
           Save{row.source === 'td' ? ' and confirm' : ''}

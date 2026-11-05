@@ -67,10 +67,31 @@ export default function WorkflowPanel({
     () => computeSavings(data.accounts, data.balances, asOf, (id) => pending.get(id)),
     [data.accounts, data.balances, asOf, pending],
   )
-  const untidy = useMemo(
+  // Rows skipped on Tidy (fine as they are) stay off its lists.
+  const skippedIds = useMemo(() => new Set(data.config.tidySkipped ?? []), [data.config.tidySkipped])
+  const untidyAll = useMemo(
     () => findUntidy(data.transactions, data.accounts, month, data.config),
     [data.transactions, data.accounts, month, data.config],
   )
+  const untidy = useMemo(() => {
+    const keep = (rows: Transaction[]) => rows.filter((t) => !skippedIds.has(t.id.split('#')[0]!))
+    return {
+      ...untidyAll,
+      uncategorized: keep(untidyAll.uncategorized),
+      parentOnly: keep(untidyAll.parentOnly),
+      untaggedCandidates: keep(untidyAll.untaggedCandidates),
+    }
+  }, [untidyAll, skippedIds])
+  const skippedHere = [...untidyAll.uncategorized, ...untidyAll.parentOnly, ...untidyAll.untaggedCandidates]
+    .map((t) => t.id.split('#')[0]!)
+    .filter((id) => skippedIds.has(id))
+  const skip = (row: Transaction) =>
+    void data.saveSettings({ ...data.config, tidySkipped: [...(data.config.tidySkipped ?? []), row.id.split('#')[0]!] })
+  const unskipMonth = () => {
+    const back = new Set(skippedHere)
+    const rest = (data.config.tidySkipped ?? []).filter((id) => !back.has(id))
+    void data.saveSettings({ ...data.config, tidySkipped: rest.length > 0 ? rest : undefined })
+  }
   const groups = useMemo(
     () =>
       reimbursementsByAccount(
@@ -146,7 +167,19 @@ export default function WorkflowPanel({
             hint: 'Anything uncategorized, or reimbursable without a bucket — the reimbursements are only as good as the tags.',
             state: steps.tidy,
             ...(untidyCount > 0 ? { detail: `${untidyCount} to fix` } : {}),
-            body: <Tidy untidy={untidy} tag={data.config.reimbursableTag} {...(onEdit ? { onEdit } : {})} />,
+            body: (
+              <div className="space-y-3">
+                <Tidy untidy={untidy} tag={data.config.reimbursableTag} onSkip={skip} {...(onEdit ? { onEdit } : {})} />
+                {skippedHere.length > 0 && (
+                  <p className="text-xs text-ink-400">
+                    {skippedHere.length} skipped as fine.{' '}
+                    <button type="button" className="underline underline-offset-2" onClick={unskipMonth}>
+                      Show them again
+                    </button>
+                  </p>
+                )}
+              </div>
+            ),
           },
           {
             key: 'reimbursements',
@@ -527,7 +560,17 @@ function CloseControls({
   )
 }
 
-function Tidy({ untidy, tag, onEdit }: { untidy: ReturnType<typeof findUntidy>; tag: string; onEdit?: (row: Transaction) => void }) {
+function Tidy({
+  untidy,
+  tag,
+  onEdit,
+  onSkip,
+}: {
+  untidy: ReturnType<typeof findUntidy>
+  tag: string
+  onEdit?: (row: Transaction) => void
+  onSkip?: (row: Transaction) => void
+}) {
   const nothing =
     untidy.uncategorized.length === 0 &&
     untidy.untaggedCandidates.length === 0 &&
@@ -551,9 +594,9 @@ function Tidy({ untidy, tag, onEdit }: { untidy: ReturnType<typeof findUntidy>; 
             {untidy.uncategorized.length === 1 ? 'row' : 'rows'}
           </p>
           <p className="mb-2 text-xs text-ink-400">
-            Edit each to give it a category.
+            Edit each to give it a category, or Skip one that is fine as it is.
           </p>
-          <TransactionTable rows={untidy.uncategorized.slice(0, 25)} empty="" {...(onEdit ? { onEdit } : {})} />
+          <TransactionTable rows={untidy.uncategorized.slice(0, 25)} empty="" editMonarch {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
         </div>
       )}
 
@@ -568,7 +611,7 @@ function Tidy({ untidy, tag, onEdit }: { untidy: ReturnType<typeof findUntidy>; 
             Edit each to tag it “{tag}: …” for the account or person who
             reimburses it — the generic tag alone puts it on no bucket.
           </p>
-          <TransactionTable rows={untidy.parentOnly.slice(0, 25)} empty="" {...(onEdit ? { onEdit } : {})} />
+          <TransactionTable rows={untidy.parentOnly.slice(0, 25)} empty="" editMonarch {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
         </div>
       )}
 
@@ -581,10 +624,10 @@ function Tidy({ untidy, tag, onEdit }: { untidy: ReturnType<typeof findUntidy>; 
           </p>
           <p className="mb-2 text-xs text-ink-400">
             Either the tag was forgotten, or these really are personal. Only you
-            can say which, so nothing is assumed. Accounts you have never claimed
+            can say which: Edit to tag it, or Skip a personal one. Accounts you have never claimed
             anything from are not asked about at all.
           </p>
-          <TransactionTable rows={untidy.untaggedCandidates.slice(0, 25)} empty="" {...(onEdit ? { onEdit } : {})} />
+          <TransactionTable rows={untidy.untaggedCandidates.slice(0, 25)} empty="" editMonarch {...(onEdit ? { onEdit } : {})} {...(onSkip ? { onSkip } : {})} />
         </div>
       )}
     </div>

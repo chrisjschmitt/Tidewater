@@ -80,6 +80,8 @@ export interface EtmConfig {
   pending?: PendingSnapshot
   /** Month → reimbursement groups (account|bucket) ticked as checked at month end. */
   reimburseChecked?: Record<string, string[]>
+  /** Rows (ids) skipped on Month end's Tidy list: fine as they are. */
+  tidySkipped?: string[]
   /** Month → the travel transfer worked out and recorded at month end. */
   transfers?: Record<string, { amount: number; recordedAt: string }>
 }
@@ -121,6 +123,7 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   pending: stored?.pending && typeof stored.pending === 'object' && Array.isArray(stored.pending.accounts) ? stored.pending : undefined,
   reimburseChecked: stored?.reimburseChecked && typeof stored.reimburseChecked === 'object' ? stored.reimburseChecked : undefined,
   transfers: stored?.transfers && typeof stored.transfers === 'object' ? stored.transfers : undefined,
+  tidySkipped: Array.isArray(stored?.tidySkipped) ? stored.tidySkipped : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
