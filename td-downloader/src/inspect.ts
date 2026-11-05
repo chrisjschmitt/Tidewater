@@ -40,13 +40,17 @@ interface ElementSketch {
 
 /** Trimmed and collapsed, so a menu of forty links stays readable. */
 const tidy = (value: string, max = 90): string => {
-  const collapsed = value.replace(/\s+/g, ' ').trim()
+  // Amounts are masked: this output finds elements, it never reads figures.
+  const collapsed = value
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/-?\$\s?-?[\d,]+(\.\d\d)?/g, '$#.##')
   return collapsed.length > max ? `${collapsed.slice(0, max - 1)}…` : collapsed
 }
 
 function sketchLine(sketch: ElementSketch, index: number): string {
   const bits = [`[${index}] <${sketch.tag}>`]
-  if (sketch.text) bits.push(`text="${sketch.text}"`)
+  if (sketch.text) bits.push(`text="${tidy(sketch.text)}"`)
   if (sketch.id) bits.push(`id=${sketch.id}`)
   if (sketch.name) bits.push(`name=${sketch.name}`)
   if (sketch.ariaLabel) bits.push(`aria-label="${sketch.ariaLabel}"`)
@@ -153,7 +157,7 @@ async function main(): Promise<void> {
       const located = page.locator(selector)
       const count = await located.count()
       console.log(`Selector ${JSON.stringify(selector)} matches ${count} element(s).`)
-      const limit = Math.min(count, 5)
+      const limit = Math.min(count, 25)
       for (let i = 0; i < limit; i++) {
         const handle = located.nth(i)
         const text = tidy((await handle.textContent().catch(() => '')) ?? '', 70)
@@ -165,7 +169,9 @@ async function main(): Promise<void> {
           ((await handle.getAttribute('aria-label').catch(() => '')) ?? '') || '',
           70,
         )
+        const id = (await handle.getAttribute('id').catch(() => '')) ?? ''
         const bits = [`[${i}] <${String(tag)}>`, `text="${text}"`]
+        if (id) bits.push(`id=${id}`)
         if (aria) bits.push(`aria-label="${aria}"`)
         if (!visible) bits.push('(hidden)')
         console.log(`  ${bits.join('  ')}`)
