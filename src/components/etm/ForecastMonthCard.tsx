@@ -2,11 +2,9 @@ import { useEffect, useState } from 'react'
 import type { PlanChangeRequest, PlanNote, PlanNoteDraft } from '../../lib/forecast/planNotes'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
-import { forecastMix, isOutsideControlWindow, pinAddsToForecast, savingsTone, withCompareIgnores } from '../../lib/forecast/forecast'
+import { isOutsideControlWindow, pinAddsToForecast, savingsTone, withCompareIgnores } from '../../lib/forecast/forecast'
 import type {
   CurrentMonthView,
-  ForecastMix,
-  ForecastMixLine,
   KnownFuture,
   MonthPoint,
   OverlayBreakdown,
@@ -90,7 +88,6 @@ export default function ForecastMonthCard({
   )
   const lumpy = lumps.length > 0 && displayed.forecast > setAside.likely * 1.05
   const placeLabel = `Place in ${monthName(point.month)}`
-  const mix = point.kind === 'future' ? forecastMix(point, placements) : null
 
   return (
     <section className="card p-6">
@@ -214,8 +211,6 @@ export default function ForecastMonthCard({
         </div>
       )}
 
-      {mix && <ForecastMixList mix={mix} onRemove={onRemove} onNotesChange={onNotesChange} />}
-
       <RiskSection overlay={overlayBreakdown} placeLabel={placeLabel} onPlace={onPlace} />
 
       {usd && (usd.actual !== 0 || usd.calendar !== 0) && (
@@ -263,75 +258,6 @@ export default function ForecastMonthCard({
         </div>
       )}
     </section>
-  )
-}
-
-function ForecastMixList({
-  mix,
-  onRemove,
-  onNotesChange,
-}: {
-  mix: ForecastMix
-  onRemove: (id: string) => void
-  onNotesChange: (id: string, notes: string) => void
-}) {
-  const groups: Array<{ key: 'monthly' | 'lumpy' | 'pinned' | 'onPlan'; label: string; lines: ForecastMixLine[] }> = [
-    { key: 'monthly', label: 'Every month', lines: mix.monthly },
-    { key: 'lumpy', label: 'Usual this month', lines: mix.lumpy },
-    { key: 'pinned', label: 'Pinned on this month', lines: mix.pinned },
-    { key: 'onPlan', label: 'Added to this month’s plan', lines: mix.onPlan },
-  ]
-  if (groups.every((group) => group.lines.length === 0)) return null
-
-  return (
-    <div className="mt-4">
-      <p className="text-[11px] uppercase tracking-wider text-ink-400">How this forecast is built</p>
-      <p className="mt-1 text-sm text-ink-500">
-        These lines add to the Forecast column, except amounts added to this
-        month’s plan. Risk is not in this list.
-      </p>
-      {groups.map(
-        (group) =>
-          group.lines.length > 0 && (
-            <div key={group.key} className="mt-3">
-              <p className="text-[11px] uppercase tracking-wider text-ink-400">{group.label}</p>
-              <ul className="mt-1 divide-y divide-sand-200/80">
-                {group.lines.map((line) => (
-                  <li
-                    key={line.placementId ?? `${group.key}-${line.key}`}
-                    className="flex flex-col gap-1.5 py-1.5"
-                  >
-                    <span className="flex items-baseline justify-between gap-3">
-                      <span className="min-w-0 truncate text-sm text-ink-900">
-                        {line.label}
-                        {line.recurrence && (
-                          <span className="ml-2 text-[11px] uppercase tracking-wider text-ink-400">
-                            {line.recurrence === 'annual' ? 'each year' : 'once'}
-                          </span>
-                        )}
-                      </span>
-                      <span className="flex shrink-0 items-baseline gap-3">
-                        <span className="text-sm tabular-nums text-ink-700">{amountIn(line.amount, 'CAD')}</span>
-                        {line.placementId && (
-                          <button onClick={() => onRemove(line.placementId!)} className="btn-quiet text-xs">
-                            Remove
-                          </button>
-                        )}
-                      </span>
-                    </span>
-                    {line.placementId && (
-                      <SavedPinComment
-                        notes={line.notes ?? ''}
-                        onSave={(notes) => onNotesChange(line.placementId!, notes)}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ),
-      )}
-    </div>
   )
 }
 

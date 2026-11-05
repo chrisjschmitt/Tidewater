@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.1 — 2026-11-04
+
+### Changed
+- Overview → Travel saving: choose which goal is your travel saving (a goal named with "vacation" or "travel" is found by itself); the choice is kept with the forecast settings. A goal with no monthly contribution says so.
+
+### Removed
+- Overview → the month card's "How this forecast is built" list (the Plan vs forecast table shows the same; pinned costs keep their own list with Remove).
+
 ## 0.14.0 — 2026-11-04
 
 First step of the Expenses rewrite into a weekly and monthly routine (Tidewater's own home screen — dashboard, goals, the light version — is unchanged).

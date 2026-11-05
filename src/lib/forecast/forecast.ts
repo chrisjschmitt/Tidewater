@@ -446,7 +446,7 @@ function matchVacationGoal(budget: Budget, config: ForecastConfig): VacationGoal
     }
     return { status: 'missing', monthly: 0, current: 0 }
   }
-  const matches = budget.goals.filter((goal) => nameKey(goal.name).includes('vacation'))
+  const matches = budget.goals.filter((goal) => /vacation|travel/.test(nameKey(goal.name)))
   if (matches.length === 1) {
     const found = matches[0]!
     return {

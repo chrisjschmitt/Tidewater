@@ -244,7 +244,11 @@ export default function ForecastPanel({
             result.vacationGoal.status === 'matched' ? result.vacationGoal.monthly : 0,
             config.ignoredCompare ?? {},
           )}
-          {...(result.vacationGoal.goalName ? { goalName: result.vacationGoal.goalName } : {})}
+          {...(result.vacationGoal.status === 'matched' && result.vacationGoal.goalName
+            ? { goalName: result.vacationGoal.goalName, goalId: result.vacationGoal.goalId }
+            : {})}
+          goals={budget.goals.map((goal) => ({ id: goal.id, name: goal.name, monthly: goal.monthly }))}
+          onChooseGoal={(goalId) => onConfigChange({ ...config, vacationGoalId: goalId })}
           onSelect={(month) => {
             setFocusedMonth(month)
             jumpTo('forecast-month')
