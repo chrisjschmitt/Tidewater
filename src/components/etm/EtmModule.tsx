@@ -8,6 +8,7 @@ import { defaultPeriod } from './PeriodSelector'
 import { useEtmData } from './useEtmData'
 import { aggregate, dashboardActuals, type DashboardActuals } from '../../lib/etm/aggregate'
 import { periodLabel, today, type Period } from '../../lib/etm/period'
+import { withBudgetEdit } from '../../lib/forecast/planHistory'
 import {
   forgetRememberedKey,
   readVaultMeta,
@@ -47,6 +48,12 @@ interface Props {
   onRestoreBackup?: (file: File) => void
   /** Plan edits from the Forecast tab: the budget's expense lines going forward. */
   onExpensesChange?: (expenses: Budget['expenses']) => void
+  /**
+   * While unlocked, hands the dashboard a recorder for its plan edits, so a
+   * change there keeps earlier months' plans the way a change in Expenses
+   * does; null once locked.
+   */
+  onPlanRecorder?: (record: ((previous: Budget, next: Budget) => void) | null) => void
 }
 
 /**
@@ -106,8 +113,19 @@ function Unlocked({
   onExpensesChange,
   onRestoreBackup,
   onUnlocked,
+  onPlanRecorder,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
+
+  // The dashboard's plan edits, recorded from this month on (planHistory.ts).
+  useEffect(() => {
+    if (!onPlanRecorder || data.loading) return
+    onPlanRecorder((previous, next) => {
+      const history = withBudgetEdit(previous, next, data.forecastConfig.planHistory, today().slice(0, 7))
+      if (history) void data.saveForecastSettings({ ...data.forecastConfig, planHistory: history })
+    })
+    return () => onPlanRecorder(null)
+  }, [onPlanRecorder, data.loading, data.forecastConfig, data.saveForecastSettings])
   const [period, setPeriod] = useState<Period>(() => defaultPeriod([]))
   const [periodSettled, setPeriodSettled] = useState(false)
 

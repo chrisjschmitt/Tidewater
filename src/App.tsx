@@ -79,6 +79,11 @@ export default function App() {
   const [etmCategory, setEtmCategory] = useState<string | null>(null)
   // Folds to a constant null in public builds, so no comparison markup ships.
   const etmActuals = __ETM_AVAILABLE__ ? etmState : null
+  // Set by the unlocked expenses module: records dashboard plan edits in its plan history.
+  const planRecorder = useRef<((previous: Budget, next: Budget) => void) | null>(null)
+  const setPlanRecorder = useCallback((record: ((previous: Budget, next: Budget) => void) | null) => {
+    planRecorder.current = record
+  }, [])
   const etmContext = __ETM_AVAILABLE__ ? etmChat : null
   const [etmMonthState, setEtmMonthPlan] = useState<MonthPlanAdjustment[] | null>(null)
   const monthAdjustments = useMemo(() => (__ETM_AVAILABLE__ ? (etmMonthState ?? []) : []), [etmMonthState])
@@ -362,11 +367,16 @@ export default function App() {
     ],
   })
 
-  const setExpenses = (lines: ExpenseLine[], groupId: GroupId) =>
-    commit({
+  const setExpenses = (lines: ExpenseLine[], groupId: GroupId) => {
+    const next = {
       ...budget,
       expenses: [...budget.expenses.filter((l) => l.groupId !== groupId), ...lines],
-    })
+    }
+    // With expense tracking unlocked, earlier months keep the plan they had
+    // (as a change made in Expenses does); without it, nothing else happens.
+    if (__ETM_AVAILABLE__) planRecorder.current?.(budget, next)
+    commit(next)
+  }
 
   const setIncome = (lines: IncomeLine[]) => commit({ ...budget, income: lines })
   const setGoals = (goals: Goal[]) => commit({ ...budget, goals })
@@ -482,6 +492,7 @@ export default function App() {
                 onGoalsChange={setGoals}
                 onRestoreBackup={(file) => void handleFile(file)}
                 onExpensesChange={(expenses) => commit({ ...budget, expenses })}
+                onPlanRecorder={setPlanRecorder}
               />
             </Suspense>
           </OptionalFeatureBoundary>

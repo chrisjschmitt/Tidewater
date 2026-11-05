@@ -166,6 +166,45 @@ export function withPlanChange(
 }
 
 /**
+ * A plan edited on the dashboard — any lines added, changed, rescheduled or
+ * removed — recorded the way a change in Expenses is: from `month` on, every
+ * earlier month keeping the plan it had. Returns the new history, or
+ * undefined when nothing the history cares about changed.
+ */
+export function withBudgetEdit(
+  previous: Budget,
+  next: Budget,
+  history: PlanHistory | undefined,
+  month: string,
+): PlanHistory | undefined {
+  const labels = new Map<string, string>()
+  for (const line of [...previous.expenses, ...next.expenses]) labels.set(planKey(line.name), line.name)
+  let out: PlanHistory = { ...(history ?? {}) }
+  let changed = false
+  for (const [key, label] of labels) {
+    const before = budgetSource(previous, key)
+    const after = budgetSource(next, key)
+    if (sameSource(before, after)) continue
+    const eras = [...(out[key]?.eras ?? [])].sort((a, z) => a.until.localeCompare(z.until))
+    const kept = eras.filter((era) => era.until < month)
+    const covering = eras.find((era) => era.until >= month)
+    const coveringBefore: Omit<PlanEra, 'until'> = covering
+      ? { amount: covering.amount, ...(covering.schedule ? { schedule: covering.schedule } : {}) }
+      : before
+    const lastKept = kept.at(-1)?.until
+    const needsEra = !sameSource(coveringBefore, after) && (!lastKept || lastKept < month)
+    const nextEras = needsEra ? [...kept, { until: month, ...coveringBefore }] : kept
+    // A slider dragged within one month keeps the first era: only a real change is saved.
+    if (JSON.stringify(nextEras) === JSON.stringify(out[key]?.eras ?? [])) continue
+    out = { ...out }
+    if (nextEras.length > 0) out[key] = { label: out[key]?.label ?? label, eras: nextEras }
+    else delete out[key]
+    changed = true
+  }
+  return changed ? out : undefined
+}
+
+/**
  * Change one category's plan for `month` only. The months before and after
  * keep whatever they had, including changes already scheduled later, and the
  * budget itself is untouched — so only the history changes.

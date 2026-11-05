@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.8 — 2026-11-04
+
+### Changed
+- **Plan edits on the dashboard keep earlier months' plans** while expense tracking is unlocked — the same as a change made in Expenses: an amount, an every-N-weeks schedule, a new line or a removed one changes the plan from this month on, and every earlier month keeps what it had (so past months' plan vs actual no longer shift). Dragging a slider records only the first change of the month. With expense tracking locked, or in the light version, the dashboard behaves exactly as before.
+
 ## 0.14.7 — 2026-11-04
 
 ### Changed

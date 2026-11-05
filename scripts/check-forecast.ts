@@ -61,6 +61,7 @@ import {
   planAmountAt,
   planKey,
   withPlanChange,
+  withBudgetEdit,
   withPlanForMonth,
   withPlanPinsAsPlans,
 } from '../src/lib/forecast/planHistory.ts'
@@ -1524,6 +1525,42 @@ console.log('\n=== Travel saving (Overview) ===')
   const short = travelOutlook(travelCalendar, { ...travelCurrent, forecastEom: 4050 } as CurrentMonthView, travelBudget, 2000)
   check('within 5% short is amber, more is red', short[0]!.tone === 'close' && travelOutlook(travelCalendar, { ...travelCurrent, forecastEom: 4500 } as CurrentMonthView, travelBudget, 2000)[0]!.tone === 'short')
   check('no Vacation contribution: no verdict', travelOutlook(travelCalendar, travelCurrent, travelBudget, 0)[0]!.tone === 'none')
+}
+
+console.log('\n=== Dashboard plan edits recorded like Expenses edits ===')
+{
+  const plan = {
+    income: [],
+    expenses: [
+      { id: 'g', name: 'Groceries', groupId: 'food', amount: 800, essential: true },
+      { id: 'd', name: 'Dining', groupId: 'joy', amount: 200, essential: false },
+      { id: 's', name: 'Storage', groupId: 'home', amount: 105, essential: false },
+    ],
+    goals: [],
+  } as unknown as Budget
+  const raised = { ...plan, expenses: plan.expenses.map((l) => (l.name === 'Groceries' ? { ...l, amount: 900 } : l)) }
+  const viaDashboard = withBudgetEdit(plan, raised, undefined, '2026-11')!
+  const viaExpenses = withPlanChange(plan, undefined, { key: 'groceries', label: 'Groceries', month: '2026-11', amount: 900 })
+  const same = ['2026-09', '2026-10', '2026-11', '2027-03'].every(
+    (m) => planAmountAt(raised, viaDashboard, 'groceries', m) === planAmountAt(viaExpenses.budget, viaExpenses.history, 'groceries', m),
+  )
+  check('a dashboard change and the same change in Expenses give the same plan, past and future', same)
+  check('earlier months keep the old plan', planAmountAt(raised, viaDashboard, 'groceries', '2026-10') === 800 && planAmountAt(raised, viaDashboard, 'groceries', '2026-11') === 900)
+  check('untouched lines are not recorded', !viaDashboard['dining'] && !viaDashboard['storage'])
+  check('nothing changed → nothing recorded', withBudgetEdit(plan, { ...plan }, undefined, '2026-11') === undefined)
+  const removed = { ...plan, expenses: plan.expenses.filter((l) => l.name !== 'Dining') }
+  const afterRemove = withBudgetEdit(plan, removed, undefined, '2026-11')!
+  check('a removed line keeps its plan in earlier months', planAmountAt(removed, afterRemove, 'dining', '2026-10') === 200 && planAmountAt(removed, afterRemove, 'dining', '2026-11') === 0)
+  const added = { ...plan, expenses: [...plan.expenses, { id: 'p', name: 'Pet food', groupId: 'home', amount: 50, essential: false }] }
+  const afterAdd = withBudgetEdit(plan, added, undefined, '2026-11')!
+  check('a new line starts this month; earlier months had none', planAmountAt(added, afterAdd, 'pet food', '2026-10') === 0 && planAmountAt(added, afterAdd, 'pet food', '2026-12') === 50)
+  const scheduled = { ...plan, expenses: plan.expenses.map((l) => (l.name === 'Storage' ? { ...l, amount: 105, everyTwoWeeks: { perPayment: 97, firstPayday: '2026-11-19', weeks: 4 } } : l)) }
+  const afterSchedule = withBudgetEdit(plan, scheduled, undefined, '2026-11')!
+  check('a schedule change alone (same average) still keeps earlier months flat', planAmountAt(scheduled, afterSchedule, 'storage', '2026-10') === 105 && Boolean(afterSchedule['storage']))
+  const again = withBudgetEdit(raised, { ...raised, expenses: raised.expenses.map((l) => (l.name === 'Groceries' ? { ...l, amount: 950 } : l)) }, viaDashboard, '2026-11')
+  check('dragging again in the same month changes no history (nothing to save)', again === undefined)
+  const twice = viaDashboard; void withBudgetEdit(raised, { ...raised, expenses: raised.expenses.map((l) => (l.name === 'Groceries' ? { ...l, amount: 950 } : l)) }, viaDashboard, '2026-11')!
+  check('a second change in the same month keeps the original earlier plan', planAmountAt(raised, twice, 'groceries', '2026-10') === 800)
 }
 
 if (failures > 0) {
