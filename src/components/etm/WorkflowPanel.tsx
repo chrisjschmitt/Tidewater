@@ -22,7 +22,7 @@ import SettleUpCard from './SettleUpCard'
 import TdStatementsCard from './TdStatementsCard'
 import BackupCard from './BackupCard'
 import type { Safeguards } from './useSafeguards'
-import { balanceAnchors } from '../../lib/etm/statementFolder'
+import { balanceAnchors, cardBalanceTooEarly, downloadDayOf, localToday } from '../../lib/etm/statementFolder'
 import { withPlanAtClose } from '../../lib/etm/closedPlan'
 import type { Account, ReconciliationRecord, Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
@@ -460,6 +460,7 @@ function Balances({ data, month }: { data: EtmData; month: string }) {
                       }${closing.source === 'statement' ? ' · from a statement' : ''}`
                     : 'No balance recorded for this month'}
                 </span>
+                {closing && <TooEarlyNote account={account} snapshot={closing} month={month} />}
               </span>
               <div className="flex gap-2">
                 <button
@@ -770,6 +771,9 @@ function Reconcile({
                   {entry.count} row{entry.count === 1 ? '' : 's'} ·{' '}
                   {entry.opening?.date} → {entry.closing?.date}
                 </span>
+                {!entry.withinTolerance && entry.closing && (
+                  <TooEarlyNote account={entry} snapshot={entry.closing} month={reconciliation.month} />
+                )}
               </span>
               <span className="text-right text-xs">
                 <span className="block text-ink-500">
@@ -850,4 +854,29 @@ function endOf(month: string): string {
 function nextMonthOf(month: string): string {
   const [y, m] = month.split('-').map(Number)
   return m === 12 ? `${y! + 1}-01` : `${y}-${String(m! + 1).padStart(2, '0')}`
+}
+
+/**
+ * A card balance read from a download taken at, or just after, the month's
+ * end — TD may not have posted the last charges yet, so the rows run on past
+ * the balance and the reconcile is off by them.
+ */
+function TooEarlyNote({
+  account,
+  snapshot,
+  month,
+}: {
+  account: Pick<Account, 'kind'>
+  snapshot: { source: 'manual' | 'statement'; fileName?: string }
+  month: string
+}) {
+  const early = cardBalanceTooEarly(account, downloadDayOf(snapshot), month, localToday())
+  if (!early) return null
+  return (
+    <span className="mt-0.5 block text-[11px] text-shell-500">
+      Read from the {early.downloaded} download — TD can take a few days to post a card’s last charges, so this
+      balance may be missing some of {monthName(month).split(' ')[0]}’s. Read {monthName(month).split(' ')[0]} again
+      from a download on or after {early.readAgainFrom} (Read statement folder above) and record the card’s balance.
+    </span>
+  )
 }

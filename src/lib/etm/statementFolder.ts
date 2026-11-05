@@ -340,3 +340,44 @@ export function downloadProgress(accounts: Account[], names: string[], day: stri
     ...(combined ? { combined: combined.trim() } : {}),
   }
 }
+
+/** Days TD can take to post a card's last charges of a month. */
+export const CARD_POSTING_DAYS = 3
+
+const shiftDays = (date: string, days: number): string =>
+  new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * A card balance read from a download taken at, or just after, the end of the
+ * month it closes may be short: TD can take a few days to post the month's
+ * last charges, and those rows land in the month later while the balance
+ * stays where it was (October 2026's Aeroplan: four Oct 30–31 charges, $123.45).
+ * Says so once the month is over; read the month again from a download on or
+ * after `readAgainFrom`. Only for balances read from a statement — a figure
+ * typed in by hand is the person's own.
+ */
+export function cardBalanceTooEarly(
+  account: Pick<Account, 'kind'>,
+  /** The download day, from the file's name (TD-…-<date>.csv). */
+  downloaded: string | undefined,
+  month: string,
+  today: string,
+): { downloaded: string; readAgainFrom: string } | undefined {
+  if (account.kind !== 'credit' || !downloaded) return undefined
+  const end = monthEnd(month)
+  if (today <= end) return undefined
+  const readAgainFrom = shiftDays(end, CARD_POSTING_DAYS)
+  return downloaded < readAgainFrom ? { downloaded, readAgainFrom } : undefined
+}
+
+/** The download day a recorded statement balance came from, from its file name. */
+export function downloadDayOf(snapshot: Pick<BalanceSnapshot, 'source' | 'fileName'>): string | undefined {
+  if (snapshot.source !== 'statement') return undefined
+  return snapshot.fileName?.match(/(\d{4}-\d{2}-\d{2})\.csv$/)?.[1]
+}
+
+/** Today on this device's calendar, YYYY-MM-DD. */
+export function localToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}

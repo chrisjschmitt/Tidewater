@@ -12,7 +12,7 @@ import {
 import { amountIn } from '../../lib/etm/format'
 import { easywebBalanceNote, type PendingSnapshot } from '../../lib/etm/pending'
 import { monthName } from '../../lib/etm/period'
-import { isReadable } from '../../lib/etm/statementFolder'
+import { cardBalanceTooEarly, isReadable, localToday } from '../../lib/etm/statementFolder'
 import { rulesCategorizer } from '../../lib/etm/rules/apply'
 
 /**
@@ -273,6 +273,19 @@ function StatementFolderReviewTable({
                         ? 'Not recorded: this account has no last four digits, so nothing in the file could be matched to it. Add them on the Accounts tab, then read the file again.'
                         : `Nothing in the file for …${row.account.lastFour}. TD skips an account with no transactions in the period; enter its balance by hand if so.`}
                 </span>
+                {(() => {
+                  // A card read too soon after the month's end may be missing its last charges.
+                  const early = ready ? cardBalanceTooEarly(row.account, row.file.date, month, localToday()) : undefined
+                  if (!early) return null
+                  const name = monthName(month).split(' ')[0]
+                  return (
+                    <span className="mt-0.5 block text-[11px] text-shell-500">
+                      Downloaded {early.downloaded} — TD can take a few days to post a card’s last charges, so this may be
+                      missing some of {name}’s. Fine to record for now; read {name} again from a download on or after{' '}
+                      {early.readAgainFrom} before closing it.
+                    </span>
+                  )
+                })()}
                 {(() => {
                   // EasyWeb's own balance beside the export's, when they differ — shown, not recorded.
                   if (!ready || row.account.kind !== 'credit' || row.heldBack || row.carriedFrom || !review.pending) return null

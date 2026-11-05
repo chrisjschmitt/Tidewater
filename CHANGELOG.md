@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.11 — 2026-11-05
+
+### Added
+- **A warning on card balances read too soon after a month ends.** TD can take a few days to post a card’s last charges, so a balance read from a download taken before the 3rd of the next month may be missing some (October 2026’s Aeroplan: $123.45 from Oct 30–31). Read statement folder says so on the card’s row, and Month end’s Closing balances and an off reconcile say which download it came from and the day to read the month again from. Only after the month has ended, only for cards, and never for a balance typed by hand.
+
 ## 0.14.10 — 2026-11-05
 
 ### Fixed

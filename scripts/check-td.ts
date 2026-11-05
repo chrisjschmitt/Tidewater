@@ -18,7 +18,7 @@ import { dailyCompare } from '../src/lib/etm/dailyCompare.ts'
 import { isPendingFileName, newestPending, parsePendingFile, pendingRows } from '../src/lib/etm/pending.ts'
 import { uncategorized } from '../src/lib/etm/importer.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
-import { downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
+import { cardBalanceTooEarly, downloadDayOf, downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
 import {
   TdFileError,
   isCombinedFileName,
@@ -337,6 +337,16 @@ const brokenRow = reviewRows(accounts, new Map([[visa.id, { file: weekendFile, r
   (r) => r.account.id === visa.id,
 )!
 check('a card file whose balances don’t chain still warns instead', brokenCard.chained === false && brokenRow.outsideMonth === true && !brokenRow.heldBack)
+
+// A card balance read too soon after the month's end may miss its last charges.
+const creditKind = { kind: 'credit' as const }
+const early = cardBalanceTooEarly(creditKind, '2026-10-31', '2026-10', '2026-11-05')
+check('card read from the Oct 31 download → too early, read again from Nov 3', early?.readAgainFrom === '2026-11-03' && early.downloaded === '2026-10-31', JSON.stringify(early))
+check('…from the Nov 5 download → fine', cardBalanceTooEarly(creditKind, '2026-11-05', '2026-10', '2026-11-05') === undefined)
+check('…not said while the month is still running', cardBalanceTooEarly(card, '2026-10-31', '2026-10', '2026-10-31') === undefined)
+check('bank accounts are never flagged', cardBalanceTooEarly({ kind: 'chequing' }, '2026-10-31', '2026-10', '2026-11-05') === undefined)
+check('the download day comes from a statement balance’s file name', downloadDayOf({ source: 'statement', fileName: 'TD-transactions-2026-10-31.csv' }) === '2026-10-31')
+check('a balance typed by hand has none', downloadDayOf({ source: 'manual', fileName: 'TD-transactions-2026-10-31.csv' }) === undefined)
 
 console.log('=== Editing and the budget running total ===')
 const mk = (id: string, amount: number, category: string, extra: Partial<Transaction> = {}): Transaction => ({
