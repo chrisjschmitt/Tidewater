@@ -77,11 +77,32 @@ const READ_JS = `(() => {
     const value = Number(m[3].replace(/,/g, ''))
     return m[1] || m[2] || m[4] ? -value : value
   }
+  // From a summary label outward to the nearest box holding an amount — but
+  // never one that also holds another summary label (a neighbour's figure).
+  const LABELS = '[id^=ccaaSummary]:not([id$=Tooltip])'
+  const AMOUNT = /\\$\\s?[\\d,]+\\.\\d\\d/
+  const boxOf = (label) => {
+    let el = label
+    for (let depth = 0; el && depth < 8; depth++) {
+      if (AMOUNT.test(el.textContent || '')) return el
+      const parent = el.parentElement
+      if (!parent || parent.querySelectorAll(LABELS).length > 1) return null
+      el = parent
+    }
+    return null
+  }
+  const textOf = (el) => (el ? (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim() : '')
   const balanceLabel = document.querySelector('${BALANCE}')
-  const balanceBox = balanceLabel && (balanceLabel.closest('tduf-summary-data') || balanceLabel.parentElement)
-  const currentBalance = balanceBox ? signed(balanceBox.innerText.replace(/current balance/i, '')) : null
+  const balanceBox = balanceLabel && boxOf(balanceLabel)
+  const currentBalance = balanceBox ? signed(textOf(balanceBox).replace(/current balance/i, '')) : null
+  // When it can't be found, the markup around the label — amounts and long
+  // digit runs masked — so the layout can be read without any figure in it.
+  const around = balanceLabel && balanceLabel.parentElement && balanceLabel.parentElement.parentElement
+  const balanceMarkup = currentBalance === null && around
+    ? around.outerHTML.replace(/\\$?\\s?-?[\\d,]+\\.\\d\\d/g, '#.##').replace(/\\d{4,}/g, '####').slice(0, 4000)
+    : undefined
   const paid = document.querySelector('${LAST_PAYMENT}')
-  const paidText = paid ? (paid.closest('tduf-summary-data') || paid).innerText.replace(/\\s+/g, ' ').trim() : ''
+  const paidText = paid ? textOf(boxOf(paid) || paid) : ''
   const paidDate = paidText.match(/([A-Za-z]{3})[a-z]*\\.?\\s+(\\d{1,2}),\\s*(\\d{4})/)
   const lastPayment = paidDate ? { date: paidDate[0], amount: money(paidText.slice(paidText.indexOf(paidDate[0]) + paidDate[0].length)) } : null
   const charges = []
@@ -97,6 +118,7 @@ const READ_JS = `(() => {
     totalText: box ? box.innerText.replace(/\\s+/g, ' ').trim() : null,
     rowCount: document.querySelectorAll('${ROWS}').length,
     currentBalance,
+    balanceMarkup,
     lastPayment,
     charges,
   }
@@ -120,6 +142,7 @@ export interface RawReading {
   rowCount?: number
   currentBalance?: number | null
   lastPayment?: { date: string; amount: number | null } | null
+  balanceMarkup?: string
   charges: {
     date: string
     description: string
@@ -131,7 +154,7 @@ export interface RawReading {
 }
 
 export type ReadResult =
-  | { reading: PendingReading; why?: undefined; raw?: undefined }
+  | { reading: PendingReading; why?: undefined; raw?: RawReading }
   | { reading: null; why: string; raw?: RawReading }
 
 const cents = (n: number) => Math.round(n * 100) / 100
@@ -163,7 +186,7 @@ export function toReading(raw: RawReading, label: string, lastFour: string, read
   if (typeof raw.currentBalance === 'number') reading.currentBalance = raw.currentBalance
   const paidOn = raw.lastPayment ? isoFromEasyWeb(raw.lastPayment.date) : null
   if (paidOn && typeof raw.lastPayment?.amount === 'number') reading.lastPayment = { date: paidOn, amount: raw.lastPayment.amount }
-  return { reading }
+  return { reading, raw }
 }
 
 /**

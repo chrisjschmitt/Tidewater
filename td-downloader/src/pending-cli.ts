@@ -44,6 +44,13 @@ async function main(): Promise<void> {
         if (result.reading) {
           readings.push(result.reading)
           console.log(`  ✓ ${card.label} (…${card.lastFour}): ${describePending(result.reading)}`)
+          if (result.reading.currentBalance === undefined && result.raw?.balanceMarkup) {
+            // The page's layout around "Current Balance", amounts masked: kept in the git-ignored runs/ folder.
+            const dump = join(packageRoot, 'runs', `balance-debug-${card.lastFour}.html`)
+            await mkdir(dirname(dump), { recursive: true })
+            await writeFile(dump, `${result.raw.balanceMarkup}\n`, 'utf8')
+            console.log(`      layout around its balance (amounts masked): ${dump}`)
+          }
         } else {
           console.log(`  ✗ ${card.label} (…${card.lastFour}): couldn't read its pending charges — ${result.why}`)
           if (result.raw) {
@@ -62,7 +69,7 @@ async function main(): Promise<void> {
         }
       }
     }
-    if (!blocked && !stayLoggedIn) logout = await logOut(page)
+    if (!blocked && !stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
   } finally {
     await closeConnection(browser)
   }

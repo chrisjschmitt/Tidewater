@@ -230,7 +230,7 @@ export async function runDownloads(
   // the first so the person can carry on, the second because it is no longer
   // a session we should touch.
   let logout: LogoutResult | undefined
-  if (page && !haltReason && !sessionBlocked && !options.stayLoggedIn) logout = await logOut(page)
+  if (page && !haltReason && !sessionBlocked && !options.stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
 
   await closeConnection(browser)
   removeSigintHandler()

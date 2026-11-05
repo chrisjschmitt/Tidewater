@@ -37,7 +37,26 @@ async function sessionEnded(page: Page): Promise<boolean> {
   return (await checkSession(page)).blocked
 }
 
-export async function logOut(page: Page): Promise<LogoutResult> {
+/**
+ * EasyWeb closes the tab as it logs out, so whether it worked is checked in a
+ * fresh tab: the home page either shows the login (logged out) or the
+ * accounts (still in). The tab is closed again either way.
+ */
+async function confirmInFreshTab(page: Page, homeUrl: string): Promise<LogoutResult> {
+  const probe = await page.context().newPage()
+  try {
+    await probe.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    await probe.waitForTimeout(2000)
+    return (await sessionEnded(probe))
+      ? { loggedOut: true }
+      : { loggedOut: false, why: 'EasyWeb closed the tab, but the home page still looks logged in' }
+  } finally {
+    await probe.close().catch(() => undefined)
+  }
+}
+
+export async function logOut(page: Page, homeUrl: string): Promise<LogoutResult> {
+  let clicked = false
   try {
     if (await sessionEnded(page)) return { loggedOut: true }
     const control = await firstVisible(page, 'body')
@@ -46,11 +65,14 @@ export async function logOut(page: Page): Promise<LogoutResult> {
     // A native "Are you sure?" box is accepted; it is the person's own request.
     page.once('dialog', (dialog) => void dialog.accept().catch(() => undefined))
     await control.click({ timeout: 10_000 })
+    clicked = true
 
     // Up to ~15 s for EasyWeb to end the session, confirming once if it asks.
     let confirmed = false
     for (let attempt = 0; attempt < 15; attempt++) {
+      if (page.isClosed()) return await confirmInFreshTab(page, homeUrl)
       await page.waitForTimeout(1000)
+      if (page.isClosed()) return await confirmInFreshTab(page, homeUrl)
       if (await sessionEnded(page)) return { loggedOut: true }
       if (!confirmed) {
         const confirm = await firstVisible(page, '[role=dialog], [role=alertdialog]')
@@ -62,6 +84,8 @@ export async function logOut(page: Page): Promise<LogoutResult> {
     }
     return { loggedOut: false, why: "clicked Log out, but EasyWeb didn't show that the session ended" }
   } catch (error) {
+    // The tab closing under a wait is EasyWeb logging out, not a failure.
+    if (clicked && page.isClosed()) return confirmInFreshTab(page, homeUrl).catch(() => ({ loggedOut: false as const, why: "couldn't check" }))
     return { loggedOut: false, why: error instanceof Error ? (error.message.split('\n')[0] ?? 'error') : String(error) }
   }
 }
