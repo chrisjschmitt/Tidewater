@@ -22,7 +22,7 @@ import TransactionsPanel from './TransactionsPanel'
 import FeedCompareCard from './FeedCompareCard'
 import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
-import { monthKeys, type Period } from '../../lib/etm/period'
+import { monthKeys, monthPeriod, type Period } from '../../lib/etm/period'
 import {
   budgetAt,
   budgetOver,
@@ -60,17 +60,16 @@ interface Props {
   onKeyChanged: (key: CryptoKey) => void
 }
 
-type Tab = 'month' | 'budget' | 'forecast' | 'reimbursable' | 'transactions' | 'review' | 'import' | 'accounts' | 'settings'
+type Tab = 'overview' | 'weekly' | 'month' | 'reimbursable' | 'budget' | 'transactions' | 'settings'
 
+/** Overview first; then the two routines; then the views for looking things up. */
 const TABS: Array<[Tab, string]> = [
+  ['overview', 'Overview'],
+  ['weekly', 'Weekly check-in'],
   ['month', 'Month end'],
-  ['budget', 'Budget'],
-  ['forecast', 'Forecast'],
   ['reimbursable', 'Reimbursable'],
+  ['budget', 'Budget'],
   ['transactions', 'Transactions'],
-  ['review', 'Review'],
-  ['import', 'Import'],
-  ['accounts', 'Accounts'],
   ['settings', 'Settings'],
 ]
 
@@ -86,13 +85,12 @@ export default function EtmArea({
   onLock,
   onWipe,
   onOpenChat,
-  onApplyHouseholdContribution,
   onExpensesChange,
   onRestoreBackup,
   unlockedKey,
   onKeyChanged,
 }: Props) {
-  const [tab, setTab] = useState<Tab>('budget')
+  const [tab, setTab] = useState<Tab>('overview')
   // The header wraps to two lines on narrower screens (the iPad); bars that
   // stick below it read its height from --etm-header.
   const areaRef = useRef<HTMLDivElement>(null)
@@ -310,7 +308,7 @@ export default function EtmArea({
                     onClick={() => {
                       setIncomingFile(watch.offer!.file)
                       watch.dismissOffer()
-                      setTab('import')
+                      setTab('weekly')
                     }}
                     className="btn-primary text-xs"
                   >
@@ -342,7 +340,7 @@ export default function EtmArea({
                 budget={budgetAt(budget, data.forecastConfig.planHistory, workMonth)}
                 month={workMonth}
                 onMonthChange={setWorkMonth}
-                onOpenImport={() => setTab('import')}
+                onOpenImport={() => setTab('weekly')}
               />
             )}
 
@@ -351,24 +349,20 @@ export default function EtmArea({
                 budget={budgetOver(budget, data.forecastConfig.planHistory, monthKeys(period))}
                 accounts={data.accounts}
                 transactions={data.budgetRows}
-                reconciliations={data.reconciliations}
                 period={period}
                 reimbursableTag={data.config.reimbursableTag}
               />
             )}
 
-            {tab === 'forecast' && (
+            {tab === 'overview' && (
               <ForecastPanel
                 transactions={data.budgetRows}
                 budget={budget}
                 config={data.forecastConfig}
                 reimbursableParentTag={data.config.reimbursableTag}
-                lastMonthSnapshot={data.lastMonthSnapshot}
                 onConfigChange={(config) => void data.saveForecastSettings(config)}
                 onSnapshot={(snapshot) => void data.saveMonthSnapshot(snapshot)}
                 onNotice={data.flash}
-                onOpenTidy={() => setTab('month')}
-                onApplyHouseholdContribution={onApplyHouseholdContribution}
                 onPlanRaise={async ({ note, ...raise }) => {
                   const history = data.forecastConfig.planHistory
                   const change = { ...raise, amount: planAmountAt(budget, history, raise.key, raise.month) + raise.amount }
@@ -422,8 +416,6 @@ export default function EtmArea({
               />
             )}
 
-            {tab === 'transactions' && <FeedCompareCard data={data} period={period} />}
-
             {tab === 'transactions' && (
               <TransactionsPanel
                 accounts={data.accounts}
@@ -439,44 +431,45 @@ export default function EtmArea({
               />
             )}
 
-            {tab === 'review' && (
-              <>
-                <DuplicatesCard data={data} />
-                <ReviewPanel data={data} />
-              </>
-            )}
-
-            {tab === 'import' && (
-              <div className="mb-6 space-y-3">
-                <TdStatementsCard data={data} />
-                <RulesCompareCard data={data} />
+            {tab === 'weekly' && (
+              <div className="space-y-8">
+                <WeeklyStep n={1} title="Download and read the TD statements" hint="Download from TD on the Mac, then read the folder: new transactions, pending card charges and, at month end, closing balances.">
+                  <TdStatementsCard data={data} />
+                </WeeklyStep>
+                <WeeklyStep n={2} title="Possible duplicates" hint="Charges that came in twice (re-dated or re-priced between downloads).">
+                  <DuplicatesCard data={data} />
+                </WeeklyStep>
+                <WeeklyStep n={3} title="File the transactions" hint="Confirm what the rules filed, and fix what they didn't.">
+                  <ReviewPanel data={data} />
+                </WeeklyStep>
+                <WeeklyStep n={4} title="Compare with Monarch" hint="Until Monarch is cancelled on Dec 1: only pending charges should differ.">
+                  <div className="space-y-3">
+                    <FeedCompareCard data={data} period={monthPeriod(new Date().toISOString().slice(0, 7))} />
+                    <RulesCompareCard data={data} />
+                    <ImportPanel
+                      accounts={data.accounts}
+                      transactions={data.allRows}
+                      groups={data.config.categoryGroups}
+                      {...(earliestSwitch(data) ? { switchedFrom: earliestSwitch(data) } : {})}
+                      batches={data.batches}
+                      incomingFile={incomingFile}
+                      onIncomingConsumed={() => setIncomingFile(null)}
+                      onCreateAccount={data.persistAccount}
+                      onCommit={async (plan, fingerprint) => {
+                        await data.applyImport(plan, fingerprint)
+                        watch.dismissOffer()
+                      }}
+                      onUndo={data.revertBatch}
+                    />
+                  </div>
+                </WeeklyStep>
+                <WeeklyStep n={5} title="Back up" hint="Save this week's work; then the iPad can restore it.">
+                  <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />
+                </WeeklyStep>
               </div>
             )}
 
-            {tab === 'import' && (
-              <h3 className="mb-2 px-1 text-sm font-semibold text-ink-900">Monarch export</h3>
-            )}
-
-            {tab === 'import' && (
-              <ImportPanel
-                accounts={data.accounts}
-                transactions={data.allRows}
-                groups={data.config.categoryGroups}
-                {...(earliestSwitch(data) ? { switchedFrom: earliestSwitch(data) } : {})}
-                batches={data.batches}
-                incomingFile={incomingFile}
-                onIncomingConsumed={() => setIncomingFile(null)}
-                onCreateAccount={data.persistAccount}
-                onCommit={async (plan, fingerprint) => {
-                  await data.applyImport(plan, fingerprint)
-                  watch.dismissOffer()
-                  setTab('transactions')
-                }}
-                onUndo={data.revertBatch}
-              />
-            )}
-
-            {tab === 'accounts' && (
+            {tab === 'settings' && (
               <AccountsPanel
                 accounts={data.accounts}
                 transactionCounts={data.transactionCounts}
@@ -566,4 +559,22 @@ function notesFor(
     next = withChangeNote(next, { key: change.key, label: change.label, month: change.month, ...note })
   }
   return next ? { planNotes: next } : {}
+}
+
+/** One numbered step of the weekly check-in. */
+function WeeklyStep({ n, title, hint, children }: { n: number; title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline gap-3 px-1">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-tide-600 text-xs font-semibold text-white">
+          {n}
+        </span>
+        <div>
+          <h2 className="text-base font-semibold tracking-tight text-ink-900">{title}</h2>
+          <p className="text-sm text-ink-500">{hint}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  )
 }

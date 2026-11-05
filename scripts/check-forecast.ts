@@ -80,6 +80,8 @@ import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod, periodLabel } from '../src/lib/etm/period.ts'
 import type { Currency, Transaction } from '../src/lib/etm/types.ts'
 import type { Budget } from '../src/lib/types.ts'
+import { travelOutlook } from '../src/lib/forecast/travel.ts'
+import type { CurrentMonthView, MonthPoint } from '../src/lib/forecast/types.ts'
 
 let failures = 0
 
@@ -1497,6 +1499,32 @@ check('$975 is within 5%: yellow', savingsTone(975, 1000) === 'close')
 check('$950 is exactly 5% short: yellow', savingsTone(950, 1000) === 'close')
 check('$900 is red', savingsTone(900, 1000) === 'short')
 check('no goal: no colour', savingsTone(500, 0) === 'none')
+
+console.log('\n=== Travel saving (Overview) ===')
+{
+  const travelBudget = {
+    income: [{ id: 'pay', label: 'Pay', amount: 6000 }],
+    expenses: [],
+    goals: [],
+  } as unknown as Budget
+  const point = (month: string, kind: MonthPoint['kind'], plan: number, calendar: number, rows: Array<{ key: string; plan: number; forecast: number }> = []) =>
+    ({ month, kind, plan, calendar, actual: 0, planVsForecast: rows }) as unknown as MonthPoint
+  const travelCalendar = [
+    point('2026-10', 'past', 4000, 4200),
+    point('2026-11', 'current', 4000, 0),
+    point('2026-12', 'future', 4000, 3900),
+    point('2027-01', 'future', 4000, 4100, [{ key: 'gifts', plan: 0, forecast: 300 }]),
+  ]
+  const travelCurrent = { month: '2026-11', forecastEom: 3950, plan: 4000, planVsForecast: [] } as unknown as CurrentMonthView
+  const outlook = travelOutlook(travelCalendar, travelCurrent, travelBudget, 2000, { '2027-01': ['gifts'] })
+  check('travel outlook starts at this month, past months left out', outlook.length === 3 && outlook[0]!.month === '2026-11', JSON.stringify(outlook.map((m) => m.month)))
+  check('this month: income − forecast to month-end', outlook[0]!.saving === 2050 && outlook[0]!.tone === 'met', `${outlook[0]!.saving}`)
+  check('a future month uses its calendar forecast', outlook[1]!.saving === 2100)
+  check('ignored rows come out of the forecast, as on the month card', outlook[2]!.forecast === 3800 && outlook[2]!.saving === 2200, `${outlook[2]!.forecast}`)
+  const short = travelOutlook(travelCalendar, { ...travelCurrent, forecastEom: 4050 } as CurrentMonthView, travelBudget, 2000)
+  check('within 5% short is amber, more is red', short[0]!.tone === 'close' && travelOutlook(travelCalendar, { ...travelCurrent, forecastEom: 4500 } as CurrentMonthView, travelBudget, 2000)[0]!.tone === 'short')
+  check('no Vacation contribution: no verdict', travelOutlook(travelCalendar, travelCurrent, travelBudget, 0)[0]!.tone === 'none')
+}
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed.`)

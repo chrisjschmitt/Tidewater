@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.0 — 2026-11-04
+
+First step of the Expenses rewrite into a weekly and monthly routine (Tidewater's own home screen — dashboard, goals, the light version — is unchanged).
+
+### Changed
+- Expenses tabs are now **Overview · Weekly check-in · Month end · Reimbursable · Budget · Transactions · Settings**, and Expenses opens on **Overview**.
+- **Overview** (was Forecast) starts with **Travel saving**: this month's forecast saving (planned income − forecast spending) against the Vacation goal's monthly contribution — green covers it, amber within 5%, red short — and the next five months as chips (tap one to read that month). Then Assumptions to revisit, the timeline, the month card, Plan vs forecast and Risk.
+- **Weekly check-in** gathers the routine in order: 1 Download and read the TD statements · 2 Possible duplicates · 3 File the transactions · 4 Compare with Monarch (day by day, Rules vs Monarch, Monarch export and Past imports — until Dec 1) · 5 Back up. Replaces the Review and Import tabs.
+- **Accounts** moved into Settings.
+
+### Removed
+- Forecast → Last month, Household categories (Change type is still in each category's "How was this forecast worked out?"), Household goals and the Vacation card; "Tagging still open" (tidy is in Month end).
+- Budget → "What you chose to budget".
+
 ## 0.13.48 — 2026-11-04
 
 ### Fixed

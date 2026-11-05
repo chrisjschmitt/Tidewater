@@ -1,25 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import ForecastCategories from './ForecastCategories'
-import ForecastGoals from './ForecastGoals'
 import ForecastActualModal from './ForecastActualModal'
 import ForecastExplainModal from './ForecastExplainModal'
 import ForecastMonthCard from './ForecastMonthCard'
-import ForecastMonthEnd from './ForecastMonthEnd'
 import ForecastTimeline from './ForecastTimeline'
 import ForecastMonthStrip from './ForecastMonthStrip'
-import ForecastVacationCard from './ForecastVacationCard'
-import { taggingGapsCopy } from './forecastCopy'
-import { amountIn } from '../../lib/etm/format'
+import TravelSavingCard from './TravelSavingCard'
 import { monthName, today } from '../../lib/etm/period'
 import { uid } from '../../lib/format'
 import { inMonth, totalIncome } from '../../lib/budget'
-import { walkForward } from '../../lib/forecast/backtest'
 import { explainCategory, forecast, lookbackMonths, monthOfKnownFuture, windowLabel } from '../../lib/forecast/forecast'
-import { lastFullMonth, monthEndVariance, snapshotFromResult } from '../../lib/forecast/snapshot'
+import { snapshotFromResult } from '../../lib/forecast/snapshot'
+import { travelOutlook } from '../../lib/forecast/travel'
 import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot, type PinRequest } from '../../lib/forecast/types'
 import {
-  taggingGaps,
-  withCategoryTypicalMonths,
   withCategoryTypeOverride,
   withIgnoredCompare,
   withIgnoredHistory,
@@ -44,12 +37,9 @@ interface Props {
   budget: Budget
   config: ForecastConfig
   reimbursableParentTag: string
-  lastMonthSnapshot?: ForecastSnapshot
   onConfigChange: (config: ForecastConfig) => void
   onSnapshot: (snapshot: ForecastSnapshot) => void
-  onOpenTidy: () => void
   onNotice?: (message: string) => void
-  onApplyHouseholdContribution?: (monthly: number, vacationGoalId?: string) => void
   /** Changes a category's plan from a month on (planHistory.ts). */
   onPlanChange?: (change: PlanChangeRequest) => void
   /** Sets a category's plan for one month only; the months around it keep theirs. */
@@ -65,12 +55,9 @@ export default function ForecastPanel({
   budget,
   config,
   reimbursableParentTag,
-  lastMonthSnapshot,
   onConfigChange,
   onSnapshot,
-  onOpenTidy,
   onNotice,
-  onApplyHouseholdContribution,
   onPlanChange,
   onPlanForMonth,
   onPlanRaise,
@@ -79,7 +66,6 @@ export default function ForecastPanel({
   const asOf = today()
   const currentMonth = asOf.slice(0, 7)
   const [focusedMonth, setFocusedMonth] = useState(currentMonth)
-  const [openCategory, setOpenCategory] = useState<string | null>(null)
   const [openActual, setOpenActual] = useState<{ key: string; label: string; month: string } | null>(null)
   const [openExplain, setOpenExplain] = useState<{ key: string; label: string; month: string } | null>(null)
   // The category open month by month (CategoryPlanModal).
@@ -115,31 +101,6 @@ export default function ForecastPanel({
     if (transactions.length === 0) return
     onSnapshot(snapshotFromResult(result, currentMonth))
   }, [currentMonth, onSnapshot, result, transactions.length])
-  const priorMonth = lastFullMonth(asOf)
-  const lastPoint = result.cad.household.calendar.find((point) => point.month === priorMonth)
-  const reconstructedMonth = useMemo(() => {
-    if (transactions.length === 0 || lastMonthSnapshot) return null
-    return (
-      walkForward(transactions, budget, config, asOf, reimbursableParentTag).months.find(
-        (row) => row.month === priorMonth,
-      ) ?? null
-    )
-  }, [asOf, budget, config, lastMonthSnapshot, priorMonth, reimbursableParentTag, transactions])
-  const lastVariance = useMemo(() => {
-    if (transactions.length === 0) return null
-    return monthEndVariance({
-      month: priorMonth,
-      actual: lastPoint?.actual ?? 0,
-      actualByCategory: lastPoint?.byCategory ?? [],
-      snapshot: lastMonthSnapshot,
-      reconstructed: reconstructedMonth
-        ? {
-            forecast: reconstructedMonth.forecast,
-            byCategory: reconstructedMonth.byCategory,
-          }
-        : null,
-    })
-  }, [lastMonthSnapshot, lastPoint, priorMonth, reconstructedMonth, transactions.length])
   const explanation = useMemo(
     () =>
       openExplain
@@ -147,17 +108,12 @@ export default function ForecastPanel({
         : null,
     [openExplain, transactions, budget, config, asOf, reimbursableParentTag],
   )
-  const gaps = useMemo(
-    () => taggingGaps(transactions, config, reimbursableParentTag),
-    [transactions, config, reimbursableParentTag],
-  )
   const empty = transactions.length === 0
   const label = windowLabel(config.window, lookback.length)
   const household = result.cad.household
   const focused =
     household.calendar.find((point) => point.month === focusedMonth) ??
     household.calendar.find((point) => point.kind === 'current')
-  const selectedCategory = household.categories.find((category) => category.key === openCategory) ?? null
   const usdCurrent = result.usd.household.currentMonth
   const usdPoint = result.usd.household.calendar.find((point) => point.month === focused?.month)
   const placements = focused
@@ -168,11 +124,10 @@ export default function ForecastPanel({
   const monthWarnings = focused
     ? result.doubleCounts.filter((warning) => warning.month === focused.month)
     : []
-  const gapsCopy = taggingGapsCopy(gaps.uncategorizedHousehold, gaps.parentOnlyReimbursable)
 
   // ← → step the page a month, when no window is open and no field is in use.
   const calendarMonths = household.calendar.map((point) => point.month)
-  const windowOpen = Boolean(openPlan || openActual || openExplain || openCategory)
+  const windowOpen = Boolean(openPlan || openActual || openExplain)
   useEffect(() => {
     if (windowOpen) return
     const onKey = (event: KeyboardEvent) => {
@@ -265,8 +220,6 @@ export default function ForecastPanel({
           </button>
           <Jump href="#forecast-compare">Plan vs forecast</Jump>
           <Jump href="#forecast-risk">Risk</Jump>
-          {lastVariance && <Jump href="#forecast-last-month">Last month</Jump>}
-          <Jump href="#forecast-categories">Categories</Jump>
           <span className="ml-auto text-[11px] uppercase tracking-wider text-ink-400">{label}</span>
           {focused && (
             <div className="mt-1 w-full border-t border-sand-200/70 pt-2">
@@ -282,6 +235,23 @@ export default function ForecastPanel({
         </nav>
       )}
 
+      {!empty && (
+        <TravelSavingCard
+          months={travelOutlook(
+            household.calendar,
+            household.currentMonth,
+            budget,
+            result.vacationGoal.status === 'matched' ? result.vacationGoal.monthly : 0,
+            config.ignoredCompare ?? {},
+          )}
+          {...(result.vacationGoal.goalName ? { goalName: result.vacationGoal.goalName } : {})}
+          onSelect={(month) => {
+            setFocusedMonth(month)
+            jumpTo('forecast-month')
+          }}
+        />
+      )}
+
       {!empty && reviews.length > 0 && (
         <RevisitCard
           reviews={reviews}
@@ -294,19 +264,10 @@ export default function ForecastPanel({
         />
       )}
 
-      {!empty && gapsCopy && (
-        <section className="card p-6">
-          <h2 className="text-base font-semibold tracking-tight text-ink-900">Tagging still open</h2>
-          <p className="mt-0.5 max-w-prose text-sm text-ink-500">{gapsCopy}</p>
-          <button onClick={onOpenTidy} className="btn-ghost mt-4 text-xs">
-            Open Month end tidy
-          </button>
-        </section>
-      )}
 
       {empty && (
         <section className="card p-6">
-          <p className="text-sm text-ink-500">Import a Monarch export in Expenses first.</p>
+          <p className="text-sm text-ink-500">Bring in your TD transactions first (Weekly check-in).</p>
         </section>
       )}
 
@@ -419,55 +380,6 @@ export default function ForecastPanel({
               onClose={() => setOpenActual(null)}
             />
           )}
-          {lastVariance && (
-            <div id="forecast-last-month" className="scroll-mt-28">
-              <ForecastMonthEnd
-                variance={lastVariance}
-                placeMonth={focused.month}
-                {...(onPlanChange
-                ? {
-                    onPlanChange,
-                    typicalPlanFor: (key: string) => planAmountAt(budget, config.planHistory, key, focused.month),
-                  }
-                : {})}
-              onPlace={(row) => placeKnownFuture(row)}
-              />
-            </div>
-          )}
-          <div id="forecast-categories" className="scroll-mt-28">
-            <ForecastCategories
-              categories={household.categories}
-              selected={selectedCategory}
-              focusedMonth={focused.month}
-              doubleCounts={result.doubleCounts}
-              onSelect={setOpenCategory}
-              onPin={(draft) => {
-                placeKnownFuture(draft)
-                setOpenCategory(null)
-              }}
-              overrideType={
-                selectedCategory ? config.categoryOverrides[selectedCategory.key]?.type : undefined
-              }
-              onOverrideType={(key, type) => onConfigChange(withCategoryTypeOverride(config, key, type))}
-              onOverrideMonths={(key, months) =>
-                onConfigChange(withCategoryTypicalMonths(config, key, months))
-              }
-            />
-          </div>
-          <ForecastVacationCard vacation={result.cad.vacation} goal={result.vacationGoal} />
-          <ForecastGoals
-            coverage={result.coverage}
-            goals={budget.goals}
-            vacationGoal={result.vacationGoal}
-            onApplyContribution={
-              onApplyHouseholdContribution
-                ? (monthly, vacationGoalId) => {
-                    onApplyHouseholdContribution(monthly, vacationGoalId)
-                    onNotice?.(`Household contribution is now ${amountIn(monthly, 'CAD')} a month.`)
-                  }
-                : undefined
-            }
-          />
         </>
       )}
     </div>
