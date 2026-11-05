@@ -51,6 +51,8 @@ export function computeSavings(
   accounts: Account[],
   balances: BalanceSnapshot[],
   asOf: string,
+  /** Pending charges read from TD for a card, used when none was typed with its balance. */
+  pendingFor?: (accountId: string) => number | undefined,
 ): Savings {
   const total = zeroMoney()
   const parts: SavingsPart[] = []
@@ -82,8 +84,9 @@ export function computeSavings(
     if (account.mainCard) {
       // A card balance is entered as what is owed, so it always subtracts.
       add({ ...base, kind: 'card', effect: -Math.abs(snapshot?.balance ?? 0) })
-      if (snapshot?.pending) {
-        add({ ...base, kind: 'pending', effect: -Math.abs(snapshot.pending) })
+      const pending = snapshot?.pending || pendingFor?.(account.id)
+      if (pending) {
+        add({ ...base, kind: 'pending', effect: -Math.abs(pending) })
       }
     }
   }

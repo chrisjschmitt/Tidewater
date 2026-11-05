@@ -33,8 +33,6 @@ export default function WeeklyCheckIn({
   lastDone?: string
   onMarkDone: () => void
 }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({})
-  const isOpen = (step: WeeklyStepView) => open[step.key] ?? step.state === 'needs'
   const allClear = status.needCount === 0
 
   return (
@@ -61,6 +59,20 @@ export default function WeeklyCheckIn({
         </button>
       </div>
 
+      <StepList steps={steps} />
+    </div>
+  )
+}
+
+/**
+ * A routine's steps as cards: number (✓ when done), title, hint, state chip.
+ * Steps that need you start open; the rest fold away and open on a tap.
+ */
+export function StepList({ steps }: { steps: WeeklyStepView[] }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const isOpen = (step: WeeklyStepView) => open[step.key] ?? step.state === 'needs'
+  return (
+    <>
       {steps.map((step, index) => (
         <section key={step.key} className="card overflow-hidden">
           <button
@@ -91,7 +103,7 @@ export default function WeeklyCheckIn({
           {isOpen(step) && <div className="border-t border-sand-200/70 bg-sand-50/40 p-4">{step.body}</div>}
         </section>
       ))}
-    </div>
+    </>
   )
 }
 

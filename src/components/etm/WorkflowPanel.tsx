@@ -5,20 +5,26 @@ import type { EtmData } from './useEtmData'
 import { presentIn } from '../../lib/etm/aggregate'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
-import { moneyPrecise } from '../../lib/format'
 import {
   closingFor,
   computeSavings,
   findUntidy,
   reconcile,
-  reimbursementPivot,
-  type PivotRow,
   type Reconciliation,
   type Savings,
 } from '../../lib/etm/workflow'
+import { monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../../lib/etm/monthEnd'
+import { bucketName, owedBy } from '../../lib/etm/config'
+import type { StepState } from '../../lib/etm/routine'
+import { StepList } from './WeeklyCheckIn'
+import ReimbursementsByAccount from './ReimbursementsByAccount'
+import SettleUpCard from './SettleUpCard'
+import TdStatementsCard from './TdStatementsCard'
+import BackupCard from './BackupCard'
+import type { Safeguards } from './useSafeguards'
 import { balanceAnchors } from '../../lib/etm/statementFolder'
 import { withPlanAtClose } from '../../lib/etm/closedPlan'
-import type { Account, ReconciliationRecord, SettledTransfer } from '../../lib/etm/types'
+import type { Account, ReconciliationRecord, Transaction } from '../../lib/etm/types'
 import type { Budget } from '../../lib/types'
 
 interface Props {
@@ -26,46 +32,76 @@ interface Props {
   budget: Budget
   month: string
   onMonthChange: (month: string) => void
-  /** Reading TD statements lives on the Import tab; Closing balances points there. */
-  onOpenImport?: () => void
+  /** Opens the shared editor on a row (ledger ids may carry a #part). */
+  onEdit?: (row: Transaction) => void
+  safeguards: Safeguards
+  onRestoreBackup?: (file: File) => void
+  /** Whether this device's data is backed up since its last change. */
+  backupState: StepState
+  /** The travel goal's monthly contribution, to set the transfer beside. */
+  travelTarget?: { name: string; monthly: number }
 }
 
 /**
- * The monthly cycle as a checklist. It computes and explains; it never moves
- * money, and nothing here is required — a month can be closed, left open, or
- * ignored entirely, and the rest of the module carries on regardless.
+ * Month end as a routine, the way it is done by hand: tidy, check and settle
+ * the reimbursements, confirm the balances, close the month, work out the
+ * travel transfer, back up. It computes and explains; it never moves money.
  */
-export default function WorkflowPanel({ data, budget, month, onMonthChange, onOpenImport }: Props) {
+export default function WorkflowPanel({
+  data,
+  budget,
+  month,
+  onMonthChange,
+  onEdit,
+  safeguards,
+  onRestoreBackup,
+  backupState,
+  travelTarget,
+}: Props) {
   const record = data.reconciliations.find((r) => r.month === month)
   const closed = record?.status === 'reconciled'
 
   const asOf = endOf(month)
+  const pending = useMemo(() => pendingAtMonthEnd(data.config.pending, month), [data.config.pending, month])
   const savings = useMemo(
-    () => computeSavings(data.accounts, data.balances, asOf),
-    [data.accounts, data.balances, asOf],
+    () => computeSavings(data.accounts, data.balances, asOf, (id) => pending.get(id)),
+    [data.accounts, data.balances, asOf, pending],
   )
   const untidy = useMemo(
     () => findUntidy(data.transactions, data.accounts, month, data.config),
     [data.transactions, data.accounts, month, data.config],
   )
-  const pivot = useMemo(
+  const groups = useMemo(
     () =>
-      reimbursementPivot(data.transactions, month, data.config, {
-        settled: record?.settled ?? [],
-      }),
-    [data.transactions, month, data.config, record],
-  )
-  const reconciliation = useMemo(
-    () =>
-      reconcile(
+      reimbursementsByAccount(
         data.transactions,
         data.accounts,
-        data.balances,
         month,
-        data.config.tolerance,
+        data.config.reimbursableTag,
+        (bucket) => bucketName(data.config, bucket),
+        (bucket) => owedBy(data.config, bucket),
       ),
+    [data.transactions, data.accounts, month, data.config],
+  )
+  const reconciliation = useMemo(
+    () => reconcile(data.transactions, data.accounts, data.balances, month, data.config.tolerance),
     [data.transactions, data.accounts, data.balances, month, data.config.tolerance],
   )
+  const checked = data.config.reimburseChecked?.[month] ?? []
+  const transfer = data.config.transfers?.[month]
+  const anchors = balanceAnchors(data.accounts)
+  const untidyCount = untidy.uncategorized.length + untidy.parentOnly.length + untidy.untaggedCandidates.length
+  const steps = monthEndSteps({
+    untidy: untidyCount,
+    reimbursements: groups,
+    checked,
+    ...(data.config.reimbursedOn?.[month] ? { reimbursedOn: data.config.reimbursedOn[month] } : {}),
+    balancesIn: anchors.length > 0 && anchors.every((a) => closingFor(data.balances, a.id, month)),
+    balanced: reconciliation.balanced,
+    closed,
+    transferRecorded: Boolean(transfer),
+    backup: backupState,
+  })
 
   const save = (changes: Partial<ReconciliationRecord>) =>
     void data.recordMonth(
@@ -82,92 +118,171 @@ export default function WorkflowPanel({ data, budget, month, onMonthChange, onOp
         budget,
       ),
     )
+  const setChecked = (key: string, on: boolean) => {
+    const next = new Set(checked)
+    if (on) next.add(key)
+    else next.delete(key)
+    void data.saveSettings({ ...data.config, reimburseChecked: { ...(data.config.reimburseChecked ?? {}), [month]: [...next] } })
+  }
+  const cadSavings = savings.total.CAD
 
   return (
-    <div className="space-y-6">
-      <YearStrip
-        year={month.slice(0, 4)}
-        selected={month}
-        data={data}
-        onSelect={onMonthChange}
+    <div className="space-y-3">
+      <YearStrip year={month.slice(0, 4)} selected={month} data={data} onSelect={onMonthChange} />
+      <div className="card p-5">
+        <h2 className="text-base font-semibold tracking-tight text-ink-900">Month end · {monthName(month)}</h2>
+        <p className="text-sm text-ink-500">
+          {steps.needCount === 0
+            ? 'Everything is done for this month.'
+            : `${steps.needCount} ${steps.needCount === 1 ? 'step needs' : 'steps need'} you.`}
+        </p>
+      </div>
+      <StepList
+        key={month}
+        steps={[
+          {
+            key: 'tidy',
+            title: 'Tidy',
+            hint: 'Anything uncategorized, or reimbursable without a bucket — the reimbursements are only as good as the tags.',
+            state: steps.tidy,
+            ...(untidyCount > 0 ? { detail: `${untidyCount} to fix` } : {}),
+            body: <Tidy untidy={untidy} tag={data.config.reimbursableTag} {...(onEdit ? { onEdit } : {})} />,
+          },
+          {
+            key: 'reimbursements',
+            title: 'Reimbursements',
+            hint: 'By the account that paid, then by bucket. Check each bucket is theirs to reimburse; fix any row with Edit.',
+            state: steps.reimbursements,
+            ...(groups.count > 0 ? { detail: `${checked.length} of ${groups.accounts.reduce((n, a) => n + a.buckets.length, 0)} checked` } : {}),
+            body: (
+              <ReimbursementsByAccount
+                month={month}
+                groups={groups}
+                checked={checked}
+                onCheck={setChecked}
+                transactions={data.transactions}
+                accounts={data.accounts}
+                config={data.config}
+                {...(onEdit ? { onEdit } : {})}
+              />
+            ),
+          },
+          {
+            key: 'settle',
+            title: 'Mark reimbursed',
+            hint: 'What each paying account is owed back; once the transfers are made, record the day.',
+            state: steps.settle,
+            body: (
+              <SettleUpCard
+                accounts={data.accounts}
+                transactions={data.transactions}
+                month={month}
+                config={data.config}
+                onConfigChange={(config) => void data.saveSettings(config)}
+              />
+            ),
+          },
+          {
+            key: 'balances',
+            title: 'Closing balances',
+            hint: 'Read the TD statements for the month (or record a balance by hand), then see that the transactions explain them.',
+            state: steps.balances,
+            body: (
+              <div className="space-y-4">
+                <TdStatementsCard data={data} fixedMonth={month} />
+                <Balances data={data} month={month} />
+                <Reconcile
+                  reconciliation={reconciliation}
+                  tolerance={data.config.tolerance}
+                  onToleranceChange={(tolerance) => void data.saveSettings({ ...data.config, tolerance })}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'close',
+            title: 'Close the month',
+            hint: 'When the month was closed (a weekend close moves later rows into next month), then close it.',
+            state: steps.close,
+            body: (
+              <div className="space-y-4">
+                <ClosedOn data={data} month={month} />
+                <CloseControls
+                  closed={closed}
+                  {...(record?.closedAt ? { closedAt: record.closedAt } : {})}
+                  balanced={reconciliation.balanced}
+                  anchored={reconciliation.accounts.some((a) => a.anchored)}
+                  onClose={() =>
+                    save({ status: 'reconciled', closedAt: new Date().toISOString(), savings: savings.total, residual: reconciliation.residual })
+                  }
+                  onReopen={() => void data.reopenMonth(month)}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'transfer',
+            title: 'Travel transfer',
+            hint: 'Expense account balance − float − what is owed on the Visa (current balance + pending) = what can go to travel savings.',
+            state: steps.transfer,
+            ...(transfer ? { detail: amountIn(transfer.amount, 'CAD') } : {}),
+            body: (
+              <div className="space-y-4">
+                <SavingsStep savings={savings} accounts={data.accounts} />
+                {travelTarget && travelTarget.monthly > 0 && cadSavings !== 0 && (
+                  <p className="text-sm text-ink-600">
+                    {travelTarget.name} asks for {amountIn(travelTarget.monthly, 'CAD')} a month —{' '}
+                    {cadSavings >= travelTarget.monthly
+                      ? `this covers it with ${amountIn(cadSavings - travelTarget.monthly, 'CAD')} to spare.`
+                      : `${amountIn(travelTarget.monthly - cadSavings, 'CAD')} short.`}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {transfer ? (
+                    <>
+                      <span className="text-sm text-tide-700">
+                        Recorded: {amountIn(transfer.amount, 'CAD')} to travel savings on {transfer.recordedAt.slice(0, 10)}.
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-quiet text-xs"
+                        onClick={() => {
+                          const next = { ...(data.config.transfers ?? {}) }
+                          delete next[month]
+                          void data.saveSettings({ ...data.config, transfers: Object.keys(next).length > 0 ? next : undefined })
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-primary text-xs disabled:opacity-50"
+                      disabled={!cadSavings || cadSavings <= 0}
+                      onClick={() =>
+                        void data.saveSettings({
+                          ...data.config,
+                          transfers: { ...(data.config.transfers ?? {}), [month]: { amount: cadSavings, recordedAt: new Date().toISOString() } },
+                        })
+                      }
+                    >
+                      I transferred {amountIn(Math.max(cadSavings ?? 0, 0), 'CAD')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'backup',
+            title: 'Back up',
+            hint: 'Save the closed month, so the iPad can restore it.',
+            state: steps.backup,
+            body: <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />,
+          },
+        ]}
       />
-
-      <Step
-        n={1}
-        title="Tidy"
-        blurb="Import the latest Monarch export, then sort out anything still missing — the claims in step two are only as good as the tags underneath them."
-      >
-        <Tidy untidy={untidy} tag={data.config.reimbursableTag} switched={Boolean(data.config.tdCutover)} />
-      </Step>
-
-      <Step
-        n={2}
-        title="Reimbursements"
-        blurb="What to ask for, and from whom. Worth doing a business day before the month ends, so the repayments land inside it. Recording a transfer only notes that you asked — nothing moves here."
-      >
-        <Pivot
-          rows={pivot}
-          transactions={data.transactions}
-          onSettle={(row, settled) => {
-            const kept = (record?.settled ?? []).filter(
-              (s) => !(s.bucket === row.bucket && s.currency === row.currency),
-            )
-            const next: SettledTransfer[] = settled
-              ? [
-                  ...kept,
-                  {
-                    bucket: row.bucket,
-                    owedBy: row.owedBy,
-                    amount: row.amount,
-                    currency: row.currency,
-                    recordedAt: new Date().toISOString(),
-                  },
-                ]
-              : kept
-            save({ settled: next, status: record?.status ?? 'open' })
-          }}
-        />
-      </Step>
-
-      <Step
-        n={3}
-        title="Closing balances"
-        blurb="Once the month is over, record what each account closed at. Reading the TD file on the Import tab fills these in; record any of them by hand here."
-      >
-        <Balances data={data} month={month} {...(onOpenImport ? { onOpenImport } : {})} />
-      </Step>
-
-      <Step
-        n={4}
-        title="Monthly savings"
-        blurb="What is free to move once the float is left behind and the cards are cleared."
-      >
-        <SavingsStep savings={savings} accounts={data.accounts} />
-      </Step>
-
-      <Step
-        n={5}
-        title="Reconcile"
-        blurb="What the balances say, against what the transactions say. Closing also keeps this month’s typical-month spend so the Budget tab can show how the plan has moved."
-      >
-        <Reconcile
-          reconciliation={reconciliation}
-          tolerance={data.config.tolerance}
-          onToleranceChange={(tolerance) => void data.saveSettings({ ...data.config, tolerance })}
-          closed={closed}
-          closedAt={record?.closedAt}
-          plannedSpend={record?.plannedSpend}
-          onClose={() =>
-            save({
-              status: 'reconciled',
-              closedAt: new Date().toISOString(),
-              savings: savings.total,
-              residual: reconciliation.residual,
-            })
-          }
-          onReopen={() => void data.reopenMonth(month)}
-        />
-      </Step>
     </div>
   )
 }
@@ -265,34 +380,7 @@ function YearStrip({
 
 // --- steps ------------------------------------------------------------------
 
-function Step({
-  n,
-  title,
-  blurb,
-  children,
-}: {
-  n: number
-  title: string
-  blurb: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="card p-6">
-      <header className="mb-4 flex gap-3">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-tide-50 text-[11px] font-semibold text-tide-700">
-          {n}
-        </span>
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-ink-900">{title}</h2>
-          <p className="mt-0.5 max-w-prose text-sm text-ink-500">{blurb}</p>
-        </div>
-      </header>
-      {children}
-    </section>
-  )
-}
-
-function Balances({ data, month, onOpenImport }: { data: EtmData; month: string; onOpenImport?: () => void }) {
+function Balances({ data, month }: { data: EtmData; month: string }) {
   const [editing, setEditing] = useState<Account | null>(null)
   const anchors = balanceAnchors(data.accounts)
 
@@ -305,51 +393,9 @@ function Balances({ data, month, onOpenImport }: { data: EtmData; month: string;
     )
   }
 
-  const cutoff = data.config.monthCutoffs?.[month] ?? ''
-  const lastDay = endOf(month)
   return (
     <div className="space-y-2">
-      <div className="rounded-2xl bg-white/70 px-4 py-3.5">
-        <p className="text-sm font-medium text-ink-900">When this month was closed</p>
-        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-          If the month was closed before its last day (a weekend), transactions dated after the close count from the
-          first of next month. The bank's dates are not changed.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-ink-700">Closed on</span>
-          <input
-            type="date"
-            className="field py-1.5"
-            min={`${month}-01`}
-            max={lastDay}
-            value={cutoff || lastDay}
-            onChange={(e) => {
-              const next = { ...(data.config.monthCutoffs ?? {}) }
-              if (!e.target.value || e.target.value >= lastDay) delete next[month]
-              else next[month] = e.target.value
-              void data.saveSettings({ ...data.config, monthCutoffs: Object.keys(next).length > 0 ? next : undefined })
-            }}
-          />
-          {cutoff && (
-            <span className="text-xs text-ink-500">
-              Anything dated after {cutoff} counts in {monthName(nextMonthOf(month))}.
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="rounded-2xl bg-white/70 px-4 py-3.5">
-        <p className="text-sm font-medium text-ink-900">Read the TD statements on the Import tab</p>
-        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
-          Download from TD and read the combined file there: its closing balances land here,
-          account by account, and anything you record by hand below stays the override.
-        </p>
-        {onOpenImport && (
-          <button onClick={onOpenImport} className="btn-ghost mt-3 text-xs">
-            Go to Import
-          </button>
-        )}
-      </div>
-
+      <p className="px-1 text-xs text-ink-500">Recorded by hand — or filled in by reading the statements above. A balance typed here stays the override.</p>
       {anchors.map((account) => {
         const closing = closingFor(data.balances, account.id, month)
         return (
@@ -405,7 +451,83 @@ function Balances({ data, month, onOpenImport }: { data: EtmData; month: string;
   )
 }
 
-function Tidy({ untidy, tag, switched }: { untidy: ReturnType<typeof findUntidy>; tag: string; switched: boolean }) {
+function ClosedOn({ data, month }: { data: EtmData; month: string }) {
+  const cutoff = data.config.monthCutoffs?.[month] ?? ''
+  const lastDay = endOf(month)
+  return (
+    <div className="space-y-2">
+      <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+        <p className="text-sm font-medium text-ink-900">When this month was closed</p>
+        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+          If the month was closed before its last day (a weekend), transactions dated after the close count from the
+          first of next month. The bank's dates are not changed.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-ink-700">Closed on</span>
+          <input
+            type="date"
+            className="field py-1.5"
+            min={`${month}-01`}
+            max={lastDay}
+            value={cutoff || lastDay}
+            onChange={(e) => {
+              const next = { ...(data.config.monthCutoffs ?? {}) }
+              if (!e.target.value || e.target.value >= lastDay) delete next[month]
+              else next[month] = e.target.value
+              void data.saveSettings({ ...data.config, monthCutoffs: Object.keys(next).length > 0 ? next : undefined })
+            }}
+          />
+          {cutoff && (
+            <span className="text-xs text-ink-500">
+              Anything dated after {cutoff} counts in {monthName(nextMonthOf(month))}.
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CloseControls({
+  closed,
+  closedAt,
+  balanced,
+  anchored,
+  onClose,
+  onReopen,
+}: {
+  closed: boolean
+  closedAt?: string
+  balanced: boolean
+  anchored: boolean
+  onClose: () => void
+  onReopen: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {closed ? (
+        <>
+          <span className="text-sm text-tide-700">Closed{closedAt ? ` on ${closedAt.slice(0, 10)}` : ''}.</span>
+          <button onClick={onReopen} className="btn-ghost text-xs">
+            Open it again
+          </button>
+        </>
+      ) : (
+        <>
+          <button onClick={onClose} className="btn-primary text-xs" disabled={!anchored}>
+            {balanced ? 'Close this month' : 'Close anyway'}
+          </button>
+          {!balanced && anchored && (
+            <span className="text-xs text-ink-400">Closing with a difference is allowed — it is recorded, not hidden.</span>
+          )}
+          {!anchored && <span className="text-xs text-ink-400">Record the closing balances first.</span>}
+        </>
+      )}
+    </div>
+  )
+}
+
+function Tidy({ untidy, tag, onEdit }: { untidy: ReturnType<typeof findUntidy>; tag: string; onEdit?: (row: Transaction) => void }) {
   const nothing =
     untidy.uncategorized.length === 0 &&
     untidy.untaggedCandidates.length === 0 &&
@@ -429,11 +551,9 @@ function Tidy({ untidy, tag, switched }: { untidy: ReturnType<typeof findUntidy>
             {untidy.uncategorized.length === 1 ? 'row' : 'rows'}
           </p>
           <p className="mb-2 text-xs text-ink-400">
-            {switched
-              ? 'Categorize these on the Review tab — TD is now the source of record for these accounts.'
-              : 'Categorize these in Monarch and import again — Monarch stays the source of record, so a change here would be overwritten.'}
+            Edit each to give it a category.
           </p>
-          <TransactionTable rows={untidy.uncategorized.slice(0, 10)} empty="" />
+          <TransactionTable rows={untidy.uncategorized.slice(0, 25)} empty="" {...(onEdit ? { onEdit } : {})} />
         </div>
       )}
 
@@ -445,11 +565,10 @@ function Tidy({ untidy, tag, switched }: { untidy: ReturnType<typeof findUntidy>
             generic “{tag}” tag
           </p>
           <p className="mb-2 text-xs text-ink-400">
-            Retag these in Monarch as “{tag}: …” for the account or person who
-            reimburses them, then import again. The generic tag by itself is not
-            enough to put them on a bucket.
+            Edit each to tag it “{tag}: …” for the account or person who
+            reimburses it — the generic tag alone puts it on no bucket.
           </p>
-          <TransactionTable rows={untidy.parentOnly.slice(0, 10)} empty="" />
+          <TransactionTable rows={untidy.parentOnly.slice(0, 25)} empty="" {...(onEdit ? { onEdit } : {})} />
         </div>
       )}
 
@@ -465,7 +584,7 @@ function Tidy({ untidy, tag, switched }: { untidy: ReturnType<typeof findUntidy>
             can say which, so nothing is assumed. Accounts you have never claimed
             anything from are not asked about at all.
           </p>
-          <TransactionTable rows={untidy.untaggedCandidates.slice(0, 10)} empty="" />
+          <TransactionTable rows={untidy.untaggedCandidates.slice(0, 25)} empty="" {...(onEdit ? { onEdit } : {})} />
         </div>
       )}
     </div>
@@ -527,7 +646,7 @@ function SavingsStep({ savings, accounts }: { savings: Savings; accounts: Accoun
         <p className="text-xs text-shell-500">
           {savings.missing.join(', ')} {savings.missing.length === 1 ? 'has' : 'have'} no
           balance recorded, so {savings.missing.length === 1 ? 'it counts' : 'they count'} as
-          zero above. Record {savings.missing.length === 1 ? 'it' : 'them'} in step one for a
+          zero above. Record {savings.missing.length === 1 ? 'it' : 'them'} under Closing balances for a
           figure you can act on.
         </p>
       )}
@@ -548,94 +667,14 @@ const describe = (kind: Savings['parts'][number]['kind']) =>
         ? 'Owed on the card'
         : 'Charged, not yet posted'
 
-function Pivot({
-  rows,
-  transactions,
-  onSettle,
-}: {
-  rows: PivotRow[]
-  transactions: EtmData['transactions']
-  onSettle: (row: PivotRow, settled: boolean) => void
-}) {
-  const [open, setOpen] = useState<string | null>(null)
-
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-ink-500">
-        Nothing this month is tagged as reimbursable, so there is nothing to
-        ask anyone for.
-      </p>
-    )
-  }
-
-  return (
-    <div className="space-y-1">
-      {rows.map((row) => {
-        const key = `${row.bucket}-${row.currency}`
-        return (
-          <div key={key} className="rounded-2xl bg-white/70">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <button
-                onClick={() => setOpen((o) => (o === key ? null : key))}
-                className="min-w-0 flex-1 text-left"
-              >
-                <span className="block truncate text-sm font-medium text-ink-900">
-                  {row.label}
-                  {row.settled && <Tag>Asked for</Tag>}
-                </span>
-                <span className="block text-[11px] text-ink-400">
-                  {row.owedBy ? `Owed by ${row.owedBy}` : 'Nobody named yet'} ·{' '}
-                  {row.count} transaction{row.count === 1 ? '' : 's'}
-                </span>
-              </button>
-              <span className="text-right">
-                <span className="block text-sm font-semibold tabular-nums text-ink-900">
-                  {amountIn(row.amount, row.currency)}
-                </span>
-              </span>
-              <button
-                onClick={() => onSettle(row, !row.settled)}
-                className={row.settled ? 'btn-quiet text-xs' : 'btn-ghost text-xs'}
-              >
-                {row.settled ? 'Not yet' : 'Mark asked for'}
-              </button>
-            </div>
-
-            {open === key && (
-              <div className="animate-fade border-t border-sand-200">
-                <TransactionTable
-                  rows={transactions
-                    .filter((t) => row.transactionIds.includes(t.id))
-                    .sort((a, z) => a.date.localeCompare(z.date))}
-                  empty="Nothing here."
-                />
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 function Reconcile({
   reconciliation,
   tolerance,
   onToleranceChange,
-  closed,
-  closedAt,
-  plannedSpend,
-  onClose,
-  onReopen,
 }: {
   reconciliation: Reconciliation
   tolerance: number
   onToleranceChange: (tolerance: number) => void
-  closed: boolean
-  closedAt?: string
-  plannedSpend?: number
-  onClose: () => void
-  onReopen: () => void
 }) {
   const anchored = reconciliation.accounts.filter((a) => a.anchored)
 
@@ -645,7 +684,7 @@ function Reconcile({
         <p className="text-sm text-ink-500">
           No account has both an opening and a closing balance for this month, so
           there is nothing to compare yet. A month opens where the last one
-          closed, so recording this month’s balances in step one is enough from
+          closed, so recording this month’s balances above is enough from
           then on.
         </p>
       ) : (
@@ -718,34 +757,6 @@ function Reconcile({
           />
         </label>
 
-        {closed ? (
-          <>
-            <span className="text-xs text-tide-700">
-              Closed{closedAt ? ` on ${closedAt.slice(0, 10)}` : ''}
-              {typeof plannedSpend === 'number'
-                ? ` · typical-month spend of ${moneyPrecise(plannedSpend)} kept`
-                : ''}
-              .
-            </span>
-            <button onClick={onReopen} className="btn-ghost text-xs">
-              Open it again
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={onClose}
-            className="btn-primary text-xs"
-            disabled={anchored.length === 0}
-          >
-            {reconciliation.balanced ? 'Close this month' : 'Close anyway'}
-          </button>
-        )}
-
-        {!reconciliation.balanced && anchored.length > 0 && !closed && (
-          <span className="text-xs text-ink-400">
-            Closing with a difference is allowed — it is recorded, not hidden.
-          </span>
-        )}
       </div>
     </div>
   )

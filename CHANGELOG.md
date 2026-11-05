@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.14.4 — 2026-11-04
+
+### Changed
+- **Month end** is now a routine like the Weekly check-in — each step says Done / Needs you / Not needed, for the month picked on the year strip (it opens on the month just ended during the first half of a month):
+  1. **Tidy** — uncategorized or bucket-less reimbursable rows, each with **Edit**.
+  2. **Reimbursements** — laid out like the reimbursements sheet: each paying account, then each bucket with its rows and sum; tick a bucket once checked; **Edit** any row and the sums follow; **Export to CSV**.
+  3. **Mark reimbursed** — Settle up (owed back by paying account, own accounts, *Reimbursed on*).
+  4. **Closing balances** — read the TD statements for that month, or record by hand; then whether the transactions explain them.
+  5. **Close the month** — the Closed-on date and Close this month.
+  6. **Travel transfer** — Expense account − float − the Visa's balance and pending charges (now filled from the downloader's pending reading for charges dated in the month), beside the travel goal's monthly amount; **I transferred $X** records it.
+  7. **Back up**.
+- Reimbursable bucket settings (who owes each, what to call it, the tag prefix) moved to **Settings → Reimbursable buckets**.
+
+### Removed
+- The Reimbursable tab (its parts are in Month end and Settings) and Month end's old "Mark asked for" pivot and Monthly savings / Reconcile layout.
+
 ## 0.14.3 — 2026-11-04
 
 ### Changed

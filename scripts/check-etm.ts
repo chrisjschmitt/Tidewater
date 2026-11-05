@@ -97,6 +97,7 @@ import { asFreshness, compareFreshness, deviceName, digest, freshnessInBackup, n
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import type { Budget, GroupId } from '../src/lib/types.ts'
 import { latestTdRead, monarchInUse, weeklySteps } from '../src/lib/etm/routine.ts'
+import { checkKey, monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../src/lib/etm/monthEnd.ts'
 import type { ImportBatch } from '../src/lib/etm/types.ts'
 
 let failures = 0
@@ -1344,6 +1345,39 @@ console.log('\n=== Weekly check-in ===')
   check('rows to file this month and last (older months left alone)', filing.file === 'needs' && filing.toFile === 2, `${filing.toFile}`)
   check('duplicates and a change since the backup need you; badge counts them', filing.duplicates === 'needs' && filing.backup === 'needs' && filing.needCount === 3, `${filing.needCount}`)
   check('after Monarch stops, compare is not needed', weeklySteps({ ...base, today: '2026-12-20', lastDone: '2026-12-14' }).compare === 'notNeeded')
+}
+
+console.log('\n=== Month end ===')
+{
+  const acct = (id: string, extra: Partial<Account> = {}) => ({ id, nickname: id, kind: 'credit', currency: 'CAD', monarchName: id, funding: false, ...extra }) as unknown as Account
+  const visa = acct('visa'), own = acct('own', { excludedFromBudget: true }), cheq = acct('cheq', { kind: 'chequing' } as Partial<Account>)
+  const r = (id: string, accountId: string, date: string, amount: number, tags: string[], extra: Partial<Transaction> = {}) =>
+    ({ id, accountId, date, amount, tags, merchant: id, category: 'X', internal: false, currency: 'CAD', source: 'td', ...extra }) as unknown as Transaction
+  const rows = [
+    r('a', 'visa', '2026-10-03', -50, ['Reimbursable: Healthcare Account']),
+    r('b', 'visa', '2026-10-09', -20.5, ['Reimbursable: Healthcare Account']),
+    r('c', 'visa', '2026-10-12', -100, ['Reimbursable: Vicki Business']),
+    r('d', 'visa', '2026-10-15', 10, ['Reimbursable: Vicki Business']),
+    r('e', 'own', '2026-10-05', -30, ['Reimbursable: Chris Business']),
+    r('f', 'visa', '2026-11-01', -99, ['Reimbursable: Healthcare Account']),
+    r('g', 'cheq', '2026-10-05', -500, ['Reimbursable: Healthcare Account'], { internal: true }),
+    r('h', 'visa', '2026-10-06', -40, []),
+  ]
+  const month = reimbursementsByAccount(rows, [cheq, visa, own], '2026-10', 'Reimbursable', (b) => (b === 'Vicki Business' ? 'Vicki (business)' : b))
+  check('grouped by paying account, in account order (transfers and other months left out)', month.accounts.map((a) => a.account.id).join(',') === 'visa,own', month.accounts.map((a) => a.account.id).join(','))
+  const visaGroup = month.accounts[0]!
+  check('…then by bucket with sums; a refund nets off', visaGroup.buckets.map((b) => `${b.name}=${b.total}`).join(',') === 'Healthcare Account=70.5,Vicki (business)=90', visaGroup.buckets.map((b) => `${b.name}=${b.total}`).join(','))
+  check('owed back vs own accounts', month.owed === 160.5 && month.own === 30 && month.count === 5, `${month.owed} ${month.own} ${month.count}`)
+  const keys = month.accounts.flatMap((a) => a.buckets.map((b) => checkKey(a.account.id, b.bucket)))
+  const base = { untidy: 0, reimbursements: month, checked: [] as string[], balancesIn: true, balanced: true, closed: false, transferRecorded: false, backup: 'done' as const }
+  const open = monthEndSteps(base)
+  check('unchecked buckets and no Reimbursed on → both need you', open.reimbursements === 'needs' && open.settle === 'needs')
+  const settled = monthEndSteps({ ...base, checked: keys, reimbursedOn: '2026-10-27', closed: true, transferRecorded: true })
+  check('every bucket checked, reimbursed, closed, transfer recorded → nothing needs you', settled.needCount === 0, JSON.stringify(settled))
+  check('no reimbursable rows → not needed', monthEndSteps({ ...base, reimbursements: { accounts: [], owed: 0, own: 0, count: 0 } }).reimbursements === 'notNeeded')
+  const snap = { date: '2026-11-04', accounts: [{ accountId: 'visa', charges: [{ date: '2026-10-31', amount: -25 }, { date: '2026-11-02', amount: -94.12 }] }] }
+  check('pending at month end: only charges dated in the month', pendingAtMonthEnd(snap, '2026-10').get('visa') === 25)
+  check('a reading taken long after the month end is not used', pendingAtMonthEnd({ ...snap, date: '2026-11-20' }, '2026-10').size === 0)
 }
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)

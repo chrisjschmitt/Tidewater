@@ -21,8 +21,10 @@ import { rulesCategorizer } from '../../lib/etm/rules/apply'
  * records each account's closing balance for the chosen month — which Month
  * end then shows on its Closing balances step.
  */
-export default function TdStatementsCard({ data }: { data: EtmData }) {
-  const [month, setMonth] = useState(thisMonth)
+export default function TdStatementsCard({ data, fixedMonth }: { data: EtmData; fixedMonth?: string }) {
+  const [chosenMonth, setMonth] = useState(thisMonth)
+  // Month end reads the statements for the month it is closing.
+  const month = fixedMonth ?? chosenMonth
   const months = useMemo(() => [thisMonth(), previousMonth(thisMonth())], [])
   const feedOptions = useMemo(
     () => ({
@@ -56,6 +58,9 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 className="text-sm font-semibold text-ink-900">TD statements</h3>
+        {fixedMonth ? (
+          <span className="text-xs text-ink-500">Closing balances for {monthName(fixedMonth)}</span>
+        ) : (
         <label className="flex items-center gap-2 text-xs text-ink-500">
           Record closing balances for
           <select
@@ -70,6 +75,7 @@ export default function TdStatementsCard({ data }: { data: EtmData }) {
             ))}
           </select>
         </label>
+        )}
       </div>
       {data.config.pending && (
         <p className="px-1 text-xs text-ink-500">

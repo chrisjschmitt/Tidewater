@@ -15,7 +15,7 @@ import BackupCard from './BackupCard'
 import KeyCard from './KeyCard'
 import { useSafeguards } from './useSafeguards'
 import PeriodSelector from './PeriodSelector'
-import ReimbursablePanel from './ReimbursablePanel'
+import ReimbursableSettingsCard from './ReimbursableSettingsCard'
 import SettingsPanel from './SettingsPanel'
 import WorkflowPanel from './WorkflowPanel'
 import TransactionsPanel from './TransactionsPanel'
@@ -63,21 +63,20 @@ interface Props {
   onKeyChanged: (key: CryptoKey) => void
 }
 
-type Tab = 'overview' | 'weekly' | 'month' | 'reimbursable' | 'budget' | 'transactions' | 'settings'
+type Tab = 'overview' | 'weekly' | 'month' | 'budget' | 'transactions' | 'settings'
 
 /** Overview first; then the two routines; then the views for looking things up. */
 const TABS: Array<[Tab, string]> = [
   ['overview', 'Overview'],
   ['weekly', 'Weekly check-in'],
   ['month', 'Month end'],
-  ['reimbursable', 'Reimbursable'],
   ['budget', 'Budget'],
   ['transactions', 'Transactions'],
   ['settings', 'Settings'],
 ]
 
 /** The period selector is hidden on tabs it does not govern. */
-const PERIODIC: Tab[] = ['budget', 'reimbursable', 'transactions']
+const PERIODIC: Tab[] = ['budget', 'transactions']
 
 export default function EtmArea({
   data,
@@ -187,6 +186,18 @@ export default function EtmArea({
     [weeklyDone, data.batches, data.config.pending, data.allRows, duplicateCount, safeguards.lastBackup, freshness?.changedAt],
   )
 
+  // The travel goal (chosen on Overview, or named with vacation/travel), for the month-end transfer.
+  const travelGoal = useMemo(() => {
+    const chosen = data.forecastConfig.vacationGoalId
+    const goal = chosen
+      ? budget.goals.find((g) => g.id === chosen)
+      : (() => {
+          const named = budget.goals.filter((g) => /vacation|travel/i.test(g.name))
+          return named.length === 1 ? named[0] : undefined
+        })()
+    return goal ? { name: goal.name, monthly: goal.monthly } : undefined
+  }, [budget.goals, data.forecastConfig.vacationGoalId])
+
   // Plan-only pins from before 0.13.12 become plan changes for their month,
   // once, so every Plan figure agrees.
   const pinsMoved = useRef(false)
@@ -217,9 +228,13 @@ export default function EtmArea({
 
   // The month-end screen settles one month at a time, so it keeps a month of
   // its own rather than following a period that may span a year.
-  const [workMonth, setWorkMonth] = useState(
-    () => data.months.at(-1) ?? new Date().toISOString().slice(0, 7),
-  )
+  // In the first half of a month, the month to close is the one just ended.
+  const [workMonth, setWorkMonth] = useState(() => {
+    const now = today()
+    const [y, m] = now.slice(0, 7).split('-').map(Number)
+    const previous = m === 1 ? `${y! - 1}-12` : `${y}-${String(m! - 1).padStart(2, '0')}`
+    return Number(now.slice(8, 10)) <= 15 ? previous : now.slice(0, 7)
+  })
 
   return (
     <div ref={areaRef} className="fixed inset-0 z-40 overflow-y-auto bg-sand-50 animate-fade">
@@ -358,7 +373,11 @@ export default function EtmArea({
                 budget={budgetAt(budget, data.forecastConfig.planHistory, workMonth)}
                 month={workMonth}
                 onMonthChange={setWorkMonth}
-                onOpenImport={() => setTab('weekly')}
+                onEdit={(t) => setEditingId(t.id.split('#')[0]!)}
+                safeguards={safeguards}
+                {...(onRestoreBackup ? { onRestoreBackup } : {})}
+                backupState={weekly.backup}
+                {...(travelGoal ? { travelTarget: travelGoal } : {})}
               />
             )}
 
@@ -421,16 +440,6 @@ export default function EtmArea({
                       },
                     }
                   : {})}
-              />
-            )}
-
-            {tab === 'reimbursable' && (
-              <ReimbursablePanel
-                accounts={data.accounts}
-                transactions={data.transactions}
-                period={period}
-                config={data.config}
-                onConfigChange={(config) => void data.saveSettings(config)}
               />
             )}
 
@@ -537,6 +546,7 @@ export default function EtmArea({
               <div className="mb-6 space-y-6">
                 <KeyCard unlockedKey={unlockedKey} onKeyChanged={onKeyChanged} onBackUp={safeguards.backUp} />
                 <BackupCard safeguards={safeguards} {...(onRestoreBackup ? { onRestore: onRestoreBackup } : {})} />
+                <ReimbursableSettingsCard data={data} />
                 <SwitchOverCard data={data} />
                 <RulesSettingsCard data={data} />
               </div>

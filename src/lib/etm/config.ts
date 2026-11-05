@@ -78,6 +78,10 @@ export interface EtmConfig {
   reimbursedOn?: Record<string, string>
   /** The latest reading of the cards' pending charges (TD-pending-<date>.json). */
   pending?: PendingSnapshot
+  /** Month → reimbursement groups (account|bucket) ticked as checked at month end. */
+  reimburseChecked?: Record<string, string[]>
+  /** Month → the travel transfer worked out and recorded at month end. */
+  transfers?: Record<string, { amount: number; recordedAt: string }>
 }
 
 export interface TdCutover {
@@ -115,6 +119,8 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   monthCutoffs: stored?.monthCutoffs && typeof stored.monthCutoffs === 'object' ? stored.monthCutoffs : undefined,
   reimbursedOn: stored?.reimbursedOn && typeof stored.reimbursedOn === 'object' ? stored.reimbursedOn : undefined,
   pending: stored?.pending && typeof stored.pending === 'object' && Array.isArray(stored.pending.accounts) ? stored.pending : undefined,
+  reimburseChecked: stored?.reimburseChecked && typeof stored.reimburseChecked === 'object' ? stored.reimburseChecked : undefined,
+  transfers: stored?.transfers && typeof stored.transfers === 'object' ? stored.transfers : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
