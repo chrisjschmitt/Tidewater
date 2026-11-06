@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build a double-clickable Tidewater.app for macOS.
-# Opens the live PWA in an app window (Chrome/Edge/Brave) or Safari.
+# Brings forward the app installed from Chrome if there is one; otherwise opens
+# the live site in a browser. It never asks for a new window, so launching twice
+# can't leave two copies of the app open.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -50,11 +52,17 @@ cat > "$APP_DIR/Contents/MacOS/Tidewater" <<'LAUNCH'
 #!/usr/bin/env bash
 set -euo pipefail
 URL="${TIDEWATER_URL:-https://tidewater-one.vercel.app}"
+INSTALLED="$HOME/Applications/Chrome Apps.localized/Tidewater.app"
+
+if [[ -z "${TIDEWATER_URL:-}" && -d "$INSTALLED" ]]; then
+  open "$INSTALLED"
+  exit 0
+fi
 
 open_chrome_family() {
   local app="$1"
   if [[ -d "/Applications/${app}.app" ]] || [[ -d "$HOME/Applications/${app}.app" ]]; then
-    open -na "$app" --args --app="$URL" --new-window
+    open -a "$app" "$URL"
     return 0
   fi
   return 1

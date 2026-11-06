@@ -13,7 +13,7 @@ Live site: [https://tidewater-one.vercel.app](https://tidewater-one.vercel.app)
 Tidewater is a Progressive Web App (PWA). Personal data stays in the browser (or browser profile)
 used to open it — nothing is uploaded to a Tidewater server.
 
-### Option A — MacBook: Tidewater.app (recommended)
+### Option A — MacBook: Tidewater.app
 
 A double-clickable Mac app is built into this repo.
 
@@ -32,8 +32,10 @@ A double-clickable Mac app is built into this repo.
    - Control-click (or right-click) **Tidewater.app** → **Open** → **Open**.
    - You only need to do this once.
 
-What it does: opens the live Tidewater site in an app-style window using Google Chrome, Microsoft
-Edge, or Brave if installed; otherwise it opens Safari.
+What it does: brings forward the Tidewater app installed from Chrome (Option B) if you have it;
+otherwise it opens the live site in Google Chrome, Microsoft Edge, or Brave if installed, or else
+Safari. For a real app window that comes forward when launched again, use Option B and keep that
+app in your Dock.
 
 Optional — point the app at a local dev server instead of production:
 
@@ -45,7 +47,7 @@ TIDEWATER_URL=http://localhost:5173 npm run app:mac
 
 Then launch the rebuilt `dist-native/Tidewater.app`.
 
-### Option B — MacBook: install from the browser
+### Option B — MacBook: install from the browser (recommended)
 
 1. Open [https://tidewater-one.vercel.app](https://tidewater-one.vercel.app) in Chrome, Edge, or Safari.
 2. **Chrome / Edge:** click the install icon in the address bar (or the browser menu → **Install Tidewater** / **Open as app**).
