@@ -59,7 +59,15 @@ export async function logOut(page: Page, homeUrl: string): Promise<LogoutResult>
   let clicked = false
   try {
     if (await sessionEnded(page)) return { loggedOut: true }
-    const control = await firstVisible(page, 'body')
+    let control = await firstVisible(page, 'body')
+    if (!control) {
+      // The run can end on a page without the control, such as a card whose
+      // export TD cancelled, so look again from the home page.
+      await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await page.waitForTimeout(2000)
+      if (await sessionEnded(page)) return { loggedOut: true }
+      control = await firstVisible(page, 'body')
+    }
     if (!control) return { loggedOut: false, why: "couldn't find EasyWeb's Log out button" }
 
     // A native "Are you sure?" box is accepted; it is the person's own request.
