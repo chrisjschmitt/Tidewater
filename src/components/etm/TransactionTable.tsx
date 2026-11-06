@@ -82,6 +82,11 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                       {row.originalStatement}
                     </span>
                   )}
+                  {(row.pending || row.source === 'monarch') && (
+                    <span className="mt-0.5 block font-medium text-shell-500">
+                      {row.pending ? 'Pending at TD — edit it once it posts' : 'From Monarch'}
+                    </span>
+                  )}
                   {row.notes && (
                     <span className="mt-0.5 block break-words text-ink-500 italic">
                       {row.notes}

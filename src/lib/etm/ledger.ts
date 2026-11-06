@@ -21,6 +21,28 @@ export function cutoverFor(cutover: TdCutover | undefined, accountId: string): s
   return cutover?.perAccount[accountId] ?? cutover?.global
 }
 
+/** Where today's rows come from, for the status shown across Expenses. */
+export type CountingFrom =
+  | { mode: 'td'; from: string }
+  | { mode: 'mixed'; from: string; onTd: number; accounts: number }
+  | { mode: 'monarch'; from?: string }
+
+/**
+ * Today's source across the accounts with a TD feed. An account counts as on TD
+ * once its switch-over date has arrived; a later date is still Monarch for now.
+ */
+export function countingFrom(cutover: TdCutover | undefined, tdAccounts: Iterable<string>, today: string): CountingFrom {
+  const dates = [...new Set(tdAccounts)].map((id) => cutoverFor(cutover, id))
+  const arrived = dates.filter((d): d is string => Boolean(d) && d! <= today).sort()
+  if (arrived.length === 0) {
+    const upcoming = dates.filter((d): d is string => Boolean(d)).sort()[0]
+    return { mode: 'monarch', ...(upcoming ? { from: upcoming } : {}) }
+  }
+  return arrived.length === dates.length
+    ? { mode: 'td', from: arrived[0]! }
+    : { mode: 'mixed', from: arrived[0]!, onTd: arrived.length, accounts: dates.length }
+}
+
 /**
  * What the switch-over needs to know beyond the dates: which accounts have a
  * TD feed at all (an account with none — a card from another bank — stays on

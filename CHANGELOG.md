@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.13 — 2026-11-06
+
+### Added
+- **Expenses always says which rows are counting.** A status in the header reads “Counting: TD · from <date>” when this copy has switched over, and stands out in colour when it hasn’t: Monarch, a date still to come, or only some accounts on TD. Clicking it opens Settings.
+- **Lists say why a row has no Edit.** Rows in category and Month end lists are labelled “Pending at TD — edit it once it posts” or “From Monarch”.
+
 ## 0.14.12 — 2026-11-06
 
 ### Fixed

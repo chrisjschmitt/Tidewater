@@ -13,7 +13,7 @@ import { aggregate } from '../src/lib/etm/aggregate.ts'
 import { monthPeriod } from '../src/lib/etm/period.ts'
 import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
 import { planTdImport } from '../src/lib/etm/importer.ts'
-import { budgetDateOf, counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
+import { budgetDateOf, countingFrom, counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
 import { dailyCompare } from '../src/lib/etm/dailyCompare.ts'
 import { isPendingFileName, newestPending, parsePendingFile, pendingRows } from '../src/lib/etm/pending.ts'
 import { uncategorized } from '../src/lib/etm/importer.ts'
@@ -453,6 +453,16 @@ const added = withPlanChange(plan0, undefined, { key: 'pet food', label: 'Pet fo
 check('a category with no plan line gets one, zero before', added.budget.expenses.length === 3 && planAmountAt(added.budget, added.history, 'pet food', '2026-09') === 0)
 const same = withPlanChange(plan0, undefined, { key: 'dining', label: 'Dining', month: '2026-10', amount: 200 })
 check('setting the same amount records nothing', Object.keys(same.history).length === 0)
+
+const countedFrom = (global: string | undefined, perAccount: Record<string, string>, ids: string[]) =>
+  countingFrom(global || Object.keys(perAccount).length ? { ...(global ? { global } : {}), perAccount } : undefined, ids, '2026-11-06')
+check('no switch-over date counts Monarch', countedFrom(undefined, {}, ['a', 'b']).mode === 'monarch')
+check('every account switched counts TD, from the date', JSON.stringify(countedFrom('2026-11-01', {}, ['a', 'b'])) === JSON.stringify({ mode: 'td', from: '2026-11-01' }))
+check('a date still to come is Monarch for now', JSON.stringify(countedFrom('2026-12-01', {}, ['a'])) === JSON.stringify({ mode: 'monarch', from: '2026-12-01' }))
+const someOn = countedFrom(undefined, { a: '2026-11-01' }, ['a', 'b'])
+check('one account switched of two is mixed', someOn.mode === 'mixed' && someOn.onTd === 1 && someOn.accounts === 2)
+check('an account with no TD feed does not hold back the status', countedFrom('2026-11-01', {}, ['a', 'a']).mode === 'td')
+check('no TD rows at all counts Monarch', countedFrom('2026-11-01', {}, []).mode === 'monarch')
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
 if (failures > 0) process.exit(1)

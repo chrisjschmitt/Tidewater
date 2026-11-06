@@ -23,6 +23,7 @@ import FeedCompareCard from './FeedCompareCard'
 import { useWatchFolder, WATCH_FOLDER_INPUT_ID } from './useWatchFolder'
 import type { EtmData } from './useEtmData'
 import { monthKeys, monthPeriod, today, type Period } from '../../lib/etm/period'
+import { countingFrom, type CountingFrom } from '../../lib/etm/ledger'
 import { readWeeklyDone, weeklySteps, writeWeeklyDone } from '../../lib/etm/routine'
 import { findPossibleDuplicates } from '../../lib/etm/duplicates'
 import WeeklyCheckIn from './WeeklyCheckIn'
@@ -208,6 +209,10 @@ export default function EtmArea({
     pinsMoved.current = true
     void data.saveForecastSettings(moved)
   }, [budget, data.forecastConfig, data.saveForecastSettings])
+  const counting = useMemo(
+    () => countingFrom(data.config.tdCutover, data.allRows.filter((r) => r.source === 'td').map((r) => r.accountId), today()),
+    [data.allRows, data.config.tdCutover],
+  )
   const editingRow = editingId ? data.allRows.find((row) => row.id === editingId) : undefined
   // TD rows that don't count yet (Monarch's copy does, before the switch-over).
   const tdCopies = useMemo(() => {
@@ -251,6 +256,7 @@ export default function EtmArea({
                   : `${data.transactions.length.toLocaleString()} transactions · ${data.accounts.length} account${data.accounts.length === 1 ? '' : 's'}`}
               </span>
             </div>
+            {!data.loading && <CountingBadge counting={counting} onOpen={() => setTab('settings')} />}
             <nav className="flex items-center gap-1">
               {TABS.map(([id, label]) => (
                 <button
@@ -585,6 +591,33 @@ export default function EtmArea({
         </Modal>
       )}
     </div>
+  )
+}
+
+/** Always in the header: where today's rows come from. Anything short of TD stands out. */
+function CountingBadge({ counting, onOpen }: { counting: CountingFrom; onOpen: () => void }) {
+  const onTd = counting.mode === 'td'
+  const label =
+    counting.mode === 'td'
+      ? `TD · from ${counting.from}`
+      : counting.mode === 'mixed'
+        ? `TD on ${counting.onTd} of ${counting.accounts} accounts · the rest on Monarch`
+        : counting.from
+          ? `Monarch · TD from ${counting.from}`
+          : 'Monarch · not switched to TD'
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="Which rows count in this copy of Tidewater. Rows dated before the switch-over still come from Monarch. Open Settings to see the date."
+      className={
+        onTd
+          ? 'rounded-full bg-tide-100 px-3 py-1.5 text-xs font-semibold text-tide-700'
+          : 'rounded-full bg-shell-500 px-3 py-1.5 text-xs font-semibold text-white'
+      }
+    >
+      Counting: {label}
+    </button>
   )
 }
 
