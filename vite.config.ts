@@ -37,6 +37,8 @@ export default defineConfig(({ mode }) => ({
         orientation: 'any',
         start_url: '/',
         scope: '/',
+        // Opening the installed app again brings the open window forward (Chrome on the Mac).
+        launch_handler: { client_mode: 'focus-existing' },
         categories: ['finance', 'productivity'],
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

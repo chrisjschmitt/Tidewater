@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.12 — 2026-11-06
+
+### Fixed
+- **Opening the installed app on the Mac no longer starts a second window.** Launching Tidewater while it is already open brings the open window forward, so an unlocked session stays as it is. (Chrome only; the iPad already opens a single copy.)
+
 ## 0.14.11 — 2026-11-05
 
 ### Added
