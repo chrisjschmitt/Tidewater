@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.16 — 2026-11-11
+
+### Changed
+- **Plan vs forecast keeps its column headings in view.** Scrolling down the table, the headings stay just under the page’s bar, and sorting still works from them. On a narrow screen the table scrolls sideways as before.
+
 ## 0.14.15 — 2026-11-11
 
 ### Added

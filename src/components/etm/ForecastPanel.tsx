@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ForecastActualModal from './ForecastActualModal'
 import ForecastExplainModal from './ForecastExplainModal'
 import ForecastMonthCard from './ForecastMonthCard'
@@ -75,6 +75,19 @@ export default function ForecastPanel({
   // Whether the full timeline is on screen; when it isn't, the sticky bar
   // carries a slim month strip instead.
   const [timelineInView, setTimelineInView] = useState(true)
+  // The page's own sticky bar: its height lets table headings stick just below it.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const root = rootRef.current
+    const bar = barRef.current
+    if (!root || !bar || typeof ResizeObserver === 'undefined') return
+    const update = () => root.style.setProperty('--forecast-bar', `${bar.offsetHeight}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(bar)
+    return () => observer.disconnect()
+  })
   useEffect(() => {
     const target = document.getElementById('forecast-timeline')
     if (!target || typeof IntersectionObserver === 'undefined') return
@@ -207,9 +220,10 @@ export default function ForecastPanel({
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} className="space-y-6">
       {!empty && (
         <nav
+          ref={barRef}
           aria-label="On this Forecast page"
           className="sticky z-[9] -mx-6 flex flex-wrap items-center gap-1 border-b border-sand-200/70 bg-sand-50/90 px-6 py-2 backdrop-blur-md"
           style={{ top: 'var(--etm-header, 3.5rem)' }}

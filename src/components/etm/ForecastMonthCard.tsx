@@ -305,9 +305,11 @@ function PlanVsForecastList({
       {rows.length === 0 ? (
         <p className="mt-3 text-sm text-ink-500">No category has a plan or a forecast this month.</p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
+        // Wide screens keep the headings in view while scrolling (a scrolling
+        // wrapper would stop them sticking); narrow ones scroll sideways instead.
+        <div className="mt-3 overflow-x-auto md:overflow-visible">
         <table className="w-full min-w-[42rem] text-sm">
-          <thead>
+          <thead className="[&_th]:z-[8] [&_th]:bg-white [&_th]:pt-2 [&_th]:shadow-[inset_0_-1px_0_rgba(28,43,40,0.08)] md:[&_th]:sticky md:[&_th]:top-[calc(var(--etm-header,3.5rem)+var(--forecast-bar,0px))]">
             <tr className="text-left text-[11px] uppercase tracking-wider text-ink-400">
               <th className="pb-2 pr-2 font-medium">
                 <span className="sr-only">Ignore</span>
