@@ -274,13 +274,20 @@ function PlanVsForecastList({
   const sorted = sortRows(rows, sort.by, sort.down, actualFor)
   const active = sorted.filter((row) => !ignored.has(row.key))
   const tucked = sorted.filter((row) => ignored.has(row.key))
+  // The running total adds up the column the table is sorted by; sorting by
+  // category or the default gap order adds up Difference.
+  const runningBy = sort.by === 'plan' || sort.by === 'forecast' || (sort.by === 'actual' && actualFor) ? sort.by : 'difference'
+  const runningValue = (row: VarianceRow): number =>
+    runningBy === 'plan' ? row.plan : runningBy === 'forecast' ? row.forecast : runningBy === 'actual' ? actualFor!(row) : row.delta
+  const runningSigned = runningBy === 'difference'
   const runningRows: Array<{ row: VarianceRow; running: number }> = []
   let running = 0
   for (const row of active) {
-    running = Math.round((running + row.delta) * 100) / 100
+    running = Math.round((running + runningValue(row)) * 100) / 100
     runningRows.push({ row, running })
   }
-  const total = runningRows.at(-1)?.running ?? 0
+  const total = Math.round(active.reduce((sum, row) => sum + row.delta, 0) * 100) / 100
+  const runningTotal = runningRows.at(-1)?.running ?? 0
   const planTotal = Math.round(active.reduce((sum, row) => sum + row.plan, 0) * 100) / 100
   const forecastTotal = Math.round(active.reduce((sum, row) => sum + row.forecast, 0) * 100) / 100
   const actualTotal = actualFor ? Math.round(active.reduce((sum, row) => sum + actualFor(row), 0) * 100) / 100 : 0
@@ -291,8 +298,8 @@ function PlanVsForecastList({
       <h3 className="text-sm font-semibold tracking-tight text-ink-900">Plan vs forecast by category</h3>
       <p className="mt-1 text-sm text-ink-500">
         {toMonthEnd
-          ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds those signed differences as you go down.'
-          : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds those signed differences as you go down.'}{' '}
+          ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds up the column you sorted by as you go down (Difference when sorted by category).'
+          : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds up the column you sorted by as you go down (Difference when sorted by category).'}{' '}
         {planEdit && 'Click a Plan figure to see that category month by month — plan beside spent and forecast — and to change its plan, with a note on why (✎ marks a category with notes). '}
         {onOpenActual && 'Click an Actual to today figure for the same view, with this month’s transactions. '}
         {onOpenForecast && 'Click a Forecast figure to see how it was worked out. '}
@@ -319,7 +326,12 @@ function PlanVsForecastList({
               {actualFor && <SortHeading column="actual" label="Actual to today" sort={sort} onSort={onSort} right />}
               <SortHeading column="forecast" label="Forecast" sort={sort} onSort={onSort} right />
               <SortHeading column="difference" label="Difference" sort={sort} onSort={onSort} right />
-              <th className="pb-2 pr-3 text-right font-medium">Running total</th>
+              <th className="pb-2 pr-3 text-right font-medium" title="Adds up the column the table is sorted by (Difference when sorted by category)">
+                Running total
+                <span className="block normal-case tracking-normal text-ink-400">
+                  of {runningBy === 'actual' ? 'actual' : runningBy}
+                </span>
+              </th>
               <th className="pb-2 text-right font-medium">
                 <span className="sr-only">Pin</span>
               </th>
@@ -331,6 +343,7 @@ function PlanVsForecastList({
                 key={row.key}
                 row={row}
                 running={soFar}
+                runningSigned={runningSigned}
                 ignored={false}
                 month={month}
                 warned={doubleCounts.some((warning) => warning.category === row.label)}
@@ -365,7 +378,7 @@ function PlanVsForecastList({
                 {signedCad(total)}
               </td>
               <td className="pt-2 pr-3 text-right text-sm font-medium tabular-nums text-ink-900">
-                {signedCad(total)}
+                {runningSigned ? signedCad(runningTotal) : amountIn(runningTotal, 'CAD')}
               </td>
               <td className="pt-2" />
             </tr>
@@ -474,6 +487,7 @@ function pinAmountFor(row: VarianceRow): number {
 function CompareRow({
   row,
   running,
+  runningSigned = true,
   ignored,
   month,
   warned,
@@ -487,6 +501,8 @@ function CompareRow({
 }: {
   row: VarianceRow
   running?: number
+  /** Whether the running figure is a difference (shown with a sign). */
+  runningSigned?: boolean
   ignored: boolean
   month: string
   warned: boolean
@@ -580,7 +596,7 @@ function CompareRow({
           {signedCad(row.delta)}
         </td>
         <td className={`py-1.5 pr-3 text-right tabular-nums ${ignored ? 'text-ink-400' : 'text-ink-700'}`}>
-          {running == null ? '—' : signedCad(running)}
+          {running == null ? '—' : runningSigned ? signedCad(running) : amountIn(running, 'CAD')}
         </td>
         <td className="py-1.5 text-right align-top">
           <button type="button" onClick={() => setOpen((value) => !value)} className="btn-quiet text-xs">

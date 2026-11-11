@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.17 — 2026-11-11
+
+### Changed
+- **Plan vs forecast’s running total follows the sort.** Sorted by Plan it adds up the plan, by Actual to today what has been spent, by Forecast the forecast, and by Difference (or category, or the default order) the differences. The heading names which (“of plan”), and the Total row’s figure under it matches its column.
+
 ## 0.14.16 — 2026-11-11
 
 ### Changed
