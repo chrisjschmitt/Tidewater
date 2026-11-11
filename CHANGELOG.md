@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.14 — 2026-11-11
+
+### Changed
+- **Transactions says “Spend”, not “Budget”.** The running column is now “Spend so far” and the total above it “Spend (CAD)”; what they count is unchanged.
+
 ## 0.14.13 — 2026-11-06
 
 ### Added

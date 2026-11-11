@@ -64,7 +64,7 @@ export default function TransactionsPanel({
   const choices = useMemo(() => optionsFrom(transactions), [transactions])
 
   // Newest first, then by merchant: the order shown and the order the
-  // Budget so far column adds up in. A TD copy sits right under the Monarch
+  // Spend so far column adds up in. A TD copy sits right under the Monarch
   // row (or split rows) it matches — the two name things differently, so by
   // merchant they would land apart.
   const { rows, partnered } = useMemo(() => {
@@ -174,10 +174,10 @@ export default function TransactionsPanel({
           <Totals label="Money in" money={totals.inbound} />
           <Totals label="Money out" money={totals.outbound} />
           <Totals label="Net" money={totals.net} signed />
-          <Totals label="Budget spend (CAD)" money={{ CAD: budgetRunning.total, USD: 0 }} />
+          <Totals label="Spend (CAD)" money={{ CAD: budgetRunning.total, USD: 0 }} />
         </div>
         <p className="mt-2 text-xs text-ink-400">
-          Budget spend counts what the Budget tab counts: no transfers or card payments, nothing held as
+          Spend counts what the Budget tab counts: no transfers or card payments, nothing held as
           reimbursable, no income, no accounts kept out of the budget. Its running figure is the last column below.
         </p>
       </section>
@@ -312,7 +312,7 @@ export default function TransactionsPanel({
                     <Th>Account</Th>
                     <Th>Whose</Th>
                     <Th right>Amount</Th>
-                    <Th right>Budget so far</Th>
+                    <Th right>Spend so far</Th>
                     <Th />
                   </tr>
                 </thead>
