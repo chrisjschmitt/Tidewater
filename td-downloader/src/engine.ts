@@ -43,6 +43,7 @@ const DOWNLOAD_TIMEOUT_MS = 60_000
 
 const STEP_TIMEOUT_MS = 20_000
 const NAV_TIMEOUT_MS = 45_000
+const SETTLE_TIMEOUT_MS = 15_000
 
 export interface RunOutcome {
   results: AccountResult[]
@@ -195,7 +196,7 @@ export async function runDownloads(
         const rows = result.file ? await countExportRows(result.file).catch(() => null) : null
         log(`  ✓ ${who}: ${rows === null ? 'saved' : `${rows} ${rows === 1 ? 'row' : 'rows'} saved`}`)
       } else if (result.status === 'halted') log(`  ■ ${who} halted: ${result.error ?? ''}`)
-      else log(`  ✗ ${who} failed: ${result.error ?? ''}`)
+      else log(`  ✗ ${who} failed: ${(result.error ?? '').split('\n')[0]}`)
 
       if (result.status === 'halted') {
         haltReason = 'stopped at your request (Ctrl+C)'
@@ -455,14 +456,29 @@ async function exportOnce(
  * navigation cannot mislead the next.
  */
 export async function openAccount(page: Page, account: AccountConfig, config: RunConfig, pacer: Pacer): Promise<void> {
-  await pacer.beforeAction()
-  await page.goto(config.easywebHomeUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS })
-  await guard(page)
+  const toSummary = async () => {
+    await pacer.beforeAction()
+    await page.goto(config.easywebHomeUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS })
+    await guard(page)
+    // Straight after signing in, EasyWeb passes through TD's sign-in pages and
+    // keeps redrawing the summary for a while; let it settle (capped).
+    await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
+  }
 
+  await toSummary()
   // Think time before the click as well as before the navigation: the pause a
   // person takes finding a link on a page they just loaded.
   await pacer.beforeAction()
-  await page.click(account.accountLink, { timeout: STEP_TIMEOUT_MS })
+  try {
+    await page.click(account.accountLink, { timeout: STEP_TIMEOUT_MS })
+  } catch (error) {
+    // A link that never held still (the first account after signing in) gets
+    // one more try from a freshly loaded summary — what a person would do.
+    if (!(error instanceof Error && error.name === 'TimeoutError')) throw error
+    await toSummary()
+    await pacer.beforeAction()
+    await page.click(account.accountLink, { timeout: STEP_TIMEOUT_MS })
+  }
   await page.waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT_MS }).catch(() => undefined)
   await guard(page)
 }

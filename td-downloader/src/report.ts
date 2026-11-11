@@ -49,7 +49,8 @@ export function formatSummary(results: readonly AccountResult[]): string {
 
 function note(result: AccountResult): string {
   if (result.file) return basename(result.file)
-  return result.error ?? ''
+  // The first line says what failed; Playwright's call log stays in the run's manifest.
+  return (result.error ?? '').split('\n')[0] ?? ''
 }
 
 /** The last thing the run prints: whether there is a file to import, and what it holds. */
