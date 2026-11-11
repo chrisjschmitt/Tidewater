@@ -20,3 +20,11 @@ docs/Workflow.md
 docs/ExpenseTrackingModuleSpecs.md
 docs/Forecasting Module Spec.md
 docs/ForecastingModuleSpecs.md
+
+# AI agent config — can hold secrets in plaintext (Apiiro/GitGuardian, Nov 2026).
+# Claude Code's "don't ask again" writes approved commands verbatim into
+# .claude/settings.local.json. Shared config stays tracked; the rest never ships.
+.claude/*
+!.claude/launch.json
+!.claude/settings.json
+.codex/
