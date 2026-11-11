@@ -318,7 +318,10 @@ export function snapshotFor(
 export type DownloadState = 'waiting' | 'downloaded'
 
 export interface DownloadProgress {
+  /** The accounts the downloader fetches: each one in a recent download's files. */
   accounts: Array<{ account: Account; state: DownloadState }>
+  /** Accounts with a number that no recent download has fetched: their balances are entered by hand. */
+  byHand: Account[]
   /** The combined file for the day, once the downloader has written it. */
   combined?: string
 }
@@ -333,10 +336,19 @@ export function downloadProgress(accounts: Account[], names: string[], day: stri
   const todays = names.filter((name) => parseStatementFileName(name)?.date === day)
   const match = matchStatementFiles(accounts, todays)
   const combined = names.find((name) => name.trim().toLowerCase() === `td-transactions-${day}.csv`)
+  // Which accounts the downloader fetches, from its last few runs' files (today's included);
+  // with no runs on record yet, every numbered account is expected.
+  const days = [...new Set(names.map((name) => parseStatementFileName(name)?.date).filter((d): d is string => Boolean(d) && d! <= day))]
+    .sort()
+    .slice(-3)
+  const recent = matchStatementFiles(accounts, names.filter((name) => days.includes(parseStatementFileName(name)?.date ?? '')))
+  const numbered = accounts.filter((account) => account.lastFour?.trim())
+  const fetched = (account: Account) => days.length === 0 || recent.byAccount.has(account.id)
   return {
-    accounts: accounts
-      .filter((account) => account.lastFour?.trim())
+    accounts: numbered
+      .filter(fetched)
       .map((account) => ({ account, state: match.byAccount.has(account.id) ? 'downloaded' : 'waiting' })),
+    byHand: numbered.filter((account) => !fetched(account)),
     ...(combined ? { combined: combined.trim() } : {}),
   }
 }

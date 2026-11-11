@@ -500,6 +500,12 @@ function DownloadFromTd({
               . Terminal’s report says why; their balances can be entered by hand below.
             </p>
           )}
+          {progress.byHand.length > 0 && (
+            <p className="text-xs text-ink-400">
+              Not fetched by the downloader — balances entered by hand:{' '}
+              {progress.byHand.map((account) => account.nickname).join(', ')}.
+            </p>
+          )}
         </div>
       )}
     </div>

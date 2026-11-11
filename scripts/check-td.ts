@@ -463,6 +463,12 @@ const p2 = downloadProgress(
 )
 check('files moved to raw/ still count, combined file ends the run', p2.accounts.every((a) => a.state === 'downloaded') && p2.combined === 'TD-transactions-2026-10-07.csv')
 
+const p3 = downloadProgress(accounts, ['TD-everyday-chequing-1111-2026-10-01.csv', 'TD-everyday-chequing-1111-2026-10-07.csv'], day)
+check('an account no recent download fetched is listed as by hand, not waiting', p3.byHand.some((a) => a.id === visa.id) && !p3.accounts.some((a) => a.account.id === visa.id) && p3.accounts.find((a) => a.account.id === chequing.id)?.state === 'downloaded')
+const p4 = downloadProgress(accounts, ['TD-rewards-visa-2222-2026-10-01.csv'], day)
+check('one fetched in a recent run but not yet today is still waiting', p4.accounts.find((a) => a.account.id === visa.id)?.state === 'waiting')
+check('no runs on record: every numbered account expected', p0.byHand.length === 0)
+
 console.log('=== Plan from a month on ===')
 const plan0: Budget = {
   income: [],

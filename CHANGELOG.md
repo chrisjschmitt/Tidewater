@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.18 — 2026-11-11
+
+### Changed
+- **Download progress only waits for accounts the downloader fetches.** An account none of the last three downloads fetched (a card from another bank, an account not in the downloader’s list, the US Dollar card while TD cancels its export) is no longer counted as “not downloaded”; it is listed on its own line as entered by hand.
+
 ## 0.14.17 — 2026-11-11
 
 ### Changed
