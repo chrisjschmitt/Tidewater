@@ -42,6 +42,8 @@ export interface WeeklyInput {
   /** TD rows (duplicates excluded). */
   tdRows: Transaction[]
   duplicates: number
+  /** Edits of pending charges that need you: posted for another amount, or never posted. */
+  pendingEditsToSee?: number
   /** ISO time of the last backup on this device. */
   lastBackup?: string
   /** ISO time the data here last changed. */
@@ -78,7 +80,8 @@ export function weeklySteps(input: WeeklyInput): WeeklySteps {
   // This month and last: last month's stragglers are filed before it closes.
   const month = input.today.slice(0, 7)
   const months = new Set([month, previousMonth(month)])
-  const toFile = input.tdRows.filter((row) => months.has(row.date.slice(0, 7)) && needsLook(row)).length
+  const toFile =
+    input.tdRows.filter((row) => months.has(row.date.slice(0, 7)) && needsLook(row)).length + (input.pendingEditsToSee ?? 0)
   const file: StepState = toFile > 0 ? 'needs' : 'done'
 
   const duplicates: StepState = input.duplicates > 0 ? 'needs' : 'notNeeded'

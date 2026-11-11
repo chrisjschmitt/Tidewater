@@ -5,6 +5,7 @@ import { counts, splitParts, tdAccountIds } from './ledger'
 import { etmGroupFor } from './groups'
 import { isInternalCategory } from '../categories'
 import type { Account, Transaction } from './types'
+import { pendingEditKey, withPendingEdit, type PendingEdit } from './pendingEdits'
 
 /**
  * Card charges still pending at TD. TD's export holds posted transactions
@@ -111,14 +112,21 @@ export interface PendingOptions {
   cutover?: TdCutover
   categorize: TdCategorizer
   groups?: Record<string, GroupId>
+  /** The user's edits of pending charges, shown on them. */
+  edits?: PendingEdit[]
 }
 
 /**
  * The pending charges still worth counting, as budget rows (split parts where
- * a rule splits them). Each has `pending: true` and an id that never collides
- * with a stored row.
+ * a rule splits them, or the user did). Each has `pending: true` and an id
+ * that never collides with a stored row.
  */
 export function pendingRows(snapshot: PendingSnapshot | undefined, all: Transaction[], options: PendingOptions): Transaction[] {
+  return pendingCharges(snapshot, all, options).flatMap((row) => splitParts(row, options.groups))
+}
+
+/** The same charges whole, before splitting: what the editor opens. */
+export function pendingCharges(snapshot: PendingSnapshot | undefined, all: Transaction[], options: PendingOptions): Transaction[] {
   if (!snapshot) return []
   const tdAccounts = tdAccountIds(all)
   const out: Transaction[] = []
@@ -167,7 +175,8 @@ export function pendingRows(snapshot: PendingSnapshot | undefined, all: Transact
         ...(outcome.split && outcome.split.length > 0 ? { split: outcome.split } : {}),
       }
       if (!counts(row, options.cutover, { tdAccounts })) return
-      out.push(...splitParts(row, options.groups))
+      const edit = options.edits?.find((e) => e.key === pendingEditKey(row))
+      out.push(edit ? withPendingEdit(row, edit, options.groups) : row)
     })
   }
   return out

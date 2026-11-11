@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.15 — 2026-11-11
+
+### Added
+- **Edit a card charge while it is still pending.** Pending rows now have Edit: merchant, comment, category, tags and splits, counted straight away (remembering a rule waits until it posts, since TD's pending wording can differ).
+  - **Posts for the same amount** (within a week): the edit is carried onto the posted row by itself, marked “Carried over from your edit while pending”.
+  - **Posts for another amount** (a tip, a gas pump hold): File transactions offers your edit with the split scaled to the posted total, to check and save — or drop.
+  - **Never posts**: File transactions says so once, with Dismiss.
+
 ## 0.14.14 — 2026-11-11
 
 ### Changed

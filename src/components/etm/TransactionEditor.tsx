@@ -8,6 +8,7 @@ import type { UserRule } from '../../lib/etm/rules/types'
 import type { SplitLine, Transaction } from '../../lib/etm/types'
 import { uid } from '../../lib/format'
 import { LAYER_WORDS } from './ReviewPanel'
+import { editFromSettled, pendingEditKey } from '../../lib/etm/pendingEdits'
 
 /**
  * One form for one transaction: merchant, comment, and its category and tags —
@@ -29,17 +30,17 @@ export default function TransactionEditor({
    * A split chosen in review: its parts' categories and tags, with the
    * amounts left blank for the user to enter — only they know them.
    */
-  prefill?: { merchant: string; lines: Array<{ category: string; tags: string[]; notes?: string }> }
+  prefill?: { merchant: string; notes?: string; lines: Array<{ category: string; tags: string[]; notes?: string; amount?: number }> }
 }) {
   const start = row.split ?? [{ amount: row.amount, category: row.category === 'Uncategorized' ? '' : row.category, tags: row.tags }]
   const total = Math.abs(row.amount)
   const [merchant, setMerchant] = useState(prefill?.merchant ?? row.merchant)
-  const [notes, setNotes] = useState(row.notes)
+  const [notes, setNotes] = useState(prefill?.notes ?? row.notes)
   const [countIn, setCountIn] = useState(row.budgetDate ?? row.date)
   const [mode, setMode] = useState<'amount' | 'percent'>('amount')
   const [lines, setLines] = useState(
     prefill
-      ? prefill.lines.map((line) => ({ value: '', category: line.category, tags: line.tags, notes: line.notes ?? '' }))
+      ? prefill.lines.map((line) => ({ value: line.amount !== undefined ? Math.abs(line.amount).toFixed(2) : '', category: line.category, tags: line.tags, notes: line.notes ?? '' }))
       : start.map((line) => ({
       value: Math.abs(line.amount).toFixed(2),
       category: line.category,
@@ -122,6 +123,12 @@ export default function TransactionEditor({
     else delete next.budgetDate
     setBusy(true)
     try {
+      if (row.pending) {
+        // A pending charge is rebuilt from each reading: the edit is kept apart and carried over when it posts.
+        await data.savePendingEdit(editFromSettled(next, new Date().toISOString()))
+        onDone()
+        return
+      }
       if (remember !== 'none' && row.source === 'td') {
         const sum = parts.reduce((s, l) => s + l.amount, 0)
         const rule: UserRule = {
@@ -244,7 +251,22 @@ export default function TransactionEditor({
             : `${remainder > 0 ? 'Still to place' : 'Over by'} ${mode === 'percent' ? `${Math.abs(remainder)}%` : Math.abs(remainder).toFixed(2)}`}
         </span>
       </div>
-      {row.source === 'td' && (
+      {row.pending && (
+        <p className="rounded-xl bg-white px-3 py-2 text-xs text-ink-500">
+          Still pending at TD. Your edit counts straight away and is carried onto the posted row when it arrives — set
+          for you if TD posts the same amount, offered in File transactions if the amount changes.{' '}
+          {data.config.pendingEdits?.some((e) => e.key === pendingEditKey(row)) && (
+            <button
+              type="button"
+              className="underline decoration-sand-300 underline-offset-2 hover:text-ink-900"
+              onClick={() => void data.dropPendingEdit(pendingEditKey(row)).then(onDone)}
+            >
+              Forget my edit
+            </button>
+          )}
+        </p>
+      )}
+      {row.source === 'td' && !row.pending && (
         <RuleChoice
           ruleKey={ruleKey}
           amount={row.amount}

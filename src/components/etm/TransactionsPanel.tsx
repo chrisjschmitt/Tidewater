@@ -373,7 +373,7 @@ export default function TransactionsPanel({
                         {budgetRunning.running.has(t.id) ? amountIn(budgetRunning.running.get(t.id)!, 'CAD') : '—'}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2.5 text-right">
-                        {onEdit && !t.pending && (t.source === 'td' || t.source === 'manual') && (
+                        {onEdit && (t.source === 'td' || t.source === 'manual') && (
                           <button
                             onClick={() => onEdit(t)}
                             className="mr-2 text-xs text-ink-500 transition hover:text-tide-700"

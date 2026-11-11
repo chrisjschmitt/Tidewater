@@ -181,10 +181,11 @@ export default function EtmArea({
         ...(data.config.pending ? { pendingDate: data.config.pending.date } : {}),
         tdRows: data.allRows.filter((row) => row.source === 'td' && !row.duplicateOf),
         duplicates: duplicateCount,
+        pendingEditsToSee: data.pendingEditOutcomes.filter((o) => o.kind === 'suggest' || o.kind === 'gone').length,
         ...(safeguards.lastBackup ? { lastBackup: safeguards.lastBackup } : {}),
         ...(freshness?.changedAt ? { changedAt: freshness.changedAt } : {}),
       }),
-    [weeklyDone, data.batches, data.config.pending, data.allRows, duplicateCount, safeguards.lastBackup, freshness?.changedAt],
+    [weeklyDone, data.batches, data.config.pending, data.allRows, data.pendingEditOutcomes, duplicateCount, safeguards.lastBackup, freshness?.changedAt],
   )
 
   // The travel goal (chosen on Overview, or named with vacation/travel), for the month-end transfer.
@@ -213,7 +214,9 @@ export default function EtmArea({
     () => countingFrom(data.config.tdCutover, data.allRows.filter((r) => r.source === 'td').map((r) => r.accountId), today()),
     [data.allRows, data.config.tdCutover],
   )
-  const editingRow = editingId ? data.allRows.find((row) => row.id === editingId) : undefined
+  const editingRow = editingId
+    ? (data.allRows.find((row) => row.id === editingId) ?? data.pendingCharges.find((row) => row.id === editingId))
+    : undefined
   // TD rows that don't count yet (Monarch's copy does, before the switch-over).
   const tdCopies = useMemo(() => {
     const counted = new Set(data.transactions.map((t) => t.id.split('#')[0]))

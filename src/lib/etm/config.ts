@@ -1,6 +1,7 @@
 import type { GroupId } from '../types'
 import type { RuleSettings } from './rules/types'
 import type { PendingSnapshot } from './pending'
+import type { PendingEdit } from './pendingEdits'
 import { asFingerprint, type ExportFingerprint } from './watchFolder'
 
 /**
@@ -78,6 +79,8 @@ export interface EtmConfig {
   reimbursedOn?: Record<string, string>
   /** The latest reading of the cards' pending charges (TD-pending-<date>.json). */
   pending?: PendingSnapshot
+  /** Edits made to card charges while still pending, carried onto the posted rows (pendingEdits.ts). */
+  pendingEdits?: PendingEdit[]
   /** Month → reimbursement groups (account|bucket) ticked as checked at month end. */
   reimburseChecked?: Record<string, string[]>
   /** Rows (ids) skipped on Month end's Tidy list: fine as they are. */
@@ -124,6 +127,7 @@ export const withDefaults = (stored: Partial<EtmConfig> | undefined): EtmConfig 
   reimburseChecked: stored?.reimburseChecked && typeof stored.reimburseChecked === 'object' ? stored.reimburseChecked : undefined,
   transfers: stored?.transfers && typeof stored.transfers === 'object' ? stored.transfers : undefined,
   tidySkipped: Array.isArray(stored?.tidySkipped) ? stored.tidySkipped : undefined,
+  pendingEdits: Array.isArray(stored?.pendingEdits) ? stored.pendingEdits.filter((e) => e && typeof e.key === 'string') : undefined,
 })
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/

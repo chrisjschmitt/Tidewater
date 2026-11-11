@@ -82,9 +82,16 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                       {row.originalStatement}
                     </span>
                   )}
+                  {row.fromPending && (
+                    <span className="mt-0.5 block text-ink-400">Carried over from your edit while pending</span>
+                  )}
                   {(row.pending || row.source === 'monarch') && (
                     <span className="mt-0.5 block font-medium text-shell-500">
-                      {row.pending ? 'Pending at TD — edit it once it posts' : 'From Monarch'}
+                      {row.pending
+                        ? row.reviewed
+                          ? 'Pending at TD — your edit carries over when it posts'
+                          : 'Pending at TD'
+                        : 'From Monarch'}
                     </span>
                   )}
                   {row.notes && (
@@ -110,7 +117,7 @@ export default function TransactionTable({ rows, empty, omitTags = [], spendSoFa
                 </td>
                 {actions && (
                   <td className="py-2 text-right">
-                    {onEdit && !row.pending && (row.source === 'td' || row.source === 'manual' || (editMonarch && row.source === 'monarch')) && (
+                    {onEdit && (row.source === 'td' || row.source === 'manual' || (editMonarch && row.source === 'monarch')) && (
                       <button
                         type="button"
                         className="btn-quiet text-xs"

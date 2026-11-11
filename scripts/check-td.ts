@@ -15,7 +15,8 @@ import { countsAsBudgetSpend, settleRow } from '../src/lib/etm/review.ts'
 import { planTdImport } from '../src/lib/etm/importer.ts'
 import { budgetDateOf, countingFrom, counts, ledgerView, shadowRows } from '../src/lib/etm/ledger.ts'
 import { dailyCompare } from '../src/lib/etm/dailyCompare.ts'
-import { isPendingFileName, newestPending, parsePendingFile, pendingRows } from '../src/lib/etm/pending.ts'
+import { isPendingFileName, newestPending, parsePendingFile, pendingCharges, pendingRows } from '../src/lib/etm/pending.ts'
+import { carriedRow, editFromSettled, resolvePendingEdits, scaledLines } from '../src/lib/etm/pendingEdits.ts'
 import { uncategorized } from '../src/lib/etm/importer.ts'
 import { parseStatementCsv } from '../src/lib/etm/statement.ts'
 import { cardBalanceTooEarly, downloadDayOf, downloadProgress, matchStatementFiles, reviewRows, scanStatementNames, snapshotFor } from '../src/lib/etm/statementFolder.ts'
@@ -247,6 +248,39 @@ console.log('=== Pending card charges ===')
   check('before the switch-over they do not count', pendingRows(snap, stored, { accounts, categorize: uncategorized }).length === 0)
   const posted = [...stored, tdVisa('v2', '2026-11-05', -30, 'TD-transactions-2026-11-04.csv')]
   check('a charge drops away once its posted copy is in', pendingRows(snap, posted, { accounts, cutover: switched, categorize: uncategorized }).length === 1)
+  // Edits of pending charges.
+  {
+    const cafeRow = pendingCharges(snap, stored, { accounts, cutover: switched, categorize: uncategorized }).find((r) => r.originalStatement === 'CAFE')!
+    const split = settleRow(cafeRow, { merchant: 'Walmart', notes: 'groceries + medicine', lines: [
+      { amount: -30.5, category: 'Groceries', tags: [] },
+      { amount: -20, category: 'Medical', tags: [] },
+    ] })
+    const edit = editFromSettled(split, '2026-11-04T23:30:00Z')
+    const shown = pendingRows(snap, stored, { accounts, cutover: switched, categorize: uncategorized, edits: [edit] })
+    const cafeParts = shown.filter((r) => r.originalStatement === 'CAFE')
+    check('a pending edit shows on the charge, split into its parts', cafeParts.length === 2 && cafeParts.every((r) => r.pending && r.merchant === 'Walmart') && cafeParts.some((r) => r.category === 'Medical' && r.amount === -20))
+    check('the edit opens again on the whole charge', pendingCharges(snap, stored, { accounts, cutover: switched, categorize: uncategorized, edits: [edit] }).find((r) => r.originalStatement === 'CAFE')!.split?.length === 2)
+    check('still listed → waiting', resolvePendingEdits([edit], snap, stored)[0]!.kind === 'waiting')
+    const cafe = (id: string, date: string, amount: number, extra: Partial<Transaction> = {}): Transaction => ({
+      ...tdVisa(id, date, amount, 'TD-transactions-2026-11-07.csv'), originalStatement: 'CAFE', category: 'Uncategorized', ...extra,
+    })
+    const same = resolvePendingEdits([edit], snap, [...stored, cafe('c1', '2026-11-06', -50.5)])[0]!
+    check('posted for the same amount → carried over', same.kind === 'carry' && same.row.id === 'c1')
+    if (same.kind === 'carry') {
+      const carried = carriedRow(same.row, edit)
+      check('… with the split, comment and a mark of where it came from', carried.split?.length === 2 && carried.notes === 'groceries + medicine' && carried.reviewed && carried.fromPending === '2026-11-04')
+      check('… and once carried it is done', resolvePendingEdits([edit], snap, [...stored, carried])[0]!.kind === 'done')
+    }
+    check('posted already filed by hand → done, nothing overwritten', resolvePendingEdits([edit], snap, [...stored, cafe('c1', '2026-11-06', -50.5, { reviewed: true })])[0]!.kind === 'done')
+    const tip = resolvePendingEdits([edit], { ...snap, date: '2026-11-07', accounts: snap.accounts.map((a) => ({ ...a, charges: [] })) }, [...stored, cafe('c2', '2026-11-06', -60.6)])[0]!
+    check('posted for another amount → offered', tip.kind === 'suggest' && tip.row.id === 'c2')
+    const scaled = scaledLines(edit, -60.6)
+    check('… with the parts scaled to the posted total', scaled.length === 2 && Math.round(scaled.reduce((s, l) => s + l.amount, 0) * 100) === -6060 && scaled[0]!.amount === -36.6)
+    check('a posted row a week too late is not taken', resolvePendingEdits([edit], snap, [...stored, cafe('c3', '2026-11-14', -50.5)])[0]!.kind === 'waiting')
+    const gone = { ...snap, date: '2026-11-07', accounts: snap.accounts.map((a) => ({ ...a, charges: [] })) }
+    check('dropped by TD, posted rows read in → gone', resolvePendingEdits([edit], gone, [...stored, tdVisa('v9', '2026-11-06', -7, 'TD-transactions-2026-11-07.csv')])[0]!.kind === 'gone')
+    check('dropped by TD, posted rows not read in yet → still waiting', resolvePendingEdits([edit], gone, stored)[0]!.kind === 'waiting')
+  }
   const later = [...stored, tdVisa('v3', '2026-11-06', -7, 'TD-transactions-2026-11-07.csv')]
   check('a later download without a fresh reading makes it stale', pendingRows(snap, later, { accounts, cutover: switched, categorize: uncategorized }).length === 0)
 }

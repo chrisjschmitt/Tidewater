@@ -181,6 +181,8 @@ export interface Transaction {
   duplicateOf?: string
   /** A card charge still pending at TD (never stored): counts in the budget until its posted copy arrives. */
   pending?: boolean
+  /** The pending charge's date, when the user's edit of it was carried onto this posted row. */
+  fromPending?: string
   /** Set on the ledger's parts of a split row (never stored): which part, of how many, of which row. */
   splitOf?: { part: number; parts: number; parentId: string }
 }

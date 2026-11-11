@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_CONFIG, type EtmConfig } from '../../lib/etm/config'
 import type { ExportFingerprint } from '../../lib/etm/watchFolder'
 import { today } from '../../lib/etm/period'
@@ -7,7 +7,9 @@ import { DEFAULT_FORECAST_CONFIG, type ForecastConfig, type ForecastSnapshot } f
 import type { ImportPlan } from '../../lib/etm/importer'
 import { ledgerView } from '../../lib/etm/ledger'
 import { historyRows, rulesCategorizer } from '../../lib/etm/rules/apply'
-import { pendingRows } from '../../lib/etm/pending'
+import { pendingCharges as readPendingCharges } from '../../lib/etm/pending'
+import { carriedRow, resolvePendingEdits, type EditOutcome, type PendingEdit } from '../../lib/etm/pendingEdits'
+import { splitParts } from '../../lib/etm/ledger'
 import type { RuleContext } from '../../lib/etm/rules/engine'
 import { buildModel } from '../../lib/etm/rules/model'
 import { withRuleDefaults } from '../../lib/etm/rules/types'
@@ -58,6 +60,14 @@ export interface EtmData {
   budgetRows: Transaction[]
   /** The pending charges in `budgetRows` (split parts where a rule splits them). */
   pending: Transaction[]
+  /** The same pending charges whole — what Edit opens for a pending row. */
+  pendingCharges: Transaction[]
+  /** Where each edit of a pending charge stands (waiting, offered, gone…). */
+  pendingEditOutcomes: EditOutcome[]
+  /** Saves (or replaces) the edit of a pending charge. */
+  savePendingEdit: (edit: PendingEdit) => Promise<void>
+  /** Forgets the edit of a pending charge. */
+  dropPendingEdit: (key: string) => Promise<void>
   /** The rules engine, learned afresh from history whenever it changes. */
   rules: RuleContext
   batches: ImportBatch[]
@@ -118,15 +128,24 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     })
     return { model, settings, accounts, reimbursableTag: config.reimbursableTag }
   }, [accounts, allRows, config.reimbursableTag, config.rules])
-  const pending = useMemo(
+  const pendingCharges = useMemo(
     () =>
-      pendingRows(config.pending, allRows, {
+      readPendingCharges(config.pending, allRows, {
         accounts,
         categorize: rulesCategorizer(rules),
         ...(config.tdCutover ? { cutover: config.tdCutover } : {}),
         ...(config.categoryGroups ? { groups: config.categoryGroups } : {}),
+        ...(config.pendingEdits ? { edits: config.pendingEdits } : {}),
       }),
-    [accounts, allRows, config.categoryGroups, config.pending, config.tdCutover, rules],
+    [accounts, allRows, config.categoryGroups, config.pending, config.pendingEdits, config.tdCutover, rules],
+  )
+  const pending = useMemo(
+    () => pendingCharges.flatMap((row) => splitParts(row, config.categoryGroups)),
+    [pendingCharges, config.categoryGroups],
+  )
+  const pendingEditOutcomes = useMemo(
+    () => resolvePendingEdits(config.pendingEdits ?? [], config.pending, allRows),
+    [allRows, config.pending, config.pendingEdits],
   )
   const budgetRows = useMemo(() => (pending.length > 0 ? [...transactions, ...pending] : transactions), [pending, transactions])
   const [notice, setNotice] = useState('')
@@ -216,9 +235,29 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
   const saveSettings = useCallback(
     async (next: EtmConfig) => {
       await saveConfig(unlockedKey, next)
+      configRef.current = next
       setConfig(next)
     },
     [unlockedKey],
+  )
+  // The latest settings, for changes made from effects and callbacks that may hold an older copy.
+  const configRef = useRef(config)
+  configRef.current = config
+
+  const savePendingEdit = useCallback(
+    async (edit: PendingEdit) => {
+      const current = configRef.current
+      await saveSettings({ ...current, pendingEdits: [...(current.pendingEdits ?? []).filter((e) => e.key !== edit.key), edit] })
+    },
+    [saveSettings],
+  )
+  const dropPendingEdit = useCallback(
+    async (key: string) => {
+      const current = configRef.current
+      const rest = (current.pendingEdits ?? []).filter((e) => e.key !== key)
+      await saveSettings({ ...current, pendingEdits: rest.length > 0 ? rest : undefined })
+    },
+    [saveSettings],
   )
 
   const saveForecastSettings = useCallback(
@@ -338,6 +377,34 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     [reload, unlockedKey],
   )
 
+  // A pending edit whose charge posted for the same amount is carried onto the
+  // posted row (one Undo with the day's review session); one whose posted row
+  // is already filed is forgotten. Run once per change, never twice at once.
+  const carrying = useRef(false)
+  useEffect(() => {
+    if (loading || carrying.current) return
+    const carry = pendingEditOutcomes.filter((o) => o.kind === 'carry')
+    const finished = pendingEditOutcomes.filter((o) => o.kind === 'done')
+    if (carry.length === 0 && finished.length === 0) return
+    carrying.current = true
+    void (async () => {
+      try {
+        if (carry.length > 0) {
+          await saveRows(carry.map((o) => carriedRow(o.row, o.edit, configRef.current.categoryGroups)))
+        }
+        const settled = new Set([...carry, ...finished].map((o) => o.edit.key))
+        const current = configRef.current
+        const rest = (current.pendingEdits ?? []).filter((e) => !settled.has(e.key))
+        await saveSettings({ ...current, pendingEdits: rest.length > 0 ? rest : undefined })
+        if (carry.length > 0) {
+          flash(`Carried ${carry.length === 1 ? 'your edit' : `${carry.length} edits`} of pending charges onto the posted ${carry.length === 1 ? 'row' : 'rows'}.`)
+        }
+      } finally {
+        carrying.current = false
+      }
+    })()
+  }, [loading, pendingEditOutcomes, saveRows, saveSettings, flash])
+
   const removeManual = useCallback(
     async (transaction: Transaction) => {
       // A split part from the ledger stands for its stored row: removing it
@@ -385,5 +452,9 @@ export function useEtmData(unlockedKey: CryptoKey): EtmData {
     addManual,
     removeManual,
     saveRows,
+    pendingCharges,
+    pendingEditOutcomes,
+    savePendingEdit,
+    dropPendingEdit,
   }
 }

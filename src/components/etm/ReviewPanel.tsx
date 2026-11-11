@@ -5,6 +5,7 @@ import { settleRow } from '../../lib/etm/review'
 import { amountIn } from '../../lib/etm/format'
 import { monthName } from '../../lib/etm/period'
 import { needsLook } from '../../lib/etm/routine'
+import { scaledLines } from '../../lib/etm/pendingEdits'
 import type { UserRule } from '../../lib/etm/rules/types'
 import type { SplitLine, Transaction } from '../../lib/etm/types'
 
@@ -62,6 +63,8 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
     .sort((a, z) => z.date.localeCompare(a.date) || a.originalStatement.localeCompare(z.originalStatement))
 
   const accountName = (id: string) => data.accounts.find((a) => a.id === id)?.nickname ?? ''
+  const offered = data.pendingEditOutcomes.filter((o) => o.kind === 'suggest' || o.kind === 'gone')
+  const [applying, setApplying] = useState<string | null>(null)
 
   const settle = (row: Transaction, merchant: string, lines: SplitLine[]) =>
     settleRow(row, { merchant, lines }, data.config.categoryGroups)
@@ -92,6 +95,65 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
   }
 
   return (
+    <>
+    {offered.length > 0 && (
+      <section className="card mb-4 p-6">
+        <h2 className="text-base font-semibold tracking-tight text-ink-900">Your edits of pending charges</h2>
+        <p className="mt-0.5 max-w-prose text-sm text-ink-500">
+          Charges you changed while pending. Same-amount ones were carried over by themselves; these need you.
+        </p>
+        <ul className="mt-3 divide-y divide-sand-200/80 text-sm">
+          {offered.map((o) => {
+            const what = `${o.edit.merchant} ${amountIn(Math.abs(o.edit.amount), 'CAD')} (pending ${o.edit.date}, ${accountName(o.edit.accountId)})`
+            return (
+              <li key={o.edit.key} className="py-2">
+                {o.kind === 'suggest' ? (
+                  <>
+                    <p className="text-ink-900">
+                      {what} posted as {amountIn(Math.abs(o.row.amount), 'CAD')} on {o.row.date}. Apply your edit, with the
+                      amounts scaled to the posted total?
+                    </p>
+                    {applying === o.edit.key ? (
+                      <div className="mt-2">
+                        <TransactionEditor
+                          data={data}
+                          row={o.row}
+                          prefill={{
+                            merchant: o.edit.merchant,
+                            notes: o.edit.notes,
+                            lines: scaledLines(o.edit, o.row.amount),
+                          }}
+                          onDone={() => {
+                            setApplying(null)
+                            void data.dropPendingEdit(o.edit.key)
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-1.5 flex gap-2">
+                        <button className="btn-primary text-xs" onClick={() => setApplying(o.edit.key)}>
+                          Apply my edit
+                        </button>
+                        <button className="btn-quiet text-xs" onClick={() => void data.dropPendingEdit(o.edit.key)}>
+                          Drop my edit
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-ink-900">Your edit of {what} didn’t post — TD dropped the charge.</p>
+                    <button className="btn-quiet text-xs" onClick={() => void data.dropPendingEdit(o.edit.key)}>
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+    )}
     <section className="card p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -258,5 +320,6 @@ export default function ReviewPanel({ data }: { data: EtmData }) {
         </button>
       )}
     </section>
+    </>
   )
 }
