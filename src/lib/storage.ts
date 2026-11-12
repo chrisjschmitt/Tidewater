@@ -12,6 +12,12 @@ export interface ChatMessage {
   text: string
   /** True when the reply left the device for a cloud model. */
   cloud?: boolean
+  /**
+   * Asked or answered while expense tracking was unlocked, so it can quote
+   * expense totals. Kept for the open session only: never written to disk
+   * (the chat store isn't encrypted) and dropped when expenses lock.
+   */
+  expenses?: boolean
 }
 
 export type CloudProvider = 'openai' | 'anthropic'
@@ -161,17 +167,26 @@ export async function clearBudget(): Promise<void> {
   await del(BUDGET_KEY)
 }
 
+const CHAT_CHECKED_KEY = 'tidewater.chat.expensesChecked'
+
 export async function loadChat(): Promise<ChatMessage[]> {
   try {
+    // Chats saved before 0.14.22 may quote expense totals and can't be told
+    // apart, so on a device with expense tracking they are cleared once.
+    if (!(await get<boolean>(CHAT_CHECKED_KEY))) {
+      if ((await loadEtmPresence())?.setUp) await del(CHAT_KEY)
+      await set(CHAT_CHECKED_KEY, true)
+    }
     const stored = await get<ChatMessage[]>(CHAT_KEY)
-    return Array.isArray(stored) ? stored : []
+    return Array.isArray(stored) ? stored.filter((message) => !message.expenses) : []
   } catch {
     return []
   }
 }
 
+/** Saves the chat without anything asked or answered while expenses were unlocked. */
 export async function saveChat(messages: ChatMessage[]): Promise<void> {
-  await set(CHAT_KEY, messages)
+  await set(CHAT_KEY, messages.filter((message) => !message.expenses))
 }
 
 export async function clearChat(): Promise<void> {

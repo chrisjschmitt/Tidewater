@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.22 — 2026-11-11
+
+### Security
+- **The assistant no longer saves expense answers.** Anything asked or answered while expense tracking is unlocked can quote expense totals, so it stays for the open session only and goes when Expenses locks; the chat store on the device isn't encrypted. Plain budget questions are saved as before. On a device with expense tracking, chats saved by earlier versions are cleared once, since they can't be told apart.
+- **Erase removes everything Expenses kept on the device**: besides the vault and the statement folder, also the backup folder, the last-backup time, the newer-backup note, "done for this week", the automatic-backup and downloader settings, and the last-use time.
+
 ## 0.14.21 — 2026-11-11
 
 ### Security

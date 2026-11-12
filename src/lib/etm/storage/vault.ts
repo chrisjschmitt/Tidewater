@@ -10,6 +10,7 @@ import {
 } from '../crypto'
 import { deleteEtmDb, openEtmDb, RECORD_STORES, type SealedRecord, type VaultMeta } from './db'
 import { forgetStatementFolder } from './statementFolder'
+import { del as forgetKeyval } from 'idb-keyval'
 import { setEtmPresence } from '../../storage'
 import { clearLastActive, readLastActive, rememberedStillValid, writeLastActive } from '../lockTimes'
 
@@ -121,13 +122,35 @@ export async function forgetRememberedKey(): Promise<void> {
   await setEtmPresence({ setUp: true, remembered: false })
 }
 
+/** The module's small per-device notes, kept in localStorage beside the vault. */
+const ETM_LOCAL_KEYS = [
+  'tidewater.etm.lastBackup',
+  'tidewater.etm.freshness',
+  'tidewater.etm.weeklyDone',
+  'tidewater.etm.autoBackup',
+  'tidewater.etm.tdDownloaderHere',
+]
+
+function forgetEtmLocalSettings(): void {
+  for (const key of ETM_LOCAL_KEYS) {
+    try {
+      localStorage.removeItem(key)
+    } catch {
+      // A private window keeps nothing.
+    }
+  }
+}
+
 /** Erase everything the module has stored on this device. */
 export async function wipeVault(): Promise<void> {
   await deleteEtmDb()
   // The statement folder is remembered outside this database, so erasing the
   // module has to say so explicitly or the grant would outlive the data.
   await forgetStatementFolder()
+  // The backup folder's grant (safeguards.ts), kept outside this database too.
+  await forgetKeyval('tidewater.etm.backupFolder').catch(() => undefined)
   clearLastActive()
+  forgetEtmLocalSettings()
   await setEtmPresence(null)
 }
 

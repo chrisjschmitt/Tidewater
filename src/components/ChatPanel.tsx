@@ -77,6 +77,12 @@ export default function ChatPanel({
     void saveChat(messages)
   }, [messages, hydrated])
 
+  // Expenses locked (idle, Lock, Erase): what was asked with them unlocked goes too.
+  useEffect(() => {
+    if (etmContext) return
+    setMessages((m) => (m.some((message) => message.expenses) ? m.filter((message) => !message.expenses) : m))
+  }, [etmContext])
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, busy])
@@ -94,13 +100,21 @@ export default function ChatPanel({
     const text = question.trim()
     if (!text || busy) return
     setInput('')
-    setMessages((m) => [...m, { id: Date.now(), role: 'user', text }])
+    // With expenses unlocked the answer can quote expense totals: kept for this session only.
+    const expenses = Boolean(__ETM_AVAILABLE__ && etmContext)
+    setMessages((m) => [...m, { id: Date.now(), role: 'user', text, ...(expenses ? { expenses } : {}) }])
     setBusy(true)
     try {
       const result = await answer(text, budget, settings, etmContext)
       setMessages((m) => [
         ...m,
-        { id: Date.now() + 1, role: 'assistant', text: result.text, cloud: result.usedCloud },
+        {
+          id: Date.now() + 1,
+          role: 'assistant',
+          text: result.text,
+          cloud: result.usedCloud,
+          ...(expenses ? { expenses } : {}),
+        },
       ])
     } finally {
       setBusy(false)
