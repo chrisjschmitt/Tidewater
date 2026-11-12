@@ -60,11 +60,11 @@ async function main(): Promise<void> {
   } else if (outcome.haltReason) {
     console.log('')
     console.log(`Run ended early: ${outcome.haltReason}`)
-    console.log('Chrome was left exactly as it was, still logged in. Re-run to pick up where this stopped,')
-    console.log('or log out of EasyWeb and quit that Chrome (⌘Q) if you are done.')
+    console.log(describeLogout(outcome.logout, stayLoggedIn, outcome.chromeClosed))
+    console.log('Run Download from TD again to pick up where this stopped.')
   } else {
     console.log('')
-    console.log(describeLogout(outcome.logout, stayLoggedIn))
+    console.log(describeLogout(outcome.logout, stayLoggedIn, outcome.chromeClosed))
   }
 
   const allOk = outcome.results.every((result) => result.status === 'ok')
@@ -79,7 +79,8 @@ main().catch((error: unknown) => {
   if (error instanceof ConfigError || error instanceof RunAbort) {
     console.error(`\n${error.message}`)
   } else {
-    console.error('\nThe run stopped on an unexpected error. Chrome was left exactly as it was.')
+    console.error('\nThe run stopped on an unexpected error. It logged out and closed the bank Chrome where it could —')
+    console.error('if that window is still open, log out of EasyWeb and quit it (⌘Q).')
     console.error(error)
   }
   process.exitCode = 1

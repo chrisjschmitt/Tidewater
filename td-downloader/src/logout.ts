@@ -99,12 +99,13 @@ export async function logOut(page: Page, homeUrl: string): Promise<LogoutResult>
 }
 
 /** One line for the end of a run. */
-export function describeLogout(result: LogoutResult | undefined, stayed: boolean): string {
+export function describeLogout(result: LogoutResult | undefined, stayed: boolean, closed = false): string {
   if (stayed) return 'Still logged in to EasyWeb (--stay-signed-in). Log out and quit that Chrome when you are done.'
   if (!result) return 'Log out of EasyWeb and quit that Chrome (⌘Q) when you are done.'
-  return result.loggedOut
-    ? 'Logged out of EasyWeb. You can quit that Chrome window (⌘Q).'
-    : `Couldn't log out of EasyWeb (${result.why}). Log out by hand and quit that Chrome (⌘Q).`
+  if (!result.loggedOut) return `Couldn't log out of EasyWeb (${result.why}). Log out by hand and quit that Chrome (⌘Q).`
+  return closed
+    ? 'Logged out of EasyWeb and closed the bank Chrome window.'
+    : 'Logged out of EasyWeb. Quit that Chrome window (⌘Q).'
 }
 
 export const STAY_FLAG = '--stay-signed-in'

@@ -131,7 +131,7 @@ function isFiniteNumber(value: unknown): value is number {
  * The debugger port is a wide-open door into a logged-in banking session, so
  * this tool only ever reaches for one on this machine.
  */
-function assertLocalCdpUrl(cdpUrl: string): void {
+export function assertLocalCdpUrl(cdpUrl: string): void {
   let parsed: URL
   try {
     parsed = new URL(cdpUrl)

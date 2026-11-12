@@ -16,6 +16,10 @@
 # Nothing is added to hide the connection either: no --enable-automation (which
 # would announce it), no --headless, no fingerprint or stealth flags. If you add
 # flags of your own, keep them in that spirit.
+#
+# Never add --remote-debugging-address or --remote-allow-origins: without them
+# the port listens on this Mac only and web pages can't reach it. With them, the
+# signed-in bank session would be open to the network or to any website.
 
 set -euo pipefail
 
@@ -45,8 +49,8 @@ Next steps, in this order:
      code path for credentials and will stop if it ever sees a login form.
   2. Leave that window open and logged in.
   3. In another terminal, from td-downloader/, run:  npm run download
-  4. Watch the run. Ctrl+C stops it and leaves this Chrome window exactly as
-     it is — still logged in, nothing closed, nothing navigated away.
+  4. Watch the run. At the end — or after Ctrl+C — it logs out of EasyWeb,
+     empties this window's cache and closes it, which shuts the debugging port.
 
 INSTRUCTIONS
 

@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { ConfigError, hasPlaceholderSelectors, loadConfig } from './config.js'
-import { RunAbort, closeConnection, connect, openAccount, openRunPage } from './engine.js'
+import { RunAbort, closeConnection, connect, openAccount, openRunPage, quitBankChrome } from './engine.js'
 import { HaltRequest } from './halt.js'
 import { localDateStamp } from './naming.js'
 import { Pacer } from './pacing.js'
@@ -33,6 +33,7 @@ async function main(): Promise<void> {
   const browser = await connect(config.cdpUrl)
   const readings: PendingReading[] = []
   let logout: LogoutResult | undefined
+  let closed = false
   let blocked = false
   try {
     const page = await openRunPage(browser)
@@ -71,11 +72,13 @@ async function main(): Promise<void> {
     }
     if (!blocked && !stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
   } finally {
-    await closeConnection(browser)
+    // Logged out: close the bank Chrome too, shutting the debugging port.
+    if (logout?.loggedOut) closed = await quitBankChrome(browser)
+    else await closeConnection(browser)
   }
   const file = await savePending(config.outputDir, localDateStamp(), readings)
   console.log(file ? `\nPending charges saved: ${file}` : '\nNothing saved.')
-  if (!blocked) console.log(`\n${describeLogout(logout, stayLoggedIn)}`)
+  if (!blocked) console.log(`\n${describeLogout(logout, stayLoggedIn, closed)}`)
 }
 
 main().catch((error: unknown) => {

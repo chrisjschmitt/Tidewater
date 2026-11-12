@@ -55,6 +55,8 @@ export interface RunOutcome {
   sessionBlocked?: boolean
   /** Set when the run tried to log out at the end. */
   logout?: LogoutResult
+  /** True when the run closed the bank Chrome window (after logging out), shutting its debugging port. */
+  chromeClosed?: boolean
 }
 
 export class RunAbort extends Error {
@@ -213,7 +215,10 @@ export async function runDownloads(
     } else {
       await runLog.halt(messageOf(error))
       await markRemaining(runLog, config, messageOf(error))
-      await closeConnection(browser)
+      // Even an unexpected error ends the bank session, so it isn't left open behind the port.
+      const ended = page && !options.stayLoggedIn ? await logOut(page, config.easywebHomeUrl).catch(() => undefined) : undefined
+      if (ended?.loggedOut) await quitBankChrome(browser)
+      else await closeConnection(browser)
       removeSigintHandler()
       await runLog.finish()
       throw error
@@ -226,14 +231,15 @@ export async function runDownloads(
   const pendingFile = await savePending(config.outputDir, dateStamp, pendingReadings).catch(() => null)
   if (pendingFile) log(`  Pending charges saved: ${pendingReadings.map((r) => `${r.label} ${describePending(r)}`).join('; ')}`)
 
-  // A finished run logs out, so the session isn't left open behind the
-  // debugging port. A Ctrl+C or a session problem leaves the window as it was:
-  // the first so the person can carry on, the second because it is no longer
-  // a session we should touch.
+  // The run logs out — finished or stopped with Ctrl+C — so the session isn't
+  // left open behind the debugging port, then closes the bank Chrome, which
+  // shuts the port. A session problem leaves the window as it was (it is no
+  // longer a session we should touch, and signing in again happens there), and
+  // so does a logout that didn't confirm, so it can be finished by hand.
   let logout: LogoutResult | undefined
-  if (page && !haltReason && !sessionBlocked && !options.stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
+  if (page && !sessionBlocked && !options.stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
 
-  await closeConnection(browser)
+  const chromeClosed = logout?.loggedOut ? await quitBankChrome(browser) : (await closeConnection(browser), false)
   removeSigintHandler()
   await runLog.finish()
 
@@ -245,6 +251,7 @@ export async function runDownloads(
   if (haltReason !== undefined) outcome.haltReason = haltReason
   if (sessionBlocked) outcome.sessionBlocked = true
   if (logout) outcome.logout = logout
+  if (chromeClosed) outcome.chromeClosed = true
   return outcome
 }
 
@@ -544,6 +551,30 @@ async function markRemaining(runLog: RunLog, config: RunConfig, reason: string):
 export async function closeConnection(browser: Browser | null): Promise<void> {
   if (!browser) return
   await browser.close().catch(() => undefined)
+}
+
+/**
+ * After logging out: empties Chrome's cache of the bank's pages (they can hold
+ * balances and transactions) and quits the bank Chrome window over CDP, which
+ * closes the debugging port. Cookies stay, so EasyWeb can still remember the
+ * username; the session they belonged to has been logged out. Returns false
+ * (and just disconnects) if Chrome didn't take the command.
+ */
+export async function quitBankChrome(browser: Browser | null): Promise<boolean> {
+  if (!browser) return false
+  try {
+    const page = browser.contexts().flatMap((context) => context.pages()).find((p) => !p.isClosed())
+    if (page) {
+      const session = await page.context().newCDPSession(page)
+      await session.send('Network.clearBrowserCache').catch(() => undefined)
+    }
+    const cdp = await browser.newBrowserCDPSession()
+    await cdp.send('Browser.close').catch(() => undefined)
+    return true
+  } catch {
+    await closeConnection(browser)
+    return false
+  }
 }
 
 function messageOf(error: unknown): string {

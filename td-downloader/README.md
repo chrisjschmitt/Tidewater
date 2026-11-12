@@ -41,16 +41,20 @@ drag it onto Tidewater's Closing balances box to read it.
 
 ### Logging out at the end
 
-A finished run **logs out of EasyWeb** with one click on EasyWeb's own Log out
-button (and its "are you sure" button, if it asks), then says so:
-`Logged out of EasyWeb. You can quit that Chrome window (⌘Q).` TD does not
-always time the session out on its own, and a signed-in window with a
-debugging port open is one any program on the Mac could drive — so the run
-doesn't leave it that way. If the button can't be found, it says so and you
-log out by hand.
+A run **logs out of EasyWeb** at the end — finished, stopped with Ctrl+C, or
+ended by an unexpected error — with one click on EasyWeb's own Log out button
+(and its "are you sure" button, if it asks). Once the logout is confirmed it
+**empties the bank window's cache and closes that Chrome**, which shuts the
+debugging port, and says `Logged out of EasyWeb and closed the bank Chrome
+window.` (0.5.0). TD does not always time the session out on its own, and a
+signed-in window with a debugging port open is one any program on the Mac
+could drive — so the run doesn't leave it that way. Cookies stay in the
+dedicated profile so EasyWeb can remember your username; the session they
+belonged to has been logged out. If the logout can't be confirmed, the window
+is left open and the run says so: log out by hand and quit it (⌘Q).
 
-It does **not** log out after a Ctrl+C (so you can carry on) or when the page
-stopped looking logged in (nothing to touch). To stay signed in on purpose —
+It does **not** log out when the page stopped looking logged in (nothing to
+touch; sign in again in that window). To stay signed in on purpose —
 say, to run `npm run pending` straight after — add the flag:
 
 ```bash
@@ -206,10 +210,10 @@ The first Ctrl+C is a request to stop. The account in flight gets fifteen
 seconds to finish, then the run stops rather than starting the next account. A
 second Ctrl+C exits immediately.
 
-Either way **your Chrome window is left exactly as it was** — still logged in,
-nothing closed, nothing navigated away, no logout. The only teardown the tool
-performs is `browser.close()` on its CDP connection, which for
-`connectOverCDP` disconnects Playwright and leaves the browser alone.
+After the first Ctrl+C the run **logs out and closes the bank Chrome**, as at
+the end of a finished run (0.5.0); run Download from TD again to pick up where
+it stopped. A second Ctrl+C exits at once *without* logging out: log out of
+EasyWeb and quit that Chrome (⌘Q) yourself.
 
 ## Resuming
 

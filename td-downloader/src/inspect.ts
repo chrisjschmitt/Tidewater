@@ -25,7 +25,10 @@ import process from 'node:process'
 import { chromium } from 'playwright'
 import type { Browser, Page } from 'playwright'
 
+import { assertLocalCdpUrl } from './config.js'
+
 const CDP_URL = process.env.TD_CDP_URL ?? 'http://localhost:9222'
+assertLocalCdpUrl(CDP_URL)
 
 interface ElementSketch {
   tag: string

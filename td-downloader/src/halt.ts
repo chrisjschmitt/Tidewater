@@ -51,11 +51,11 @@ export class HaltRequest {
 export function installSigintHandler(halt: HaltRequest, log: (message: string) => void): () => void {
   const onSigint = () => {
     if (halt.requested) {
-      log('\nSecond Ctrl+C — exiting now. Chrome is untouched.')
+      log('\nSecond Ctrl+C — exiting now, without logging out. Log out of EasyWeb and quit that Chrome (⌘Q).')
       process.exit(130)
     }
     halt.request()
-    log('\nCtrl+C — finishing the account in flight, then stopping. Ctrl+C again to exit immediately.')
+    log('\nCtrl+C — finishing the account in flight, then logging out and closing the bank Chrome. Ctrl+C again to exit immediately.')
   }
 
   process.on('SIGINT', onSigint)
