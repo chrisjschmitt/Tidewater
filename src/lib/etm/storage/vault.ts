@@ -11,6 +11,7 @@ import {
 import { deleteEtmDb, openEtmDb, RECORD_STORES, type SealedRecord, type VaultMeta } from './db'
 import { forgetStatementFolder } from './statementFolder'
 import { setEtmPresence } from '../../storage'
+import { clearLastActive, readLastActive, rememberedStillValid, writeLastActive } from '../lockTimes'
 
 /**
  * Short enough not to argue with someone who has chosen a key and shared it,
@@ -76,15 +77,19 @@ export async function unlockVault(passphrase: string, remember: boolean): Promis
 }
 
 /**
- * The stored key is non-extractable, so what lands in IndexedDB is a handle
- * the browser will use for decryption but will not spell out — a copy of the
- * database file alone does not carry the key with it.
+ * The stored key is non-extractable: JavaScript cannot read it out. The
+ * browser still keeps the key material in its own files (Chrome's profile on
+ * the Mac, wrapped by the Keychain in Safari), so a copy of those files can
+ * decrypt the vault. That is why a remembered key lasts 12 hours at most and
+ * is dropped after 15 minutes idle (lockTimes.ts).
  */
 async function rememberKey(key: CryptoKey | null): Promise<void> {
   const db = await openEtmDb()
   try {
-    if (key) await db.put('unlock', { key, rememberedAt: new Date().toISOString() }, 'remembered')
-    else await db.delete('unlock', 'remembered')
+    if (key) {
+      await db.put('unlock', { key, rememberedAt: new Date().toISOString() }, 'remembered')
+      writeLastActive()
+    } else await db.delete('unlock', 'remembered')
   } finally {
     db.close()
   }
@@ -95,7 +100,13 @@ export async function rememberedKey(): Promise<CryptoKey | null> {
   const db = await openEtmDb()
   try {
     const stored = await db.get('unlock', 'remembered')
-    return stored?.key ?? null
+    if (!stored) return null
+    if (!rememberedStillValid(stored.rememberedAt, readLastActive())) {
+      await db.delete('unlock', 'remembered')
+      await setEtmPresence({ setUp: true, remembered: false })
+      return null
+    }
+    return stored.key ?? null
   } catch {
     return null
   } finally {
@@ -106,6 +117,7 @@ export async function rememberedKey(): Promise<CryptoKey | null> {
 /** Lock: drop the persisted key so the next session must present the passphrase. */
 export async function forgetRememberedKey(): Promise<void> {
   await rememberKey(null)
+  clearLastActive()
   await setEtmPresence({ setUp: true, remembered: false })
 }
 
@@ -115,6 +127,7 @@ export async function wipeVault(): Promise<void> {
   // The statement folder is remembered outside this database, so erasing the
   // module has to say so explicitly or the grant would outlive the data.
   await forgetStatementFolder()
+  clearLastActive()
   await setEtmPresence(null)
 }
 

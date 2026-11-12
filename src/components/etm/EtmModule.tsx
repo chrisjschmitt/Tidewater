@@ -6,6 +6,7 @@ import EtmOpening from './EtmOpening'
 import EtmStrip from './EtmStrip'
 import { defaultPeriod } from './PeriodSelector'
 import { useEtmData } from './useEtmData'
+import { useIdleLock } from './useIdleLock'
 import { aggregate, dashboardActuals, type DashboardActuals } from '../../lib/etm/aggregate'
 import { periodLabel, today, type Period } from '../../lib/etm/period'
 import { withBudgetEdit } from '../../lib/forecast/planHistory'
@@ -116,6 +117,11 @@ function Unlocked({
   onPlanRecorder,
 }: Props & { unlockedKey: CryptoKey }) {
   const data = useEtmData(unlockedKey)
+  // 15 minutes without use locks the vault, remembered key included (lockTimes.ts).
+  useIdleLock(() => {
+    void forgetRememberedKey()
+    onLocked()
+  })
 
   // The dashboard's plan edits, recorded from this month on (planHistory.ts).
   useEffect(() => {

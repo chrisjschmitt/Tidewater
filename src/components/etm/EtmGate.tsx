@@ -125,7 +125,8 @@ export default function EtmGate({ mode, onClose, onUnlocked }: Props) {
           <span>
             Stay unlocked on this device
             <span className="mt-0.5 block text-xs text-ink-400">
-              Skips the key next time. Leave this off on a shared computer.
+              Skips the key next time, for up to 12 hours. Expenses still locks after 15 minutes without
+              use. Leave this off on a shared computer.
             </span>
           </span>
         </label>

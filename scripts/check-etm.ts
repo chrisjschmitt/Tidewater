@@ -100,6 +100,7 @@ import { latestTdRead, monarchInUse, weeklySteps } from '../src/lib/etm/routine.
 import { cardOwedAtMonthEnd, checkKey, monthEndSteps, pendingAtMonthEnd, reimbursementsByAccount } from '../src/lib/etm/monthEnd.ts'
 import type { ImportBatch } from '../src/lib/etm/types.ts'
 import { easywebBalanceNote } from '../src/lib/etm/pending.ts'
+import { IDLE_LOCK_MS, REMEMBER_MS, idleExpired, rememberedStillValid } from '../src/lib/etm/lockTimes.ts'
 
 let failures = 0
 
@@ -1409,6 +1410,23 @@ console.log('\n=== Month end ===')
   check('a difference that isn’t the payment → plain note', easywebBalanceNote(reading, 1250)?.payment === undefined && easywebBalanceNote(reading, 1250)?.current === 199.66)
   check('balances agree → no note', easywebBalanceNote(reading, 199.66) === undefined)
   check('no EasyWeb balance read → no note', easywebBalanceNote({ ...reading, currentBalance: undefined }, 1199.66) === undefined)
+}
+
+console.log('\n=== Lock times ===')
+{
+  const now = Date.parse('2026-11-11T12:00:00Z')
+  const ago = (ms: number) => new Date(now - ms).toISOString()
+  check('remembered key fresh and in use: kept', rememberedStillValid(ago(60_000), ago(30_000), now))
+  check('remembered key at 12 hours: dropped', !rememberedStillValid(ago(REMEMBER_MS), ago(1_000), now))
+  check('remembered key at 11h59: kept', rememberedStillValid(ago(REMEMBER_MS - 60_000), ago(1_000), now))
+  check('last use 15 minutes ago: dropped', !rememberedStillValid(ago(60 * 60_000), ago(IDLE_LOCK_MS), now))
+  check('last use 14 minutes ago: kept', rememberedStillValid(ago(60 * 60_000), ago(IDLE_LOCK_MS - 60_000), now))
+  check('no save time: dropped', !rememberedStillValid(undefined, ago(1_000), now))
+  check('garbled save time: dropped', !rememberedStillValid('not a date', ago(1_000), now))
+  check('save time in the future: dropped', !rememberedStillValid(new Date(now + 3_600_000).toISOString(), undefined, now))
+  check('no last-use time (older version): the 12-hour limit alone', rememberedStillValid(ago(60_000), undefined, now))
+  check('idle 14 minutes: open', !idleExpired(now - IDLE_LOCK_MS + 60_000, now))
+  check('idle 15 minutes: locks', idleExpired(now - IDLE_LOCK_MS, now))
 }
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)

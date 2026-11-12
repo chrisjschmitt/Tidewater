@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.20 — 2026-11-11
+
+### Security
+- **Expenses locks after 15 minutes without use** — no tap, click, key or scroll anywhere in Tidewater — and asks for the expense key again. Checked as the app comes back into view, so a Mac or iPad waking from sleep locks at once.
+- **"Stay unlocked" lasts 12 hours at most**, then the kept key is deleted from the browser's files, so an older copy of them (a Time Machine backup, a copied browser profile) no longer opens the vault. Fifteen minutes without use drops it too, closed app included. A key kept more than 12 hours ago by an earlier version is dropped on the first open.
+
 ## 0.14.19 — 2026-11-11
 
 ### Changed
