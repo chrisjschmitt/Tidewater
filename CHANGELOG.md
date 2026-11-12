@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.21 — 2026-11-11
+
+### Security
+- **Browser security headers.** Tidewater may now load code, styles and images only from its own site, and may send data only to itself and to Anthropic or OpenAI (the assistant, with your own key): code that somehow got into the page could not send your data anywhere else. No other site may show Tidewater in a frame, links don't pass Tidewater's address on, and the browser won't guess file types or offer camera, microphone or location.
+
 ## 0.14.20 — 2026-11-11
 
 ### Security
