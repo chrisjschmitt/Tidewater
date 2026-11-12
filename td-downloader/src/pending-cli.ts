@@ -9,6 +9,7 @@ import { localDateStamp } from './naming.js'
 import { Pacer } from './pacing.js'
 import { describePending, readPending, savePending, type PendingReading } from './pending.js'
 import { STAY_FLAG, describeLogout, logOut, type LogoutResult } from './logout.js'
+import { describeExtensions, extraExtensions, type ChromeEnd } from './bank-chrome.js'
 
 /**
  * `npm run pending` — refresh only the cards' pending charges, with no
@@ -33,10 +34,12 @@ async function main(): Promise<void> {
   const browser = await connect(config.cdpUrl)
   const readings: PendingReading[] = []
   let logout: LogoutResult | undefined
-  let closed = false
+  let chromeEnd: ChromeEnd | undefined
   let blocked = false
   try {
     const page = await openRunPage(browser)
+    const extras = await extraExtensions(browser)
+    if (extras.length > 0) console.log(`${describeExtensions(extras)}\n`)
     const pacer = new Pacer(config.pacing, new HaltRequest())
     for (const card of cards) {
       try {
@@ -73,12 +76,12 @@ async function main(): Promise<void> {
     if (!blocked && !stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
   } finally {
     // Logged out: close the bank Chrome too, shutting the debugging port.
-    if (logout?.loggedOut) closed = await quitBankChrome(browser)
+    if (logout?.loggedOut) chromeEnd = await quitBankChrome(browser, config.cdpUrl, (m) => console.log(m))
     else await closeConnection(browser)
   }
   const file = await savePending(config.outputDir, localDateStamp(), readings)
   console.log(file ? `\nPending charges saved: ${file}` : '\nNothing saved.')
-  if (!blocked) console.log(`\n${describeLogout(logout, stayLoggedIn, closed)}`)
+  if (!blocked) console.log(`\n${describeLogout(logout, stayLoggedIn, chromeEnd)}`)
 }
 
 main().catch((error: unknown) => {

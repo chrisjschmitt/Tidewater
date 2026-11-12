@@ -53,6 +53,25 @@ dedicated profile so EasyWeb can remember your username; the session they
 belonged to has been logged out. If the logout can't be confirmed, the window
 is left open and the run says so: log out by hand and quit it (⌘Q).
 
+**Closed is checked, not assumed (0.5.1).** On 2026-11-12 Chrome quit when
+asked and then started itself again 27 seconds later, hidden, with no window
+and the debugging port open. So after closing it the run waits for port 9222 to
+shut, then watches it for 45 seconds. If Chrome comes back, the run closes it a
+second time and says so. If the port still answers, the run says the bank
+Chrome is still running and prints the command that quits only it:
+`pkill -f "user-data-dir=$HOME/.td-downloader-profile"`.
+
+### Keep the bank profile bare
+
+The bank Chrome's profile (`~/.td-downloader-profile`) should hold nothing but
+EasyWeb. **Keep it signed out of Google**, with *Allow Chrome sign-in* off
+(chrome://settings/people → Sync and Google services): a signed-in profile
+syncs your everyday extensions into it, and any extension that can read pages
+can read the bank's. Signing in also turns on Chrome features that keep it
+running in the background. From 0.5.1 a run warns at the start, naming them, if
+the bank Chrome has extensions besides Chrome's own two (Google Docs Offline
+and Chrome Web Store Payments).
+
 It does **not** log out when the page stopped looking logged in (nothing to
 touch; sign in again in that window). To stay signed in on purpose —
 say, to run `npm run pending` straight after — add the flag:

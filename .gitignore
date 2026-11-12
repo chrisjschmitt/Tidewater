@@ -18,6 +18,7 @@ planning-data/
 # Private ETM / forecasting inputs — contain real account numbers and confidential workflow details; never commit
 docs/Workflow.md
 docs/security-review-etm.md
+docs/encrypted-sync-plan.md
 docs/ExpenseTrackingModuleSpecs.md
 docs/Forecasting Module Spec.md
 docs/ForecastingModuleSpecs.md

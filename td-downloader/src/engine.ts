@@ -11,6 +11,7 @@ import { RunLog, alreadyOkToday, resumeKey } from './manifest.js'
 import { localDateStamp, outputFilename, partialFilename } from './naming.js'
 import { Pacer } from './pacing.js'
 import { checkSession } from './session-guard.js'
+import { confirmClosed, describeExtensions, extraExtensions, type ChromeEnd } from './bank-chrome.js'
 import { logOut, type LogoutResult } from './logout.js'
 import { describePending, readPending, savePending, type PendingReading } from './pending.js'
 import type { AccountConfig, AccountResult, ExportStep, RunConfig } from './types.js'
@@ -55,8 +56,8 @@ export interface RunOutcome {
   sessionBlocked?: boolean
   /** Set when the run tried to log out at the end. */
   logout?: LogoutResult
-  /** True when the run closed the bank Chrome window (after logging out), shutting its debugging port. */
-  chromeClosed?: boolean
+  /** How the bank Chrome ended up after logging out: closed, closed again after restarting itself, or still open. */
+  chromeEnd?: ChromeEnd
 }
 
 export class RunAbort extends Error {
@@ -112,6 +113,8 @@ export async function runDownloads(
       await mkdir(config.outputDir, { recursive: true })
       browser = await connect(config.cdpUrl)
       page = await openRunPage(browser)
+      const extras = await extraExtensions(browser)
+      if (extras.length > 0) log(`${describeExtensions(extras)}\n`)
     }
 
     let position = 0
@@ -217,7 +220,7 @@ export async function runDownloads(
       await markRemaining(runLog, config, messageOf(error))
       // Even an unexpected error ends the bank session, so it isn't left open behind the port.
       const ended = page && !options.stayLoggedIn ? await logOut(page, config.easywebHomeUrl).catch(() => undefined) : undefined
-      if (ended?.loggedOut) await quitBankChrome(browser)
+      if (ended?.loggedOut) await quitBankChrome(browser, config.cdpUrl, log)
       else await closeConnection(browser)
       removeSigintHandler()
       await runLog.finish()
@@ -239,7 +242,7 @@ export async function runDownloads(
   let logout: LogoutResult | undefined
   if (page && !sessionBlocked && !options.stayLoggedIn) logout = await logOut(page, config.easywebHomeUrl)
 
-  const chromeClosed = logout?.loggedOut ? await quitBankChrome(browser) : (await closeConnection(browser), false)
+  const chromeEnd = logout?.loggedOut ? await quitBankChrome(browser, config.cdpUrl, log) : (await closeConnection(browser), undefined)
   removeSigintHandler()
   await runLog.finish()
 
@@ -251,7 +254,7 @@ export async function runDownloads(
   if (haltReason !== undefined) outcome.haltReason = haltReason
   if (sessionBlocked) outcome.sessionBlocked = true
   if (logout) outcome.logout = logout
-  if (chromeClosed) outcome.chromeClosed = true
+  if (chromeEnd) outcome.chromeEnd = chromeEnd
   return outcome
 }
 
@@ -557,11 +560,12 @@ export async function closeConnection(browser: Browser | null): Promise<void> {
  * After logging out: empties Chrome's cache of the bank's pages (they can hold
  * balances and transactions) and quits the bank Chrome window over CDP, which
  * closes the debugging port. Cookies stay, so EasyWeb can still remember the
- * username; the session they belonged to has been logged out. Returns false
- * (and just disconnects) if Chrome didn't take the command.
+ * username; the session they belonged to has been logged out. Then checks the
+ * port really shut and stays shut (bank-chrome.ts): Chrome has been seen
+ * starting itself again, hidden, seconds after quitting.
  */
-export async function quitBankChrome(browser: Browser | null): Promise<boolean> {
-  if (!browser) return false
+export async function quitBankChrome(browser: Browser | null, cdpUrl: string, log: (message: string) => void): Promise<ChromeEnd | undefined> {
+  if (!browser) return undefined
   try {
     const page = browser.contexts().flatMap((context) => context.pages()).find((p) => !p.isClosed())
     if (page) {
@@ -570,11 +574,10 @@ export async function quitBankChrome(browser: Browser | null): Promise<boolean> 
     }
     const cdp = await browser.newBrowserCDPSession()
     await cdp.send('Browser.close').catch(() => undefined)
-    return true
   } catch {
     await closeConnection(browser)
-    return false
   }
+  return confirmClosed(cdpUrl, log)
 }
 
 function messageOf(error: unknown): string {

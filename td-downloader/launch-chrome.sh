@@ -47,6 +47,8 @@ Next steps, in this order:
   1. In the Chrome window that just opened, go to TD EasyWeb and log in
      BY HAND — username, password, and any MFA prompt. The downloader has no
      code path for credentials and will stop if it ever sees a login form.
+     Don't sign this window in to Google or add extensions: it is for
+     EasyWeb only.
   2. Leave that window open and logged in.
   3. In another terminal, from td-downloader/, run:  npm run download
   4. Watch the run. At the end — or after Ctrl+C — it logs out of EasyWeb,

@@ -60,11 +60,11 @@ async function main(): Promise<void> {
   } else if (outcome.haltReason) {
     console.log('')
     console.log(`Run ended early: ${outcome.haltReason}`)
-    console.log(describeLogout(outcome.logout, stayLoggedIn, outcome.chromeClosed))
+    console.log(describeLogout(outcome.logout, stayLoggedIn, outcome.chromeEnd))
     console.log('Run Download from TD again to pick up where this stopped.')
   } else {
     console.log('')
-    console.log(describeLogout(outcome.logout, stayLoggedIn, outcome.chromeClosed))
+    console.log(describeLogout(outcome.logout, stayLoggedIn, outcome.chromeEnd))
   }
 
   const allOk = outcome.results.every((result) => result.status === 'ok')

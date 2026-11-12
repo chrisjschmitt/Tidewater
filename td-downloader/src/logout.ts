@@ -1,3 +1,4 @@
+import { QUIT_COMMAND, type ChromeEnd } from './bank-chrome.js'
 import type { Page } from 'playwright'
 
 import { checkSession } from './session-guard.js'
@@ -99,13 +100,21 @@ export async function logOut(page: Page, homeUrl: string): Promise<LogoutResult>
 }
 
 /** One line for the end of a run. */
-export function describeLogout(result: LogoutResult | undefined, stayed: boolean, closed = false): string {
+export function describeLogout(result: LogoutResult | undefined, stayed: boolean, chrome?: ChromeEnd): string {
   if (stayed) return 'Still logged in to EasyWeb (--stay-signed-in). Log out and quit that Chrome when you are done.'
   if (!result) return 'Log out of EasyWeb and quit that Chrome (⌘Q) when you are done.'
   if (!result.loggedOut) return `Couldn't log out of EasyWeb (${result.why}). Log out by hand and quit that Chrome (⌘Q).`
-  return closed
-    ? 'Logged out of EasyWeb and closed the bank Chrome window.'
-    : 'Logged out of EasyWeb. Quit that Chrome window (⌘Q).'
+  if (chrome === 'closed') return 'Logged out of EasyWeb and closed the bank Chrome window.'
+  if (chrome === 'reclosed') {
+    return 'Logged out of EasyWeb and closed the bank Chrome window. Chrome started itself again in the background, so it was closed a second time.'
+  }
+  if (chrome === 'open') {
+    return [
+      'Logged out of EasyWeb, but the bank Chrome is still running (maybe with no window), with its debugging port open.',
+      `Quit it with:  ${QUIT_COMMAND}`,
+    ].join('\n')
+  }
+  return 'Logged out of EasyWeb. Quit that Chrome window (⌘Q).'
 }
 
 export const STAY_FLAG = '--stay-signed-in'
