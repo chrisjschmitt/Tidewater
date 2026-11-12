@@ -137,12 +137,16 @@ export default function ForecastMonthCard({
         onIgnore={onIgnore}
         onPlace={onPlace}
         doubleCounts={doubleCounts}
-        {...(isCurrent ? { actualFor: (row: VarianceRow) => actualToDateFor(row, current.remainLines) } : {})}
+        {...(isCurrent
+          ? { actualFor: (row: VarianceRow) => actualToDateFor(row, current.remainLines) }
+          : point.kind === 'past'
+            ? { actualFor: (row: VarianceRow) => postedFor(row, point.byCategory), actualLabel: 'Actual' }
+            : {})}
         {...(typicalPlanFor && onPlanChange && onOpenPlan
           ? { planEdit: { typicalPlanFor, onPlanChange, onOpen: onOpenPlan, ...(hasPlanNotes ? { hasNotes: hasPlanNotes } : {}) } }
           : {})}
         pinnedKeys={new Set(placements.map((future) => pinKey(future.category)))}
-        {...(isCurrent && onOpenActual ? { onOpenActual } : {})}
+        {...(point.kind !== 'future' && onOpenActual ? { onOpenActual } : {})}
         {...(onOpenForecast ? { onOpenForecast } : {})}
       />
 
@@ -228,6 +232,11 @@ export default function ForecastMonthCard({
   )
 }
 
+/** A past month's posted spend for the row's category. */
+function postedFor(row: VarianceRow, byCategory: Array<{ key: string; actual: number }>): number {
+  return byCategory.find((category) => category.key === row.key)?.actual ?? 0
+}
+
 function actualToDateFor(row: VarianceRow, remainLines: RemainLine[]): number {
   const leftover = remainLines.find((line) => line.key === row.key)
   if (leftover) return leftover.actual
@@ -247,6 +256,7 @@ function PlanVsForecastList({
   onPlace,
   doubleCounts,
   actualFor,
+  actualLabel = 'Actual to today',
   planEdit,
   pinnedKeys,
   onOpenActual,
@@ -259,8 +269,10 @@ function PlanVsForecastList({
   onIgnore: (key: string, ignored: boolean) => void
   onPlace: (row: PinRequest) => void
   doubleCounts: Array<{ category: string; month: string }>
-  /** The current month only: what each category has spent so far. */
+  /** What each category has spent: so far on the current month, posted on a past one. */
   actualFor?: (row: VarianceRow) => number
+  /** The Actual column's heading. */
+  actualLabel?: string
   planEdit?: PlanEdit
   /** Categories with a pin on this month, badged in their row. */
   pinnedKeys: Set<string>
@@ -301,7 +313,7 @@ function PlanVsForecastList({
           ? 'Plan for this month (plus any pinned cost) beside forecast to month-end. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds up the column you sorted by as you go down (Difference when sorted by category).'
           : 'Plan for this month (plus any pinned cost) beside the forecast this card places. Difference is forecast minus plan. Largest absolute gap first; click a column heading to sort by it, again to reverse. The running total adds up the column you sorted by as you go down (Difference when sorted by category).'}{' '}
         {planEdit && 'Click a Plan figure to see that category month by month — plan beside spent and forecast — and to change its plan, with a note on why (✎ marks a category with notes). '}
-        {onOpenActual && 'Click an Actual to today figure for the same view, with this month’s transactions. '}
+        {onOpenActual && `Click an ${actualLabel} figure for the same view, with that month’s transactions. `}
         {onOpenForecast && 'Click a Forecast figure to see how it was worked out. '}
         Ignore a line if you expect to hit Plan there anyway — that gap leaves
         Forecast; Plan does not change. Raise adds an amount to the category's
@@ -323,7 +335,7 @@ function PlanVsForecastList({
               </th>
               <SortHeading column="category" label="Category" sort={sort} onSort={onSort} />
               <SortHeading column="plan" label="Plan" sort={sort} onSort={onSort} right />
-              {actualFor && <SortHeading column="actual" label="Actual to today" sort={sort} onSort={onSort} right />}
+              {actualFor && <SortHeading column="actual" label={actualLabel} sort={sort} onSort={onSort} right />}
               <SortHeading column="forecast" label="Forecast" sort={sort} onSort={onSort} right />
               <SortHeading column="difference" label="Difference" sort={sort} onSort={onSort} right />
               <th className="pb-2 pr-3 text-right font-medium" title="Adds up the column the table is sorted by (Difference when sorted by category)">
@@ -569,7 +581,7 @@ function CompareRow({
                 type="button"
                 className="tabular-nums underline decoration-sand-300 underline-offset-2 hover:text-ink-900"
                 onClick={() => onOpenActual({ key: row.key, label: row.label })}
-                aria-label={`Transactions behind ${row.label} actual to today`}
+                aria-label={`Transactions behind ${row.label} actual`}
               >
                 {amountIn(actual, 'CAD')}
               </button>

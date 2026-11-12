@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.19 — 2026-11-11
+
+### Changed
+- **Past months' Plan vs forecast has an Actual column.** Each category's posted spend for that month sits beside its plan and forecast, with a total; sort by it and the running total adds it up. Click a figure for that category's window with that month's transactions open. The current month keeps Actual to today; future months have none.
+
 ## 0.14.18 — 2026-11-11
 
 ### Changed

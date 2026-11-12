@@ -338,7 +338,7 @@ export default function ForecastPanel({
               onIgnore={(key, ignored) =>
                 onConfigChange(withIgnoredCompare(config, focused.month, key, ignored))
               }
-              onOpenActual={(row) => setOpenPlan({ ...row, month: currentMonth, showTransactions: true })}
+              onOpenActual={(row) => setOpenPlan({ ...row, month: focused.month, showTransactions: true })}
               onOpenForecast={(row) => setOpenExplain({ ...row, month: focused.month })}
             />
           </div>
