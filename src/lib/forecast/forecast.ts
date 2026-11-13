@@ -361,6 +361,8 @@ const isMonthlyType = (type: CategoryForecast['type']): boolean =>
  * A type override (annual / seasonal / irregular) still wins.
  */
 export function usesPlanPrior(category: CategoryForecast, plan: number): boolean {
+  // Chris said to follow the plan: it wins over history and type, even at $0.
+  if (category.followsPlan) return true
   if (!(plan > 0)) return false
   if (isMonthlyType(category.type)) return false
   if (category.overridden) return false
@@ -374,6 +376,12 @@ function applyPlanPriors(categories: CategoryForecast[], budget: Budget): void {
     category.usedPlanPrior = true
     category.likely = roundCents(plan)
     category.setAsideShare = roundCents(plan)
+    if (category.followsPlan) {
+      // History's range would put the old cost back in through Risk.
+      category.high = roundCents(plan)
+      category.low = roundCents(plan)
+      continue
+    }
     if (category.high < plan) category.high = roundCents(plan)
     if (category.low === 0 || category.low > plan) category.low = roundCents(plan)
   }
@@ -1462,7 +1470,9 @@ function typicalHowFor(
   config: ForecastConfig,
 ): TypicalHow {
   if (!category) return { kind: 'no-history' }
-  if (usesPlanPrior(category, plan)) return { kind: 'plan-prior', plan: roundCents(plan) }
+  if (usesPlanPrior(category, plan)) {
+    return { kind: 'plan-prior', plan: roundCents(plan), ...(category.followsPlan ? { followed: true } : {}) }
+  }
   const override = config.categoryOverrides[category.key]
   const values = series?.values ?? []
   const present = values.filter((value) => value > 0).length

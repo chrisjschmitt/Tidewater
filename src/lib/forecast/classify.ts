@@ -273,6 +273,7 @@ export function classifyCategory(
     usedLastAmount,
     lowSample: occurrences < 3,
     usedPlanPrior: false,
+    followsPlan: Boolean(override?.followPlan),
     repeatedCycle: cycle,
     average12: n === 0 ? 0 : roundCents(mean(series.values.slice(-Math.min(12, n)))),
     average24: n >= 24 ? roundCents(mean(series.values.slice(-24))) : undefined,

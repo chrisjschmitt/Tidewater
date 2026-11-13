@@ -9,6 +9,8 @@ interface Props {
   /** The category's type override, if one is set. */
   overrideType?: ExpenseType
   onChangeType: (type: ExpenseType | 'auto') => void
+  /** Turns "Forecast follows my plan" on or off for this category. */
+  onFollowPlan: (on: boolean) => void
   onIgnoreMonth: (month: string, ignored: boolean) => void
   /** Opens one month's transactions for this category. */
   onOpenMonth: (month: string) => void
@@ -25,6 +27,7 @@ export default function ForecastExplainModal({
   explanation: e,
   overrideType,
   onChangeType,
+  onFollowPlan,
   onIgnoreMonth,
   onOpenMonth,
   onClose,
@@ -90,6 +93,21 @@ export default function ForecastExplainModal({
                 })}
               </div>
               <p className="mt-1.5 text-xs text-ink-400">The forecast recalculates straight away. History lets the pattern decide.</p>
+              <label className="mt-3 flex items-start gap-2 text-ink-900">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={e.category.followsPlan}
+                  onChange={(event) => onFollowPlan(event.target.checked)}
+                />
+                <span>
+                  Forecast follows my plan
+                  <span className="block text-xs text-ink-400">
+                    For a cost you know has changed, such as a new price or a discount, before history can show it.
+                    Every month's forecast becomes that month's plan; this month's is never less than already spent.
+                  </span>
+                </span>
+              </label>
             </div>
           )}
         </section>
@@ -227,7 +245,8 @@ function summaryCopy(e: CategoryExplanation): string {
   } else {
     parts.push(`${seen}.`)
   }
-  if (c.usedPlanPrior) parts.push('Your Budget plan stands in until this category has a monthly pattern of its own.')
+  if (c.followsPlan) parts.push('You set it to follow your plan, so the plan is the forecast for every month and its history is set aside.')
+  else if (c.usedPlanPrior) parts.push('Your Budget plan stands in until this category has a monthly pattern of its own.')
   if (c.usedLastAmount) parts.push('It barely changes, so the latest amount is taken as the new level.')
   if (c.lowSample && c.monthsPresent > 0) parts.push('That is only a few months, so treat this as an early guess.')
   if (c.average12 > 0) {
@@ -244,7 +263,9 @@ function howCopy(how: TypicalHow, month: string): string {
   const word = monthName(month).split(' ')[0]
   switch (how.kind) {
     case 'plan-prior':
-      return `your Budget plan for this category (${cad(how.plan)}), standing in until history looks monthly`
+      return how.followed
+        ? `your plan for ${word} (${cad(how.plan)}), because you set this category to follow it`
+        : `your Budget plan for this category (${cad(how.plan)}), standing in until history looks monthly`
     case 'override':
       return 'the amount you set for this category'
     case 'last-amount':

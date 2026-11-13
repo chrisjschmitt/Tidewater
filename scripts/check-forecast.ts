@@ -51,6 +51,7 @@ import {
   withAllowListedTag,
   withCategoryTypicalMonths,
   withCategoryTypeOverride,
+  withCategoryFollowPlan,
   withIgnoredCompare,
   withIgnoredHistory,
   withVacationTag,
@@ -882,6 +883,47 @@ check(
   'Lantern App without a Budget line stays overlay-only',
   lantern?.type === 'irregular' && lantern.lowSample && lantern.usedPlanPrior === false,
 )
+
+console.log('\n=== Forecast follows my plan ===')
+{
+  // A storage unit at $170 for months moves to $105, with $44 in Sep and Oct (a discount).
+  const unitHist = ['2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07'].map((m, i) =>
+    fxTx(`unit-${i}`, `${m}-05`, 'Boat Storage', -170),
+  )
+  const unitKey = nameKey('Boat Storage')
+  const unitBudget = withLine('Boat Storage', 105)
+  const sep = withPlanForMonth(unitBudget, undefined, { key: unitKey, label: 'Boat Storage', month: '2026-09', amount: 44 })
+  const history = withPlanForMonth(unitBudget, sep, { key: unitKey, label: 'Boat Storage', month: '2026-10', amount: 44 })
+  const plain = withForecastDefaults({ window: 24, planHistory: history })
+  const followed = withCategoryFollowPlan(plain, unitKey, true)
+  const tx = [...transactions, ...unitHist]
+  const before = forecast(tx, unitBudget, plain, ASOF)
+  const after = forecast(tx, unitBudget, followed, ASOF)
+  const placed = (r: ReturnType<typeof forecast>, m: string) =>
+    monthPoint(r, m)?.byCategory.find((row) => row.key === unitKey)?.forecast
+  check('without it, history ($170) is the forecast', placed(before, '2026-09') === 170, `${placed(before, '2026-09')}`)
+  check('with it, September and October forecast the $44 plan', placed(after, '2026-09') === 44 && placed(after, '2026-10') === 44, `${placed(after, '2026-09')} ${placed(after, '2026-10')}`)
+  check('with it, November forecasts the $105 plan', placed(after, '2026-11') === 105, `${placed(after, '2026-11')}`)
+  const sepRow = monthPoint(after, '2026-09')?.planVsForecast.find((row) => row.key === unitKey)
+  check('Plan vs forecast shows no gap', sepRow?.plan === 44 && sepRow.delta === 0, JSON.stringify(sepRow))
+  const unitCat = cat(after, 'Boat Storage')
+  check('the category is marked as following the plan, its range is the plan', unitCat?.followsPlan === true && unitCat.high === 105 && unitCat.low === 105)
+  const remain = after.cad.household.currentMonth.remainLines.find((line) => line.key === unitKey)
+  check('this month: nothing spent yet leaves the plan to come', remain?.remain === 105, JSON.stringify(remain))
+  const paid = forecast([...tx, fxTx('unit-aug', '2026-08-05', 'Boat Storage', -120)], unitBudget, followed, ASOF)
+  const paidRemain = paid.cad.household.currentMonth.remainLines.find((line) => line.key === unitKey)
+  check('this month: spending above the plan stays, nothing more expected', (paidRemain?.remain ?? 0) === 0)
+  const why = explainCategory(tx, unitBudget, followed, ASOF, unitKey, '2026-09')
+  check(
+    'the explanation says the plan is followed and its steps add up',
+    why.typical.how.kind === 'plan-prior' && why.typical.how.followed === true && why.figure === 44 && near(why.steps.reduce((sum, step) => sum + step.amount, 0), why.figure, 0.005),
+    `${why.typical.how.kind} ${why.figure}`,
+  )
+  const off = withCategoryFollowPlan(followed, unitKey, false)
+  check('turning it off removes the setting', off.categoryOverrides[unitKey] === undefined)
+  const typed = withCategoryFollowPlan(withCategoryTypeOverride(plain, unitKey, 'variable-monthly'), unitKey, true)
+  check('it keeps a type set by hand', typed.categoryOverrides[unitKey]?.type === 'variable-monthly' && typed.categoryOverrides[unitKey]?.followPlan === true)
+}
 
 console.log('\n=== Coverage (9 of 10, vacation ignored) ===')
 check('vacation goal is matched by name', result.vacationGoal.status === 'matched')

@@ -26,6 +26,12 @@ export interface CategoryOverride {
   /** Calendar months 1–12. */
   typicalMonths?: number[]
   ignoreOutliers?: boolean
+  /**
+   * The forecast uses this category's plan for every month instead of its
+   * history: for a cost Chris knows has changed (a cheaper storage unit, a
+   * discount) before history can show it.
+   */
+  followPlan?: boolean
 }
 
 export type PinAddsTo = 'plan' | 'both'
@@ -196,6 +202,8 @@ export interface CategoryForecast {
    * calendar amount because history is not yet monthly.
    */
   usedPlanPrior: boolean
+  /** Set by Chris (`CategoryOverride.followPlan`): the plan is the forecast, whatever history says. */
+  followsPlan: boolean
   repeatedCycle: boolean
   /** Mean monthly spend over the last 12 lookback months (or all, if fewer). */
   average12: number
@@ -422,7 +430,7 @@ export interface ForecastResult {
 
 /** How the typical amount for one category and month was chosen (forecast.ts `explainCategory`). */
 export type TypicalHow =
-  | { kind: 'plan-prior'; plan: number }
+  | { kind: 'plan-prior'; plan: number; followed?: boolean }
   | { kind: 'override' }
   | { kind: 'last-amount' }
   | { kind: 'median-recent'; months: number }

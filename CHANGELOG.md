@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.23 — 2026-11-13
+
+### Forecast
+- **"Forecast follows my plan"**, for a cost you know has changed before history can show it (a cheaper storage unit, a two-month discount). Turn it on in a category's forecast explanation (click its Forecast figure). Every month's forecast then becomes that month's plan, one-month plan changes included, and the range used for Risk is the plan too. This month's forecast is still never less than what has already been spent. Turn it off to let history decide again.
+
 ## 0.14.22 — 2026-11-11
 
 ### Security

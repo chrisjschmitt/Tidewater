@@ -276,7 +276,8 @@ const isEmptyOverride = (override: CategoryOverride): boolean =>
   override.type == null &&
   override.amount == null &&
   override.typicalMonths == null &&
-  !override.ignoreOutliers
+  !override.ignoreOutliers &&
+  !override.followPlan
 
 function withOverrideRecord(
   config: ForecastConfig,
@@ -315,6 +316,14 @@ export function withCategoryTypeOverride(
   current.type = type
   if (!isLumpyType(type)) delete current.typicalMonths
   else if (previous && !isLumpyType(previous)) delete current.typicalMonths
+  return withOverrideRecord(config, key, current)
+}
+
+/** Turn "Forecast follows my plan" on or off for one category. */
+export function withCategoryFollowPlan(config: ForecastConfig, key: string, on: boolean): ForecastConfig {
+  const current: CategoryOverride = { ...(config.categoryOverrides[key] ?? {}) }
+  if (on) current.followPlan = true
+  else delete current.followPlan
   return withOverrideRecord(config, key, current)
 }
 

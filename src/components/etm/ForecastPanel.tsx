@@ -14,6 +14,7 @@ import { travelOutlook } from '../../lib/forecast/travel'
 import { withForecastDefaults, type ForecastConfig, type ForecastSnapshot, type PinRequest } from '../../lib/forecast/types'
 import {
   withCategoryTypeOverride,
+  withCategoryFollowPlan,
   withIgnoredCompare,
   withIgnoredHistory,
 } from '../../lib/forecast/universe'
@@ -349,6 +350,7 @@ export default function ForecastPanel({
                 ? { overrideType: config.categoryOverrides[explanation.key]!.type }
                 : {})}
               onChangeType={(type) => onConfigChange(withCategoryTypeOverride(config, explanation.key, type))}
+              onFollowPlan={(on) => onConfigChange(withCategoryFollowPlan(config, explanation.key, on))}
               onIgnoreMonth={(month, ignored) =>
                 onConfigChange(withIgnoredHistory(config, explanation.key, month, ignored))
               }
